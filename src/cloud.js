@@ -66,7 +66,9 @@ export async function sendMagicLink(email) {
   if (!sb) throw new Error("Sky-synk er ikke konfigurert.");
   const { error } = await sb.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: window.location.origin },
+    /* origin alone drops the base path when the app is hosted under a
+       subpath (GitHub Pages), landing the magic link on a 404 */
+    options: { emailRedirectTo: window.location.origin + window.location.pathname },
   });
   if (error) throw error;
 }
