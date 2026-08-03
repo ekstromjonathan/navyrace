@@ -64,10 +64,16 @@ const store = {
   },
 };
 /* ----------------------------- program data ----------------------------- */
-const PHASES = (w) =>
-  w <= 3 ? "Base" : w <= 6 ? "Bygg" : w <= 9 ? "Spesifikk topp" : "Nedtrapping";
+/** Phase label scaled to program length (10w: 1–3 Base … 10 Nedtrapping). */
+const PHASES = (w, total = 10) => {
+  const t = w / Math.max(total, 1);
+  if (t <= 0.3) return "Base";
+  if (t <= 0.6) return "Bygg";
+  if (t <= 0.9) return "Spesifikk topp";
+  return "Nedtrapping";
+};
 
-// per-week parameters (index 0 = uke 1)
+// per-week parameters (index 0 = uke 1) — 10-week source curve
 const WK = [
   { runEasy: 30, long: 5,   int: "6 × 1 min hardt / 2 min rolig", str: 3, brick: 0 },
   { runEasy: 35, long: 6,   int: "8 × 1 min / 2 min",            str: 3, brick: 0 },
@@ -83,95 +89,162 @@ const WK = [
 
 const DAYS = ["MAN", "TIR", "ONS", "TOR", "FRE", "LØR", "SØN"];
 
+/* Icon keys — never store React components in program JSON (localStorage / sky). */
+const ICONS = {
+  Footprints, Timer, Dumbbell, Activity, Waves, Anchor, Mountain,
+  Flame, Move, Hand, Target, Zap,
+};
+const TYPE_ICON = {
+  easyrun: "Footprints", strA: "Dumbbell", intervals: "Timer", mobility: "Move",
+  strB: "Dumbbell", brick: "Waves", skills: "Hand", longrun: "Footprints",
+};
+function resolveIcon(key) {
+  if (typeof key === "function") return key; // legacy in-memory
+  return ICONS[key] || Activity;
+}
 function ex(name, icon, detail, cue) { return { name, icon, detail, cue }; }
 
-function buildDay(w, d, p = WK[w - 1]) {
-  const phase = PHASES(w);
+/** Map display week 1..n onto the 10-week template (keep ends, stretch middle). */
+function templateWeekIndex(week, totalWeeks) {
+  const src = WK.length;
+  if (totalWeeks <= 1) return 0;
+  if (week <= 1) return 0;
+  if (week >= totalWeeks) return src - 1;
+  const t = (week - 1) / (totalWeeks - 1);
+  return Math.round(t * (src - 1));
+}
+
+function buildDay(w, d, p = WK[w - 1], totalWeeks = 10) {
+  const phase = PHASES(w, totalWeeks);
   const base = { week: w, day: d, phase };
 
   if (d === 0) return { ...base, type: "easyrun", title: "Rolig løp + grep",
-    icon: Footprints, est: `~${p.runEasy + 10} min`, loadKey: "easyrun",
+    icon: "Footprints", est: `~${p.runEasy + 10} min`, loadKey: "easyrun",
     load: p.runEasy, unit: "min",
-    estFromLoad: (load) => `~${load + 10} min`,
     items: [
-      ex("Rolig løp · sone 2", Footprints, `${p.runEasy} min`, "Snakketempo. Skal føles for lett."),
-      ex("Dødheng", Hand, "3 × maks tid", "Rett etter løpet. Bygger grep."),
+      ex("Rolig løp · sone 2", "Footprints", `${p.runEasy} min`, "Snakketempo. Skal føles for lett."),
+      ex("Dødheng", "Hand", "3 × maks tid", "Rett etter løpet. Bygger grep."),
     ] };
 
   if (d === 1) return { ...base, type: "strA", title: "Styrke A · trekk + bæring",
-    icon: Dumbbell, est: "~40 min", loadKey: "strA", load: p.str, unit: "runder",
+    icon: "Dumbbell", est: "~40 min", loadKey: "strA", load: p.str, unit: "runder",
     items: [
-      ex("Pull-ups", Activity, `${p.str} × maks`, "Strikk som hjelp ved behov."),
-      ex("Ring-rows", Activity, `${p.str} × 12`, "Juster vinkel for vanskelighet."),
-      ex("Vektplate-bæring 10 kg", Anchor, `${p.str} × 40 m`, "Mot bryst. Rett rygg."),
-      ex("KB swing 16 kg", Zap, "4 × 15", "Eksplosiv hofte → over vegger."),
-      ex("Hollow hold", Move, "3 × 30 s", "Stram kjerne."),
+      ex("Pull-ups", "Activity", `${p.str} × maks`, "Strikk som hjelp ved behov."),
+      ex("Ring-rows", "Activity", `${p.str} × 12`, "Juster vinkel for vanskelighet."),
+      ex("Vektplate-bæring 10 kg", "Anchor", `${p.str} × 40 m`, "Mot bryst. Rett rygg."),
+      ex("KB swing 16 kg", "Zap", "4 × 15", "Eksplosiv hofte → over vegger."),
+      ex("Hollow hold", "Move", "3 × 30 s", "Stram kjerne."),
     ] };
 
   if (d === 2) return { ...base, type: "intervals", title: "Intervaller",
-    icon: Timer, est: "~35 min", loadKey: "intervals", load: null, unit: "",
+    icon: "Timer", est: "~35 min", loadKey: "intervals", load: null, unit: "",
     items: [
-      ex("Oppvarming", Footprints, "10 min rolig", "Gradvis opp i puls."),
-      ex("Hovedøkt", Flame, p.int, "Hardt = du klarer ikke prate."),
-      ex("Nedjogg", Footprints, "5 min løst", "Rist ut beina."),
+      ex("Oppvarming", "Footprints", "10 min rolig", "Gradvis opp i puls."),
+      ex("Hovedøkt", "Flame", p.int, "Hardt = du klarer ikke prate."),
+      ex("Nedjogg", "Footprints", "5 min løst", "Rist ut beina."),
     ] };
 
   if (d === 3) return { ...base, type: "mobility", title: "Mobilitet + core (valgfri)",
-    icon: Move, est: "~25 min", loadKey: "mobility", load: null, unit: "",
+    icon: "Move", est: "~25 min", loadKey: "mobility", load: null, unit: "",
     items: [
-      ex("Mobilitet hofte / ankel", Move, "10 min", "Roterende, kontrollert."),
-      ex("Strikk face-pulls", Activity, "3 × 15", "Skulderhelse for all hengingen."),
-      ex("Planke", Target, "3 × 40 s", "Lett dag — ikke mas på."),
+      ex("Mobilitet hofte / ankel", "Move", "10 min", "Roterende, kontrollert."),
+      ex("Strikk face-pulls", "Activity", "3 × 15", "Skulderhelse for all hengingen."),
+      ex("Planke", "Target", "3 × 40 s", "Lett dag — ikke mas på."),
     ] };
 
   if (d === 4) return { ...base, type: "strB", title: "Styrke B · press + krabb + grep",
-    icon: Dumbbell, est: "~40 min", loadKey: "strB", load: p.str, unit: "runder",
+    icon: "Dumbbell", est: "~40 min", loadKey: "strB", load: p.str, unit: "runder",
     items: [
-      ex("Dips på stol", Dumbbell, `${p.str} × maks`, "Press deg over kanten."),
-      ex("Push-ups · føtter på stol", Activity, `${p.str} × 12–20`, "Tyngre med føtter hevet."),
-      ex("Bulgarsk utfall", Mountain, "3 × 10 / bein", "Bakfot på stol."),
-      ex("Step-ups m/KB 16 kg", Mountain, "3 × 10 / bein", "Kontrollert ned."),
-      ex("Bjørnekrabb", Move, "4 × 20 m", "Hold hofta lav og rytmen jevn."),
-      ex("Heng-utholdenhet", Hand, "3 × 45–60 s", "Til failure på siste."),
+      ex("Dips på stol", "Dumbbell", `${p.str} × maks`, "Press deg over kanten."),
+      ex("Push-ups · føtter på stol", "Activity", `${p.str} × 12–20`, "Tyngre med føtter hevet."),
+      ex("Bulgarsk utfall", "Mountain", "3 × 10 / bein", "Bakfot på stol."),
+      ex("Step-ups m/KB 16 kg", "Mountain", "3 × 10 / bein", "Kontrollert ned."),
+      ex("Bjørnekrabb", "Move", "4 × 20 m", "Hold hofta lav og rytmen jevn."),
+      ex("Heng-utholdenhet", "Hand", "3 × 45–60 s", "Til failure på siste."),
     ] };
 
   if (d === 5) {
     if (p.brick > 0) return { ...base, type: "brick", title: "Brick · løp + styrke",
-      icon: Waves, est: `~${p.brick * 12} min`, loadKey: "brick", load: p.brick, unit: "runder",
-      estFromLoad: (load) => `~${load * 12} min`,
+      icon: "Waves", est: `~${p.brick * 12} min`, loadKey: "brick", load: p.brick, unit: "runder",
       items: [
-        ex("Format", Flame, `Løp 1 km → stasjon · ${p.brick} runder`, "Styrke i tretthet — som på løpsdagen."),
-        ex("Stasjon: trekk", Activity, "5 pull-ups + 30 s heng", null),
-        ex("Stasjon: bæring", Anchor, "40 m vektplate 10 kg", null),
-        ex("Stasjon: kraft", Zap, "15 KB swing + 10 goblet squat", null),
-        ex("Stasjon: krabb", Move, "20 m bjørnekrabb + 10 burpees", null),
-        ex("Stasjon: grep", Hand, "Stige / ringer hånd-over-hånd", null),
+        ex("Format", "Flame", `Løp 1 km → stasjon · ${p.brick} runder`, "Styrke i tretthet — som på løpsdagen."),
+        ex("Stasjon: trekk", "Activity", "5 pull-ups + 30 s heng", null),
+        ex("Stasjon: bæring", "Anchor", "40 m vektplate 10 kg", null),
+        ex("Stasjon: kraft", "Zap", "15 KB swing + 10 goblet squat", null),
+        ex("Stasjon: krabb", "Move", "20 m bjørnekrabb + 10 burpees", null),
+        ex("Stasjon: grep", "Hand", "Stige / ringer hånd-over-hånd", null),
       ] };
     return { ...base, type: "skills", title: "Grep + teknikk",
-      icon: Hand, est: "~35 min", loadKey: "skills", load: p.str, unit: "runder",
+      icon: "Hand", est: "~35 min", loadKey: "skills", load: p.str, unit: "runder",
       items: [
-        ex("Grepsutholdenhet", Hand, "4 × maks heng", "Aktiv + passiv heng."),
-        ex("Traversering", Activity, "3–5 runder", "Stige / ringer hånd-over-hånd."),
-        ex("Vegg-overgang", Mountain, `${p.str} × teknikk`, "Pull → dip → over."),
-        ex("Burpees", Flame, "4 × 10", "Tempo, ikke maks."),
+        ex("Grepsutholdenhet", "Hand", "4 × maks heng", "Aktiv + passiv heng."),
+        ex("Traversering", "Activity", "3–5 runder", "Stige / ringer hånd-over-hånd."),
+        ex("Vegg-overgang", "Mountain", `${p.str} × teknikk`, "Pull → dip → over."),
+        ex("Burpees", "Flame", "4 × 10", "Tempo, ikke maks."),
       ] };
   }
 
   return { ...base, type: "longrun", title: "Langtur",
-    icon: Footprints, est: `~${Math.round(p.long * 6)} min`, loadKey: "longrun",
+    icon: "Footprints", est: `~${Math.round(p.long * 6)} min`, loadKey: "longrun",
     load: p.long, unit: "km",
-    estFromLoad: (load) => `~${Math.round(load * 6)} min`,
     items: [
-      ex("Langt rolig løp · sone 2", Footprints, `${p.long} km`, "Bygg motoren. Lavt tempo."),
-      ex("Underlag", Mountain, "Terreng / sand om mulig", "Løypa er ikke flat asfalt."),
+      ex("Langt rolig løp · sone 2", "Footprints", `${p.long} km`, "Bygg motoren. Lavt tempo."),
+      ex("Underlag", "Mountain", "Terreng / sand om mulig", "Løypa er ikke flat asfalt."),
     ] };
 }
 
-const SESSIONS = [];
-for (let w = 1; w <= 10; w++) for (let d = 0; d < 7; d++) {
-  const s = buildDay(w, d);
-  s.id = `w${w}d${d}`;
-  SESSIONS.push(s);
+/** Attach non-JSON runtime helpers (estFromLoad) from loadKey — never persist the fn. */
+function withRuntime(session) {
+  if (!session) return session;
+  const key = session.loadKey || session.type;
+  if (key === "easyrun") {
+    return { ...session, estFromLoad: (load) => `~${load + 10} min` };
+  }
+  if (key === "brick") {
+    return { ...session, estFromLoad: (load) => `~${load * 12} min` };
+  }
+  if (key === "longrun") {
+    return { ...session, estFromLoad: (load) => `~${Math.round(load * 6)} min` };
+  }
+  return session;
+}
+
+function resolveSessions(program) {
+  const raw = program?.sessions
+    || (Array.isArray(program?.weeks) ? program.weeks.flat() : null)
+    || SESSIONS;
+  return raw.map(withRuntime);
+}
+
+/** Resample the 10-week curve to `totalWeeks` (B6). Keeps base+taper ends. */
+function buildProgramSessions(totalWeeks = 10) {
+  const n = Math.max(2, Math.min(24, Number(totalWeeks) || 10));
+  const out = [];
+  for (let w = 1; w <= n; w++) {
+    const p = WK[templateWeekIndex(w, n)];
+    for (let d = 0; d < 7; d++) {
+      const s = buildDay(w, d, p, n);
+      s.id = `w${w}d${d}`;
+      out.push(s);
+    }
+  }
+  return out;
+}
+
+const SESSIONS = buildProgramSessions(10);
+
+/** Materialize a resampled program once at onboarding (§4.3 / B3 / B6).
+ *  Never call from render — session ids must stay stable under stored logs. */
+function buildProgram(profile) {
+  const weeks = Math.max(2, Math.min(24, Number(profile?.goal?.weeks) || 10));
+  const startedAt = profile?.startedAt || Date.now();
+  return {
+    id: `prog_${weeks}_${startedAt}`,
+    weeks,
+    sessions: buildProgramSessions(weeks),
+    generatedAt: Date.now(),
+    source: "resample_v1",
+  };
 }
 
 /* --------------------------- exercise library --------------------------- */
@@ -213,7 +286,7 @@ const LIB = {
 /* reusable expandable exercise row */
 function ExerciseRow({ item }) {
   const [open, setOpen] = useState(false);
-  const Ico = item.icon;
+  const Ico = resolveIcon(item.icon);
   const info = LIB[item.name] || {};
   return (
     <div>
@@ -362,12 +435,6 @@ button,input{font:inherit;color:inherit}
 .cell.today{border-color:var(--flare);background:rgba(255,84,54,.08)}
 .cell.today svg{color:var(--flare)}
 .cell svg{color:var(--muted)}
-
-/* footer race marker */
-.race{margin-top:26px;display:flex;align-items:center;gap:12px;padding:15px 16px;border-radius:14px;
-  border:1px dashed var(--line);background:transparent}
-.race .f{font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.05em}
-.race .s{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:.1em}
 
 /* sheet */
 .scrim{position:fixed;inset:0;background:rgba(5,7,9,.66);z-index:20;backdrop-filter:blur(3px);
@@ -733,16 +800,22 @@ function FoodSection({ icon: Ico, title, children, defOpen = false }) {
   );
 }
 
-function FoodView() {
+function FoodView({ profile }) {
+  const weightKg = profile?.body?.weightKg;
+  const proteinText = weightKg
+    ? `${Math.round(weightKg * 1.6)}–${Math.round(weightKg * 2)}`
+    : "1,6–2";
+  const proteinUnit = weightKg ? "g" : "g/kg";
+  const goalLabel = profile?.goal?.label || "Trening";
   return (
     <div className="fade">
       <div className="fhero">
         <div className="tag"><span className="dot" style={{ background: "var(--flare)" }} /> Din drivstoffplan</div>
         <div className="fhero-grid">
-          <div className="metric"><div className="k">Protein / dag</div><div className="v">130–150<small>g</small></div></div>
-          <div className="metric"><div className="k">Mål</div><div className="v" style={{ fontSize: 15 }}>Vokse, ikke kutte</div></div>
+          <div className="metric"><div className="k">Protein / dag</div><div className="v">{proteinText}<small>{proteinUnit}</small></div></div>
+          <div className="metric"><div className="k">Mål</div><div className="v" style={{ fontSize: 15 }}>{goalLabel}</div></div>
         </div>
-        <p className="fhero-p">Du er allerede slank — spis i et lite overskudd. Vekta skal ikke falle mens du trener hardt. Protein ved hvert måltid betyr mest.</p>
+        <p className="fhero-p">Protein ved hvert måltid betyr mest. Hold energien jevn mens du trener hardt — vekta skal ikke stupe.</p>
       </div>
 
       <FoodSection icon={Target} title="Formelen" defOpen>
@@ -927,9 +1000,9 @@ function SyncSheet({ user, sync, onClose }) {
 
 export default function App() {
   const [loaded, setLoaded] = useState(false);
-  const [gate, setGate] = useState("boot"); // boot | coach | app
+  const [gate, setGate] = useState("boot"); // boot | restoring | coach | app
   const [profile, setProfile] = useState(null);
-  const [program, setProgram] = useState(null); // null = builtin
+  const [program, setProgram] = useState(null); // null = builtin template fallback
   const [progress, setProgress] = useState(emptyProgress());
   const [sheet, setSheet] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -939,6 +1012,7 @@ export default function App() {
   const toastTimer = useRef(null);
   const lastAction = useRef(null);
   const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(!cloud.enabled);
   const [sync, setSync] = useState("idle");
   const [authSheet, setAuthSheet] = useState(false);
   const [settingsSheet, setSettingsSheet] = useState(false);
@@ -946,15 +1020,16 @@ export default function App() {
   const profileRef = useRef(null);
   const programRef = useRef(null);
 
-  const sessions = program?.weeks?.flat?.() || program?.sessions || SESSIONS;
+  const sessions = resolveSessions(program);
   const programId = program?.id || BUILTIN_PROGRAM_ID;
   const index = progress.index || 0;
   const logs = activeLogs(progress, programId);
   const finished = index >= sessions.length;
   const session = finished ? null : sessions[index];
-  const w = session ? session.week : 10;
+  /* Weeks from actual sessions — never invent weeks past the stored program (B6). */
+  const totalWeeks = Math.max(1, Math.ceil(sessions.length / 7));
+  const w = session ? session.week : totalWeeks;
   const brand = profile?.brand || defaultBrand();
-  const totalWeeks = profile?.goal?.weeks || 10;
 
   useEffect(() => { setViewWeek(w); }, [w]);
   useEffect(() => { profileRef.current = profile; }, [profile]);
@@ -965,17 +1040,49 @@ export default function App() {
       const raw = await store.get(KEY);
       const s = parseApp(raw);
       if (s?.profile) {
-        setProfile(s.profile);
-        setProgram(s.program ?? null);
-        const prog = s.progress || emptyProgress();
+        let prog = s.program ?? null;
+        let progState = s.progress || emptyProgress();
         // accept legacy flat logs if somehow present
-        if (prog.logs && !prog.logsByProgram) {
-          prog.logsByProgram = { [BUILTIN_PROGRAM_ID]: prog.logs };
-          delete prog.logs;
+        if (progState.logs && !progState.logsByProgram) {
+          progState.logsByProgram = { [BUILTIN_PROGRAM_ID]: progState.logs };
+          delete progState.logs;
         }
-        setProgress(prog);
-        localAt.current = prog.updatedAt || 0;
+        /* Phase-1 users: profile without materialized program — build once (B6/B3). */
+        if (!prog?.sessions?.length && !Array.isArray(prog?.weeks)) {
+          prog = buildProgram(s.profile);
+          const builtinLogs = progState.logsByProgram?.[BUILTIN_PROGRAM_ID] || {};
+          if (prog.weeks === 10 && Object.keys(builtinLogs).length) {
+            progState = {
+              ...progState,
+              logsByProgram: { ...progState.logsByProgram, [prog.id]: builtinLogs },
+              updatedAt: Date.now(),
+            };
+          } else if (Object.keys(builtinLogs).length) {
+            progState = {
+              ...progState,
+              archive: { ...(progState.archive || {}), [BUILTIN_PROGRAM_ID]: builtinLogs },
+              logsByProgram: { ...progState.logsByProgram, [prog.id]: {} },
+              index: Math.min(progState.index || 0, prog.sessions.length),
+              updatedAt: Date.now(),
+            };
+          } else {
+            progState = {
+              ...progState,
+              logsByProgram: { ...progState.logsByProgram, [prog.id]: {} },
+              updatedAt: Date.now(),
+            };
+          }
+          localAt.current = progState.updatedAt;
+          store.set(KEY, serializeApp(s.profile, prog, progState));
+        }
+        setProfile(s.profile);
+        setProgram(prog);
+        setProgress(progState);
+        localAt.current = progState.updatedAt || 0;
         setGate("app");
+      } else if (cloud.enabled) {
+        /* Hold coach boot until auth+pull settle — avoids name-prompt flash (UX #3). */
+        setGate("restoring");
       } else {
         setGate("coach");
       }
@@ -984,35 +1091,59 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!cloud.enabled) return;
-    cloud.getUser().then(setUser).catch(() => {});
-    return cloud.onAuthChange(setUser);
+    if (!cloud.enabled) {
+      setAuthReady(true);
+      return;
+    }
+    let cancelled = false;
+    cloud.getUser()
+      .then((u) => { if (!cancelled) { setUser(u); setAuthReady(true); } })
+      .catch(() => { if (!cancelled) setAuthReady(true); });
+    const unsub = cloud.onAuthChange((u) => { if (!cancelled) setUser(u); });
+    return () => { cancelled = true; unsub(); };
   }, []);
+
+  /* No local profile + active session: pull before booting coach chat. */
+  useEffect(() => {
+    if (gate !== "restoring" || !loaded || !authReady) return;
+    let cancelled = false;
+    (async () => {
+      if (!cloud.enabled || !user) {
+        if (!cancelled) setGate("coach");
+        return;
+      }
+      setSync("syncing");
+      try {
+        const remote = await cloud.pull(user.id);
+        if (cancelled) return;
+        if (remote?.profile) {
+          applyRemote(remote);
+          setGate("app");
+          showToast("Hentet planen din fra skyen.", "var(--go)");
+          setSync("ok");
+          return;
+        }
+        setGate("coach");
+        setSync("ok");
+      } catch {
+        if (cancelled) return;
+        setGate("coach");
+        setSync("error");
+        showToast("Kunne ikke hente planen. Prøv igjen, eller sett opp på nytt.", "var(--hard)");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [gate, loaded, authReady, user]);
 
   useEffect(() => {
     if (!cloud.enabled || !user || !loaded) return;
+    if (gate !== "app") return;
     let cancelled = false;
     (async () => {
       setSync("syncing");
       try {
         const remote = await cloud.pull(user.id);
         if (cancelled) return;
-        /* Returning user (magic link from chat): hydrate and skip onboarding. */
-        if (!profileRef.current && remote?.profile) {
-          applyRemote(remote);
-          setGate("app");
-          showToast("Hentet planen din fra skyen.", "var(--go)");
-          if (!cancelled) setSync("ok");
-          return;
-        }
-        if (gate === "coach") {
-          if (!cancelled) setSync("ok");
-          return;
-        }
-        if (gate !== "app") {
-          if (!cancelled) setSync("ok");
-          return;
-        }
         const local = cloudPayload(index, logs, profileRef.current, programRef.current, localAt.current);
         const winner = cloud.newer(local, remote);
         if (winner === remote && remote) {
@@ -1040,18 +1171,30 @@ export default function App() {
   }
 
   function applyRemote(remote) {
-    const pid = remote.program?.id || BUILTIN_PROGRAM_ID;
+    const hadStoredProgram = !!(remote.program?.sessions?.length || Array.isArray(remote.program?.weeks));
+    const remoteProgram = hadStoredProgram
+      ? remote.program
+      : remote.profile
+        ? buildProgram(remote.profile)
+        : remote.program ?? null;
+    const pid = remoteProgram?.id || BUILTIN_PROGRAM_ID;
+    let remoteLogs = remote.logs || {};
+    /* Profile-only remote just got materialized: 10w session ids match the old
+       builtin template — keep logs. Other lengths would mis-key → drop. */
+    if (!hadStoredProgram && remoteProgram && remoteProgram.id !== BUILTIN_PROGRAM_ID && remoteProgram.weeks !== 10) {
+      remoteLogs = {};
+    }
     const nextProgress = {
-      index: remote.index || 0,
-      logsByProgram: { [pid]: remote.logs || {} },
+      index: Math.min(remote.index || 0, resolveSessions(remoteProgram).length),
+      logsByProgram: { [pid]: remoteLogs },
       archive: {},
       updatedAt: remote.updatedAt || 0,
     };
     localAt.current = nextProgress.updatedAt;
     setProgress(nextProgress);
     if (remote.profile) setProfile(remote.profile);
-    if (remote.program !== undefined) setProgram(remote.program);
-    store.set(KEY, serializeApp(remote.profile || profileRef.current, remote.program ?? programRef.current, nextProgress));
+    if (remote.program !== undefined || remoteProgram) setProgram(remoteProgram);
+    store.set(KEY, serializeApp(remote.profile || profileRef.current, remoteProgram ?? programRef.current, nextProgress));
   }
 
   function persistProgress(i, l, opts = {}) {
@@ -1094,6 +1237,9 @@ export default function App() {
 
   const a = session ? adapt(session, index, logs, sessions) : null;
   const shown = session && a ? withLoad(session, a.load) : session;
+  const SessionIcon = session
+    ? resolveIcon(session.icon || TYPE_ICON[session.type])
+    : null;
 
   function complete(rpeKey) {
     lastAction.current = { index, logs };
@@ -1170,35 +1316,48 @@ export default function App() {
   }
 
   function persistCoachProfile(nextProfile) {
-    if (!nextProfile) return;
+    if (!nextProfile) return null;
+    const nextProgram = buildProgram(nextProfile);
     setProfile(nextProfile);
-    setProgram(null);
-    const next = emptyProgress();
-    next.updatedAt = Date.now();
+    setProgram(nextProgram);
+    profileRef.current = nextProfile;
+    programRef.current = nextProgram;
+    const next = {
+      ...emptyProgress(),
+      logsByProgram: { [nextProgram.id]: {} },
+      updatedAt: Date.now(),
+    };
     localAt.current = next.updatedAt;
     setProgress(next);
-    store.set(KEY, serializeApp(nextProfile, null, next));
+    store.set(KEY, serializeApp(nextProfile, nextProgram, next));
+    return nextProgram;
   }
 
   function enterAppFromCoach(nextProfile) {
-    if (nextProfile) persistCoachProfile(nextProfile);
+    let prog = programRef.current;
+    let prof = profileRef.current;
+    if (nextProfile) {
+      /* Already materialized via onProgramReady — keep that program (same startedAt → same id). */
+      if (!prog || !prof) {
+        prog = persistCoachProfile(nextProfile);
+        prof = nextProfile;
+      }
+    }
     setGate("app");
     showToast("Program klart — velkommen.", "var(--go)");
     if (cloud.enabled && user) {
-      const prof = nextProfile || profileRef.current;
-      const prog = null;
       const payload = cloudPayload(0, {}, prof, prog, Date.now());
       cloud.push(user.id, payload).catch(() => {});
     }
   }
 
-  if (!loaded || gate === "boot") {
+  if (!loaded || gate === "boot" || gate === "restoring") {
     return (
       <div className="nr-root">
         <style>{CSS}</style>
         <div className="nr-wrap" style={{ display: "grid", placeItems: "center" }}>
           <div className="mono" style={{ color: "var(--muted)", letterSpacing: ".2em", fontSize: 12 }}>
-            LASTER…
+            {gate === "restoring" && user ? "HENTER PLANEN DIN…" : "LASTER…"}
           </div>
         </div>
       </div>
@@ -1307,7 +1466,7 @@ export default function App() {
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div className="hicon"><session.icon size={22} /></div>
+                <div className="hicon"><SessionIcon size={22} /></div>
                 <div>
                   <div className="htitle">{session.title}</div>
                 </div>
@@ -1370,7 +1529,7 @@ export default function App() {
             <button className="navb" disabled={viewWeek <= 1} onClick={() => setViewWeek((v) => Math.max(1, v - 1))} aria-label="Forrige uke">
               <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
             </button>
-            <div className="lbl">Uke {viewWeek} · {PHASES(viewWeek)}{viewWeek === w ? " · nå" : ""}</div>
+            <div className="lbl">Uke {viewWeek} · {PHASES(viewWeek, totalWeeks)}{viewWeek === w ? " · nå" : ""}</div>
             <button className="navb" disabled={viewWeek >= totalWeeks} onClick={() => setViewWeek((v) => Math.min(totalWeeks, v + 1))} aria-label="Neste uke">
               <ChevronRight size={15} />
             </button>
@@ -1382,7 +1541,7 @@ export default function App() {
               const done = !!logs[c.id] && !skipped;
               const isToday = gIdx === index;
               const future = gIdx > index;
-              const Ico = c.icon;
+              const Ico = resolveIcon(c.icon || TYPE_ICON[c.type]);
               return (
                 <div
                   className={`cell ${done ? "done" : ""} ${skipped ? "skip" : ""} ${isToday ? "today" : ""} ${future ? "future" : ""}`}
@@ -1400,7 +1559,7 @@ export default function App() {
 
         </>)}
 
-        {tab === "food" && <FoodView />}
+        {tab === "food" && <FoodView profile={profile} />}
 
         {/* kept mounted so the running timer survives tab switches */}
         <div style={{ display: tab === "stretch" ? undefined : "none" }}>

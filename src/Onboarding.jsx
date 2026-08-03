@@ -491,6 +491,8 @@ export function Coach({
     setD({ ...EMPTY_DRAFT });
     setReturnEmail("");
     setReturnErr("");
+    setSyncEmail("");
+    setSyncErr("");
     restoreTried.current = false;
     setTurn("boot");
     setTyping(false);
