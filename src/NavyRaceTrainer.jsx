@@ -6,6 +6,12 @@ import {
   Cloud, CloudOff, RefreshCw, Mail
 } from "lucide-react";
 import * as cloud from "./cloud.js";
+import { adapt, withLoad, RPE, SKIPPED } from "./adapt.js";
+import {
+  KEY, BUILTIN_PROGRAM_ID, emptyProgress, activeLogs, withActiveLogs,
+  paceInfo, todaySlot, serializeApp, parseApp, defaultBrand,
+} from "./state.js";
+import { Coach } from "./Onboarding.jsx";
 
 /* ----------------------------- storage shim ----------------------------- */
 /* Claude artifact storage when available, else localStorage, else memory.   */
@@ -57,8 +63,6 @@ const store = {
     mem[k] = v;
   },
 };
-const KEY = "navyrace:v1";
-
 /* ----------------------------- program data ----------------------------- */
 const PHASES = (w) =>
   w <= 3 ? "Base" : w <= 6 ? "Bygg" : w <= 9 ? "Spesifikk topp" : "Nedtrapping";
@@ -73,7 +77,7 @@ const WK = [
   { runEasy: 45, long: 9,   int: "Bakkedrag 10 × 30 s",          str: 4, brick: 6 },
   { runEasy: 40, long: 9.5, int: "5 × 4 min terskel / 2 min",    str: 4, brick: 7 },
   { runEasy: 40, long: 8,   int: "8 × 45 s bakke",               str: 4, brick: 8 },
-  { runEasy: 35, long: 6,   int: "6 × 2 min race-fart",          str: 4, brick: 7 },
+  { runEasy: 35, long: 6,   int: "6 × 2 min tempo",              str: 4, brick: 7 },
   { runEasy: 25, long: 4,   int: "4 × 1 min løst, så hvil",      str: 2, brick: 4 },
 ];
 
@@ -88,6 +92,7 @@ function buildDay(w, d, p = WK[w - 1]) {
   if (d === 0) return { ...base, type: "easyrun", title: "Rolig løp + grep",
     icon: Footprints, est: `~${p.runEasy + 10} min`, loadKey: "easyrun",
     load: p.runEasy, unit: "min",
+    estFromLoad: (load) => `~${load + 10} min`,
     items: [
       ex("Rolig løp · sone 2", Footprints, `${p.runEasy} min`, "Snakketempo. Skal føles for lett."),
       ex("Dødheng", Hand, "3 × maks tid", "Rett etter løpet. Bygger grep."),
@@ -126,15 +131,16 @@ function buildDay(w, d, p = WK[w - 1]) {
       ex("Push-ups · føtter på stol", Activity, `${p.str} × 12–20`, "Tyngre med føtter hevet."),
       ex("Bulgarsk utfall", Mountain, "3 × 10 / bein", "Bakfot på stol."),
       ex("Step-ups m/KB 16 kg", Mountain, "3 × 10 / bein", "Kontrollert ned."),
-      ex("Bjørnekrabb", Move, "4 × 20 m", "Race-spesifikk. Lav, jevn."),
+      ex("Bjørnekrabb", Move, "4 × 20 m", "Hold hofta lav og rytmen jevn."),
       ex("Heng-utholdenhet", Hand, "3 × 45–60 s", "Til failure på siste."),
     ] };
 
   if (d === 5) {
-    if (p.brick > 0) return { ...base, type: "brick", title: "Brick · løp + hinder",
+    if (p.brick > 0) return { ...base, type: "brick", title: "Brick · løp + styrke",
       icon: Waves, est: `~${p.brick * 12} min`, loadKey: "brick", load: p.brick, unit: "runder",
+      estFromLoad: (load) => `~${load * 12} min`,
       items: [
-        ex("Format", Flame, `Løp 1 km → stasjon · ${p.brick} runder`, "Hinder i tretthet — som race-dag."),
+        ex("Format", Flame, `Løp 1 km → stasjon · ${p.brick} runder`, "Styrke i tretthet — som på løpsdagen."),
         ex("Stasjon: trekk", Activity, "5 pull-ups + 30 s heng", null),
         ex("Stasjon: bæring", Anchor, "40 m vektplate 10 kg", null),
         ex("Stasjon: kraft", Zap, "15 KB swing + 10 goblet squat", null),
@@ -154,6 +160,7 @@ function buildDay(w, d, p = WK[w - 1]) {
   return { ...base, type: "longrun", title: "Langtur",
     icon: Footprints, est: `~${Math.round(p.long * 6)} min`, loadKey: "longrun",
     load: p.long, unit: "km",
+    estFromLoad: (load) => `~${Math.round(load * 6)} min`,
     items: [
       ex("Langt rolig løp · sone 2", Footprints, `${p.long} km`, "Bygg motoren. Lavt tempo."),
       ex("Underlag", Mountain, "Terreng / sand om mulig", "Løypa er ikke flat asfalt."),
@@ -165,21 +172,6 @@ for (let w = 1; w <= 10; w++) for (let d = 0; d < 7; d++) {
   const s = buildDay(w, d);
   s.id = `w${w}d${d}`;
   SESSIONS.push(s);
-}
-
-/* Rebuild a session with the adapted load written into items/est, so the
-   exercise list shows the same dose as the hero metric. Display-only —
-   SESSIONS and log identity are untouched. */
-const LOAD_FIELD = {
-  easyrun: "runEasy", strA: "str", strB: "str",
-  skills: "str", brick: "brick", longrun: "long",
-};
-function withLoad(session, load) {
-  if (load == null || load === session.load) return session;
-  const field = LOAD_FIELD[session.loadKey];
-  if (!field) return session;
-  const p = { ...WK[session.week - 1], [field]: load };
-  return { ...buildDay(session.week, session.day, p), id: session.id };
 }
 
 /* --------------------------- exercise library --------------------------- */
@@ -215,7 +207,7 @@ const LIB = {
   "Vegg-overgang": { how: "Øv på å dra deg opp til brysthøyde (pull) og presse over kanten (dip), som over en klatrevegg.", focus: "Eksplosivt opp, rull over hofta.", rest: "90–120 s" },
   "Burpees": { how: "Fra stående: ned i planke, evt. push-up, hopp inn og opp. Jevnt tempo.", focus: "Tempo, ikke maks — pust jevnt.", rest: "45–60 s" },
   "Langt rolig løp · sone 2": { how: "Ukas lengste økt, holdt i rolig snakketempo hele veien.", focus: "Bygger motoren. Tål å løpe sakte.", rest: null },
-  "Underlag": { how: "Legg gjerne deler av turen på terreng, grus eller sand.", focus: "Løypa i Horten er ikke flat asfalt.", rest: null },
+  "Underlag": { how: "Legg gjerne deler av turen på terreng, grus eller sand.", focus: "Variert underlag bygger stødighet til løpsdagen.", rest: null },
 };
 
 /* reusable expandable exercise row */
@@ -256,31 +248,6 @@ function ExerciseRow({ item }) {
       )}
     </div>
   );
-}
-
-/* --------------------------- adaptation engine --------------------------- */
-const RPE = {
-  lett:    { mult: 1.08, color: "var(--go)",   label: "Lett",    msg: "Forrige føltes lett — skrur opp litt." },
-  passe:   { mult: 1.0,  color: "var(--hold)", label: "Passe",   msg: "Holder planen." },
-  brutalt: { mult: 0.9,  color: "var(--hard)", label: "Brutalt", msg: "Forrige var hard — letter litt." },
-};
-
-/* log value for a session that was skipped instead of completed */
-const SKIPPED = "hoppet";
-
-function adapt(session, index, logs) {
-  if (session.load == null) return { load: null, note: null };
-  let prev = null;
-  for (let i = index - 1; i >= 0; i--) {
-    const s = SESSIONS[i];
-    if (s.loadKey === session.loadKey && RPE[logs[s.id]]) { prev = logs[s.id]; break; }
-  }
-  if (!prev) return { load: session.load, note: null };
-  const r = RPE[prev];
-  let v = session.load * r.mult;
-  v = session.unit === "km" ? Math.round(v * 2) / 2 : Math.round(v);
-  const note = v !== session.load ? r.msg : null;
-  return { load: v, note, dir: v > session.load ? "up" : v < session.load ? "down" : "flat" };
 }
 
 /* -------------------------------- styles -------------------------------- */
@@ -534,6 +501,71 @@ button,input{font:inherit;color:inherit}
 .st-num{font-family:var(--mono);font-size:11px;color:var(--muted);width:20px;flex:0 0 auto}
 .st-nm{font-weight:600;font-size:13.5px}
 .st-sec{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* onboarding / chat coach */
+.ob-welcome{display:flex;flex-direction:column;justify-content:center;min-height:100dvh}
+.ob-welcome-inner{text-align:center;padding:24px 0 40px}
+.ob-welcome-preview{text-align:left;max-width:340px;margin:0 auto}
+.ob-chat{display:flex;flex-direction:column;height:100dvh;max-width:430px;margin:0 auto;
+  padding:calc(10px + env(safe-area-inset-top,0px)) 16px calc(10px + env(safe-area-inset-bottom,0px))}
+.ob-chat-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:6px 0 12px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.ob-chat-head-left{display:flex;align-items:center;gap:10px}
+.ob-chat-name{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:.04em;text-transform:uppercase}
+.ob-chat-sub{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.ob-dots{display:flex;gap:5px}
+.ob-dots span{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.ob-dots span.on{background:var(--flare)}
+.ob-avatar{width:34px;height:34px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+  background:linear-gradient(145deg,rgba(232,104,58,.35),rgba(232,104,58,.12));
+  border:1px solid rgba(232,104,58,.45);font-family:var(--disp);font-weight:700;font-size:14px;color:var(--flare)}
+.ob-transcript{flex:1 1 auto;overflow-y:auto;padding:16px 0 12px;display:flex;flex-direction:column;gap:12px;
+  -webkit-overflow-scrolling:touch}
+.ob-row{display:flex;align-items:flex-end;gap:8px;max-width:92%;animation:obIn .28s ease both}
+.ob-row.coach{align-self:flex-start}
+.ob-row.user{align-self:flex-end;flex-direction:row-reverse}
+.ob-bubble-card{border-radius:16px;padding:11px 14px;max-width:100%}
+.ob-bubble-card.coach{background:rgba(236,232,224,.06);border:1px solid var(--line);border-bottom-left-radius:5px}
+.ob-bubble-card.user{background:rgba(232,104,58,.16);border:1px solid rgba(232,104,58,.35);border-bottom-right-radius:5px}
+.ob-bubble-card.typing{padding:14px 16px}
+.ob-who{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--flare);text-transform:uppercase;margin-bottom:5px}
+.ob-text{font-size:15px;line-height:1.45;color:var(--bone);white-space:pre-wrap}
+.ob-row.user .ob-text{color:var(--bone)}
+.ob-typing{display:flex;gap:5px;align-items:center;height:14px}
+.ob-typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:obDot 1.2s infinite ease-in-out}
+.ob-typing span:nth-child(2){animation-delay:.15s}
+.ob-typing span:nth-child(3){animation-delay:.3s}
+@keyframes obDot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+@keyframes obIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.ob-composer{flex:0 0 auto;padding-top:10px;border-top:1px solid var(--line);
+  padding-bottom:max(4px,env(safe-area-inset-bottom,0px))}
+.ob-composer-idle{min-height:18px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);padding:4px 2px}
+.ob-composer-cta{margin-top:14px}
+.ob-fields{margin-bottom:4px}
+.ob-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.ob-chip{border:1px solid var(--line);background:var(--panel);color:var(--bone);border-radius:999px;
+  padding:10px 14px;font-family:var(--disp);font-weight:600;font-size:12.5px;letter-spacing:.03em;
+  text-transform:uppercase;cursor:pointer}
+.ob-chip.on{background:var(--flare);color:#1a0a06;border-color:var(--flare)}
+.ob-chip:active{transform:scale(.97)}
+.ob-chip:disabled{opacity:.4;pointer-events:none}
+.ob-label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:12px 0 7px}
+.pace{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin-top:6px}
+.pace.ahead{color:var(--go)}.pace.behind{color:var(--hold)}.pace.on{color:var(--muted)}
+.cal-note{margin:0 0 14px;padding:10px 12px;border-radius:11px;border:1px solid var(--line);
+  background:rgba(236,232,224,.04);font-size:12.5px;color:var(--muted);line-height:1.4}
+.ob-hint{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:8px}
+.ob-inline{display:flex;gap:8px;align-items:stretch;margin-top:4px}
+.ob-inline .tinput{flex:1 1 auto;margin:0}
+.ob-inline-cta{margin:0;padding:0 16px;flex:0 0 auto;width:auto;min-width:72px}
+.ob-return-link{margin-top:14px;width:100%}
+.ob-err{margin-top:8px;font-size:12.5px;color:var(--hard);line-height:1.35}
+.sheet-warn{margin:0 0 16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(232,104,58,.4);
+  background:rgba(232,104,58,.1);font-size:13.5px;line-height:1.45;color:var(--bone)}
+.sheet-warn strong{color:var(--flare);font-weight:700}
+.cta.danger{background:var(--hard);color:#fff}
 `;
 
 /* ------------------------- 5-min stretch routine ------------------------ */
@@ -756,6 +788,75 @@ function FoodView() {
   );
 }
 
+function SettingsSheet({ coachName, onRestartProgram, onReonboard, onClose }) {
+  const [confirm, setConfirm] = useState(null); // null | "restart" | "reonboard"
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-h">
+          <div className="sheet-t">Innstillinger</div>
+          <button className="iconbtn" onClick={onClose} aria-label="Lukk"><X size={16} /></button>
+        </div>
+
+        {!confirm && (
+          <>
+            <div className="sheet-sub">
+              Styr programmet ditt. Begge handlingene under sletter tracking — det går ikke an å angre.
+            </div>
+            <button
+              className="cta"
+              style={{ marginTop: 4 }}
+              onClick={() => setConfirm("restart")}
+            >
+              <RotateCcw size={16} /> Start programmet på nytt
+            </button>
+            <button
+              className="skipbtn"
+              style={{ marginTop: 10, width: "100%" }}
+              onClick={() => setConfirm("reonboard")}
+            >
+              Kjør onboarding på nytt
+            </button>
+          </>
+        )}
+
+        {confirm === "restart" && (
+          <>
+            <div className="sheet-warn">
+              <strong>Advarsel:</strong> All økt-tracking (fullført, RPE, fremdrift) slettes.
+              Profilen og målet ditt beholdes, men {coachName || "MAI"} husker ikke hva du har gjort.
+              Dette kan ikke angres.
+            </div>
+            <button className="cta danger" onClick={() => { onRestartProgram(); onClose(); }}>
+              Ja — slett tracking og start på nytt
+            </button>
+            <button className="skipbtn" style={{ marginTop: 10, width: "100%" }} onClick={() => setConfirm(null)}>
+              Avbryt
+            </button>
+          </>
+        )}
+
+        {confirm === "reonboard" && (
+          <>
+            <div className="sheet-warn">
+              <strong>Advarsel:</strong> Profil, programvalg og all tracking slettes.
+              Du må snakke med {coachName || "MAI"} på nytt — appen husker ikke den trackede løsningen din.
+              Dette kan ikke angres.
+            </div>
+            <button className="cta danger" onClick={() => { onReonboard(); onClose(); }}>
+              Ja — glem alt og start onboarding
+            </button>
+            <button className="skipbtn" style={{ marginTop: 10, width: "100%" }} onClick={() => setConfirm(null)}>
+              Avbryt
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SyncSheet({ user, sync, onClose }) {
   const [email, setEmail] = useState("");
   const [state, setState] = useState("form");   // form | sending | sent | error
@@ -826,8 +927,10 @@ function SyncSheet({ user, sync, onClose }) {
 
 export default function App() {
   const [loaded, setLoaded] = useState(false);
-  const [index, setIndex] = useState(0);
-  const [logs, setLogs] = useState({});
+  const [gate, setGate] = useState("boot"); // boot | coach | app
+  const [profile, setProfile] = useState(null);
+  const [program, setProgram] = useState(null); // null = builtin
+  const [progress, setProgress] = useState(emptyProgress());
   const [sheet, setSheet] = useState(false);
   const [preview, setPreview] = useState(null);
   const [viewWeek, setViewWeek] = useState(1);
@@ -836,53 +939,86 @@ export default function App() {
   const toastTimer = useRef(null);
   const lastAction = useRef(null);
   const [user, setUser] = useState(null);
-  const [sync, setSync] = useState("idle");   // idle | syncing | ok | error
+  const [sync, setSync] = useState("idle");
   const [authSheet, setAuthSheet] = useState(false);
-  const localAt = useRef(0);                  // updatedAt of what's on screen
+  const [settingsSheet, setSettingsSheet] = useState(false);
+  const localAt = useRef(0);
+  const profileRef = useRef(null);
+  const programRef = useRef(null);
 
-  const finished = index >= SESSIONS.length;
-  const session = finished ? null : SESSIONS[index];
+  const sessions = program?.weeks?.flat?.() || program?.sessions || SESSIONS;
+  const programId = program?.id || BUILTIN_PROGRAM_ID;
+  const index = progress.index || 0;
+  const logs = activeLogs(progress, programId);
+  const finished = index >= sessions.length;
+  const session = finished ? null : sessions[index];
   const w = session ? session.week : 10;
+  const brand = profile?.brand || defaultBrand();
+  const totalWeeks = profile?.goal?.weeks || 10;
 
   useEffect(() => { setViewWeek(w); }, [w]);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+  useEffect(() => { programRef.current = program; }, [program]);
 
   useEffect(() => {
     (async () => {
       const raw = await store.get(KEY);
-      if (raw) {
-        try {
-          const s = JSON.parse(raw);
-          setIndex(s.index || 0); setLogs(s.logs || {}); localAt.current = s.updatedAt || 0;
-        } catch (e) {}
+      const s = parseApp(raw);
+      if (s?.profile) {
+        setProfile(s.profile);
+        setProgram(s.program ?? null);
+        const prog = s.progress || emptyProgress();
+        // accept legacy flat logs if somehow present
+        if (prog.logs && !prog.logsByProgram) {
+          prog.logsByProgram = { [BUILTIN_PROGRAM_ID]: prog.logs };
+          delete prog.logs;
+        }
+        setProgress(prog);
+        localAt.current = prog.updatedAt || 0;
+        setGate("app");
+      } else {
+        setGate("coach");
       }
       setLoaded(true);
     })();
   }, []);
 
-  /* Cloud sync is additive: the app above never waits on it, and every path
-     here is skipped entirely when the env vars are absent. */
   useEffect(() => {
     if (!cloud.enabled) return;
     cloud.getUser().then(setUser).catch(() => {});
     return cloud.onAuthChange(setUser);
   }, []);
 
-  /* On login (and on load when already logged in): reconcile once, both ways. */
   useEffect(() => {
     if (!cloud.enabled || !user || !loaded) return;
     let cancelled = false;
     (async () => {
       setSync("syncing");
       try {
-        const local = { index, logs, updatedAt: localAt.current };
         const remote = await cloud.pull(user.id);
         if (cancelled) return;
+        /* Returning user (magic link from chat): hydrate and skip onboarding. */
+        if (!profileRef.current && remote?.profile) {
+          applyRemote(remote);
+          setGate("app");
+          showToast("Hentet planen din fra skyen.", "var(--go)");
+          if (!cancelled) setSync("ok");
+          return;
+        }
+        if (gate === "coach") {
+          if (!cancelled) setSync("ok");
+          return;
+        }
+        if (gate !== "app") {
+          if (!cancelled) setSync("ok");
+          return;
+        }
+        const local = cloudPayload(index, logs, profileRef.current, programRef.current, localAt.current);
         const winner = cloud.newer(local, remote);
-        if (winner === remote) {
-          setIndex(remote.index); setLogs(remote.logs); localAt.current = remote.updatedAt;
-          await store.set(KEY, JSON.stringify(remote));
+        if (winner === remote && remote) {
+          applyRemote(remote);
           showToast("Hentet fremdrift fra skyen.", "var(--go)");
-        } else if (!remote || winner.updatedAt > (remote.updatedAt ?? 0)) {
+        } else if (!remote || (winner?.updatedAt ?? 0) > (remote?.updatedAt ?? 0)) {
           await cloud.push(user.id, local);
         }
         if (!cancelled) setSync("ok");
@@ -891,35 +1027,84 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, loaded]);
+  }, [user, loaded, gate]);
 
-  const persist = (i, l) => {
-    const state = { index: i, logs: l, updatedAt: Date.now() };
-    localAt.current = state.updatedAt;
-    store.set(KEY, JSON.stringify(state));
-    /* Fire and forget — a failed push must never block logging a session.
-       The next successful sync carries it, since updatedAt still wins. */
+  function cloudPayload(i, l, prof, prog, at) {
+    return {
+      index: i,
+      logs: l,
+      profile: prof,
+      program: prog,
+      updatedAt: at || Date.now(),
+    };
+  }
+
+  function applyRemote(remote) {
+    const pid = remote.program?.id || BUILTIN_PROGRAM_ID;
+    const nextProgress = {
+      index: remote.index || 0,
+      logsByProgram: { [pid]: remote.logs || {} },
+      archive: {},
+      updatedAt: remote.updatedAt || 0,
+    };
+    localAt.current = nextProgress.updatedAt;
+    setProgress(nextProgress);
+    if (remote.profile) setProfile(remote.profile);
+    if (remote.program !== undefined) setProgram(remote.program);
+    store.set(KEY, serializeApp(remote.profile || profileRef.current, remote.program ?? programRef.current, nextProgress));
+  }
+
+  function persistProgress(i, l, opts = {}) {
+    const next = {
+      ...withActiveLogs(progress, l, programId),
+      index: i,
+      updatedAt: Date.now(),
+    };
+    localAt.current = next.updatedAt;
+    setProgress(next);
+    const prof = opts.profile !== undefined ? opts.profile : profile;
+    const prog = opts.program !== undefined ? opts.program : program;
+    store.set(KEY, serializeApp(prof, prog, next));
     if (cloud.enabled && user) {
       setSync("syncing");
-      cloud.push(user.id, state).then(() => setSync("ok"), () => setSync("error"));
+      const payload = cloudPayload(i, l, prof, prog, next.updatedAt);
+      cloud.push(user.id, payload).then(() => setSync("ok"), () => setSync("error"));
     }
-  };
+  }
 
-  const a = session ? adapt(session, index, logs) : null;
-  /* what the hero + list render: the session with the adapted dose applied */
+  async function persistProfile(nextProfile, nextProgram = program) {
+    setProfile(nextProfile);
+    setProgram(nextProgram);
+    const next = { ...progress, updatedAt: Date.now() };
+    localAt.current = next.updatedAt;
+    setProgress(next);
+    store.set(KEY, serializeApp(nextProfile, nextProgram, next));
+    if (cloud.enabled && user) {
+      setSync("syncing");
+      try {
+        const local = cloudPayload(index, logs, nextProfile, nextProgram, next.updatedAt);
+        const merged = await cloud.pushProfile(user.id, local);
+        if (merged) applyRemote(merged);
+        setSync("ok");
+      } catch (e) {
+        setSync("error");
+      }
+    }
+  }
+
+  const a = session ? adapt(session, index, logs, sessions) : null;
   const shown = session && a ? withLoad(session, a.load) : session;
 
   function complete(rpeKey) {
     lastAction.current = { index, logs };
     const newLogs = { ...logs, [session.id]: rpeKey };
     const newIndex = index + 1;
-    setLogs(newLogs); setIndex(newIndex); setSheet(false);
-    persist(newIndex, newLogs);
-    // preview next adaptation
-    const next = SESSIONS[newIndex];
+    setSheet(false);
+    persistProgress(newIndex, newLogs);
+    const next = sessions[newIndex];
     let msg = "Økt logget.";
     if (next && next.load != null) {
-      const na = adapt(next, newIndex, newLogs);
+      const na = adapt(next, newIndex, newLogs, sessions);
       msg = na.note ? na.note : "Neste økt: planen holder.";
     }
     showToast(msg, RPE[rpeKey].color, true);
@@ -929,8 +1114,8 @@ export default function App() {
     lastAction.current = { index, logs };
     const newLogs = { ...logs, [session.id]: SKIPPED };
     const newIndex = index + 1;
-    setLogs(newLogs); setIndex(newIndex); setSheet(false);
-    persist(newIndex, newLogs);
+    setSheet(false);
+    persistProgress(newIndex, newLogs);
     showToast("Økt hoppet over — programmet går videre.", "var(--muted)", true);
   }
 
@@ -938,8 +1123,7 @@ export default function App() {
     const prev = lastAction.current;
     if (!prev) return;
     lastAction.current = null;
-    setIndex(prev.index); setLogs(prev.logs);
-    persist(prev.index, prev.logs);
+    persistProgress(prev.index, prev.logs);
     showToast("Angret — økten er åpen igjen.", "var(--muted)");
   }
 
@@ -949,13 +1133,66 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), undoable ? 6000 : 3200);
   }
 
-  function reset() {
-    if (!window.confirm("Nullstille all fremdrift?")) return;
-    setIndex(0); setLogs({}); persist(0, {});
-    showToast("Fremdrift nullstilt.", "var(--muted)");
+  function resetProgress() {
+    const pid = programId;
+    const prevLogs = activeLogs(progress, pid);
+    const next = {
+      ...emptyProgress(),
+      archive: {
+        ...(progress.archive || {}),
+        ...(Object.keys(prevLogs).length ? { [`${pid}:${Date.now()}`]: prevLogs } : {}),
+      },
+      updatedAt: Date.now(),
+    };
+    const nextProfile = profile
+      ? { ...profile, startedAt: Date.now() }
+      : profile;
+    localAt.current = next.updatedAt;
+    setProgress(next);
+    if (nextProfile) setProfile(nextProfile);
+    store.set(KEY, serializeApp(nextProfile, program, next));
+    if (cloud.enabled && user) {
+      cloud.pushProfile(user.id, cloudPayload(0, {}, nextProfile, program, next.updatedAt)).catch(() => {
+        cloud.push(user.id, cloudPayload(0, {}, nextProfile, program, next.updatedAt)).catch(() => {});
+      });
+    }
+    showToast("Tracking slettet — programmet starter på nytt.", "var(--muted)");
   }
 
-  if (!loaded) {
+  function resetAll() {
+    setProfile(null);
+    setProgram(null);
+    setProgress(emptyProgress());
+    localAt.current = 0;
+    store.set(KEY, "");
+    setGate("coach");
+    showToast("Alt glemt — snakk med treneren på nytt.", "var(--muted)");
+  }
+
+  function persistCoachProfile(nextProfile) {
+    if (!nextProfile) return;
+    setProfile(nextProfile);
+    setProgram(null);
+    const next = emptyProgress();
+    next.updatedAt = Date.now();
+    localAt.current = next.updatedAt;
+    setProgress(next);
+    store.set(KEY, serializeApp(nextProfile, null, next));
+  }
+
+  function enterAppFromCoach(nextProfile) {
+    if (nextProfile) persistCoachProfile(nextProfile);
+    setGate("app");
+    showToast("Program klart — velkommen.", "var(--go)");
+    if (cloud.enabled && user) {
+      const prof = nextProfile || profileRef.current;
+      const prog = null;
+      const payload = cloudPayload(0, {}, prof, prog, Date.now());
+      cloud.push(user.id, payload).catch(() => {});
+    }
+  }
+
+  if (!loaded || gate === "boot") {
     return (
       <div className="nr-root">
         <style>{CSS}</style>
@@ -968,10 +1205,34 @@ export default function App() {
     );
   }
 
-  const phase = session ? session.phase : "Fullført";
-  const pct = Math.round((index / SESSIONS.length) * 100);
+  if (gate === "coach") {
+    return (
+      <>
+        <style>{CSS}</style>
+        <Coach
+          user={user}
+          cloudEnabled={cloud.enabled}
+          onProgramReady={persistCoachProfile}
+          onEnterApp={enterAppFromCoach}
+          onCloudRestore={(remote) => {
+            applyRemote(remote);
+            setGate("app");
+            showToast("Hentet planen din fra skyen.", "var(--go)");
+          }}
+        />
+        {authSheet && (
+          <SyncSheet user={user} sync={sync} onClose={() => setAuthSheet(false)} />
+        )}
+      </>
+    );
+  }
+
+  const pct = Math.round((index / Math.max(sessions.length, 1)) * 100);
   const vWeekStart = (viewWeek - 1) * 7;
-  const cells = SESSIONS.slice(vWeekStart, vWeekStart + 7);
+  const cells = sessions.slice(vWeekStart, vWeekStart + 7);
+  const pace = paceInfo(profile, index);
+  const calMismatch = profile?.schedule?.mode === "calendar" && session && session.day !== todaySlot();
+  const goalLabel = profile?.goal?.label || "Trening";
 
   return (
     <div className="nr-root">
@@ -982,8 +1243,12 @@ export default function App() {
         {/* header */}
         <div className="hd fade">
           <div>
-            <div className="hd-title">NAVY RACE<span style={{ color: "var(--flare)" }}>·</span>10</div>
-            <div className="hd-sub">Uke {w} / 10 &nbsp;·&nbsp; {phase}</div>
+            <div className="hd-title">{brand.appName}</div>
+            <div className="hd-sub">
+              Uke {w} / {totalWeeks} &nbsp;·&nbsp; {goalLabel}
+              {profile?.goal?.date ? ` · til ${profile.goal.date}` : ""}
+            </div>
+            {pace && <div className={`pace ${pace.kind}`}>{pace.label}</div>}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {cloud.enabled && (
@@ -999,21 +1264,34 @@ export default function App() {
                   : user ? <Cloud size={15} /> : <CloudOff size={15} />}
               </button>
             )}
-            <button className="iconbtn" onClick={reset} aria-label="Nullstill"><RotateCcw size={15} /></button>
+            <button
+              className="iconbtn"
+              onClick={() => setSettingsSheet(true)}
+              aria-label="Innstillinger"
+              title="Innstillinger"
+            >
+              <RotateCcw size={15} />
+            </button>
           </div>
         </div>
         <div className="prog fade"><i style={{ width: `${pct}%` }} /></div>
+        {calMismatch && (
+          <div className="cal-note">
+            I dag er {DAYS[todaySlot()]}, planen viser {DAYS[session.day]}.
+            Kalender-modus — ta økta likevel, eller kom tilbake på {DAYS[session.day]}.
+          </div>
+        )}
 
         {tab === "train" && (<>
         {finished ? (
           <div className="hero fade">
             <div className="htitle">Blokk fullført</div>
             <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.5, marginTop: 8 }}>
-              10 uker i boks. Hvil, spis, sov — du blir ikke sterkere de siste dagene, bare sliten.
-              Vi sees på startstreken på Karljohansvern.
+              Blokka er i boks. Hvil, spis, sov — du blir ikke sterkere de siste dagene, bare sliten.
+              Når du er klar, kan du starte en ny periode i innstillinger.
             </p>
-            <button className="cta" onClick={reset} style={{ marginTop: 20 }}>
-              <RotateCcw size={18} /> Start på nytt
+            <button className="cta" onClick={() => setSettingsSheet(true)} style={{ marginTop: 20 }}>
+              <RotateCcw size={18} /> Innstillinger
             </button>
           </div>
         ) : (
@@ -1093,7 +1371,7 @@ export default function App() {
               <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
             </button>
             <div className="lbl">Uke {viewWeek} · {PHASES(viewWeek)}{viewWeek === w ? " · nå" : ""}</div>
-            <button className="navb" disabled={viewWeek >= 10} onClick={() => setViewWeek((v) => Math.min(10, v + 1))} aria-label="Neste uke">
+            <button className="navb" disabled={viewWeek >= totalWeeks} onClick={() => setViewWeek((v) => Math.min(totalWeeks, v + 1))} aria-label="Neste uke">
               <ChevronRight size={15} />
             </button>
           </div>
@@ -1120,14 +1398,6 @@ export default function App() {
           <div className="hint">Bla mellom uker · trykk en dag for å se økten</div>
         </div>
 
-        {/* race marker */}
-        <div className="race fade" style={{ animationDelay: ".3s" }}>
-          <Anchor size={20} style={{ color: "var(--flare)", flex: "0 0 auto" }} />
-          <div>
-            <div className="f">NAVY RACE · HORTEN</div>
-            <div className="s">8 KM · 30 HINDRE · KARLJOHANSVERN</div>
-          </div>
-        </div>
         </>)}
 
         {tab === "food" && <FoodView />}
@@ -1154,6 +1424,15 @@ export default function App() {
       {/* sync sheet */}
       {authSheet && (
         <SyncSheet user={user} sync={sync} onClose={() => setAuthSheet(false)} />
+      )}
+
+      {settingsSheet && (
+        <SettingsSheet
+          coachName={brand.coachName}
+          onRestartProgram={resetProgress}
+          onReonboard={resetAll}
+          onClose={() => setSettingsSheet(false)}
+        />
       )}
 
       {/* check-in sheet */}
@@ -1187,7 +1466,7 @@ export default function App() {
 
       {/* day preview sheet */}
       {preview && (() => {
-        const pIdx = SESSIONS.indexOf(preview);
+        const pIdx = sessions.findIndex((s) => s.id === preview.id);
         const isSkipped = logs[preview.id] === SKIPPED;
         const isDone = !!logs[preview.id] && !isSkipped;
         const isToday = pIdx === index;
