@@ -1562,8 +1562,8 @@ export default function App() {
         <div className="prog fade"><i style={{ width: `${pct}%` }} /></div>
         {calMismatch && (
           <div className="cal-note">
-            I dag er {DAYS[todayD]}, planen viser {DAYS[session.day]}.
-            Kalender-modus — ta økta likevel, eller kom tilbake på {DAYS[session.day]}.
+            I dag er {DAYS[todayD]}, planen sier {DAYS[session.day]}.
+            Du valgte faste ukedager — ta økta likevel, eller vent til {DAYS[session.day]}.
           </div>
         )}
         {todayIsRest && !finished && (
