@@ -98,11 +98,12 @@ const DAYS = ["MAN", "TIR", "ONS", "TOR", "FRE", "LØR", "SØN"];
 /* Icon keys — never store React components in program JSON (localStorage / sky). */
 const ICONS = {
   Footprints, Timer, Dumbbell, Activity, Waves, Anchor, Mountain,
-  Flame, Move, Hand, Target, Zap,
+  Flame, Move, Hand, Target, Zap, Wind,
 };
 const TYPE_ICON = {
   easyrun: "Footprints", strA: "Dumbbell", intervals: "Timer", mobility: "Move",
   strB: "Dumbbell", brick: "Waves", skills: "Hand", longrun: "Footprints",
+  rest: "Wind",
 };
 function resolveIcon(key) {
   if (typeof key === "function") return key; // legacy in-memory
@@ -225,10 +226,24 @@ function resolveSessions(program) {
 /** Rolling block length when the user has no deadline (kontinuerlig). */
 const CONTINUOUS_BLOCK_WEEKS = 8;
 
-/** Resample the 10-week curve to `totalWeeks` (B6). Keeps base+taper ends
- *  (taper skipped when ongoing — last third is vedlikehold via PHASES). */
-function buildProgramSessions(totalWeeks = 10, { ongoing = false } = {}) {
+/** Which Mon=0…Sun=6 slots are training days for a given daysPerWeek.
+ *  Drops optional mobility first, then brick/skills — keeps strength + long. */
+function trainDaysFor(daysPerWeek) {
+  const n = Math.max(3, Math.min(6, Number(daysPerWeek) || 4));
+  const map = {
+    3: [1, 2, 6],        // strA, intervals, longrun
+    4: [0, 1, 4, 6],      // easy, strA, strB, long
+    5: [0, 1, 2, 4, 6],   // + intervals, drop mobility + brick
+    6: [0, 1, 2, 4, 5, 6], // full minus optional mobility
+  };
+  return map[n];
+}
+
+/** Resample the 10-week curve to `totalWeeks` (B6). Only emits training days
+ *  for `daysPerWeek` — rest days are not sessions (shown as empty in week UI). */
+function buildProgramSessions(totalWeeks = 10, { ongoing = false, daysPerWeek = 4 } = {}) {
   const n = Math.max(2, Math.min(24, Number(totalWeeks) || 10));
+  const trainDays = trainDaysFor(daysPerWeek);
   const out = [];
   for (let w = 1; w <= n; w++) {
     /* Ongoing: map onto source weeks 1..(src-1) so we never land on the race taper row. */
@@ -236,7 +251,7 @@ function buildProgramSessions(totalWeeks = 10, { ongoing = false } = {}) {
       ? Math.min(WK.length - 2, templateWeekIndex(w, n + 1))
       : templateWeekIndex(w, n);
     const p = WK[srcIdx];
-    for (let d = 0; d < 7; d++) {
+    for (const d of trainDays) {
       const s = buildDay(w, d, p, n, ongoing);
       s.id = `w${w}d${d}`;
       out.push(s);
@@ -245,7 +260,7 @@ function buildProgramSessions(totalWeeks = 10, { ongoing = false } = {}) {
   return out;
 }
 
-const SESSIONS = buildProgramSessions(10);
+const SESSIONS = buildProgramSessions(10, { daysPerWeek: 6 });
 
 /** Materialize a resampled program once at onboarding (§4.3 / B3 / B6).
  *  Never call from render — session ids must stay stable under stored logs. */
@@ -254,12 +269,17 @@ function buildProgram(profile) {
   const weeks = ongoing
     ? CONTINUOUS_BLOCK_WEEKS
     : Math.max(2, Math.min(24, Number(profile?.goal?.weeks) || 10));
+  const daysPerWeek = Math.max(3, Math.min(6, Number(profile?.schedule?.daysPerWeek) || 4));
+  const trainDays = trainDaysFor(daysPerWeek);
   const startedAt = profile?.startedAt || Date.now();
   return {
-    id: `prog_${ongoing ? "cont" : weeks}_${startedAt}`,
+    id: `prog_${ongoing ? "cont" : weeks}_${daysPerWeek}d_${startedAt}`,
     weeks,
+    daysPerWeek,
+    trainDays,
+    mode: profile?.schedule?.mode || "flexible",
     ongoing: !!ongoing,
-    sessions: buildProgramSessions(weeks, { ongoing: !!ongoing }),
+    sessions: buildProgramSessions(weeks, { ongoing: !!ongoing, daysPerWeek }),
     generatedAt: Date.now(),
     source: ongoing ? "continuous_v1" : "resample_v1",
   };
@@ -450,6 +470,9 @@ button,input{font:inherit;color:inherit}
 .cell.done svg{color:var(--go)}
 .cell.skip{opacity:.55}
 .cell.skip svg{color:var(--muted)}
+.cell.rest{opacity:.4;background:transparent}
+.cell.rest .d{color:var(--muted)}
+.cell.rest svg{color:var(--muted)}
 .cell.today{border-color:var(--flare);background:rgba(255,84,54,.08)}
 .cell.today svg{color:var(--flare)}
 .cell svg{color:var(--muted)}
@@ -789,6 +812,7 @@ function StretchView() {
 const TYPE_LABEL = {
   easyrun: "Utholdenhet", strA: "Styrke", strB: "Styrke", intervals: "Fart",
   mobility: "Restitusjon", brick: "Spesifikk", skills: "Ferdighet", longrun: "Utholdenhet",
+  rest: "Hvile",
 };
 
 /* contextual fuel cue per session type */
@@ -1044,8 +1068,18 @@ export default function App() {
   const logs = activeLogs(progress, programId);
   const finished = index >= sessions.length;
   const session = finished ? null : sessions[index];
-  /* Weeks from actual sessions — never invent weeks past the stored program (B6). */
-  const totalWeeks = Math.max(1, Math.ceil(sessions.length / 7));
+  const daysPerWeek = program?.daysPerWeek
+    || profile?.schedule?.daysPerWeek
+    || Math.max(1, Math.round(sessions.filter((s) => s.week === 1).length)) || 7;
+  const trainDays = program?.trainDays
+    || trainDaysFor(daysPerWeek);
+  /* Weeks from stored program / session.week — never invent past the plan (B6). */
+  const totalWeeks = Math.max(
+    1,
+    program?.weeks || 0,
+    sessions.reduce((m, s) => Math.max(m, s.week || 0), 0),
+    Math.ceil(sessions.length / Math.max(daysPerWeek, 1)),
+  );
   const w = session ? session.week : totalWeeks;
   const brand = profile?.brand || defaultBrand();
 
@@ -1439,10 +1473,29 @@ export default function App() {
   }
 
   const pct = Math.round((index / Math.max(sessions.length, 1)) * 100);
-  const vWeekStart = (viewWeek - 1) * 7;
-  const cells = sessions.slice(vWeekStart, vWeekStart + 7);
+  /* Always show Mon–Sun: training sessions in place, rest days as placeholders. */
+  const weekSessions = sessions.filter((s) => s.week === viewWeek);
+  const cells = DAYS.map((_, d) => {
+    const s = weekSessions.find((x) => x.day === d);
+    if (s) return { ...s, gIdx: sessions.findIndex((x) => x.id === s.id) };
+    return {
+      id: `w${viewWeek}d${d}-rest`,
+      week: viewWeek,
+      day: d,
+      type: "rest",
+      title: "Hvile",
+      icon: "Wind",
+      est: "—",
+      items: [],
+      gIdx: -1,
+      rest: true,
+    };
+  });
   const pace = paceInfo(profile, index);
-  const calMismatch = profile?.schedule?.mode === "calendar" && session && session.day !== todaySlot();
+  const calendarMode = profile?.schedule?.mode === "calendar";
+  const todayD = todaySlot();
+  const todayIsRest = calendarMode && !trainDays.includes(todayD);
+  const calMismatch = calendarMode && !todayIsRest && session && session.day !== todayD;
   const goalLabel = profile?.goal?.label || "Trening";
   const ongoing = !!(program?.ongoing || profile?.goal?.periodMode === "ongoing");
 
@@ -1458,8 +1511,8 @@ export default function App() {
             <div className="hd-title">{brand.appName}</div>
             <div className="hd-sub">
               {ongoing
-                ? <>Uke {w} &nbsp;·&nbsp; kontinuerlig &nbsp;·&nbsp; {goalLabel}</>
-                : <>Uke {w} / {totalWeeks} &nbsp;·&nbsp; {goalLabel}{profile?.goal?.date ? ` · til ${profile.goal.date}` : ""}</>}
+                ? <>Uke {w} &nbsp;·&nbsp; kontinuerlig &nbsp;·&nbsp; {daysPerWeek} d/uke &nbsp;·&nbsp; {goalLabel}</>
+                : <>Uke {w} / {totalWeeks} &nbsp;·&nbsp; {daysPerWeek} d/uke &nbsp;·&nbsp; {goalLabel}{profile?.goal?.date ? ` · til ${profile.goal.date}` : ""}</>}
             </div>
             {pace && <div className={`pace ${pace.kind}`}>{pace.label}</div>}
           </div>
@@ -1490,8 +1543,13 @@ export default function App() {
         <div className="prog fade"><i style={{ width: `${pct}%` }} /></div>
         {calMismatch && (
           <div className="cal-note">
-            I dag er {DAYS[todaySlot()]}, planen viser {DAYS[session.day]}.
+            I dag er {DAYS[todayD]}, planen viser {DAYS[session.day]}.
             Kalender-modus — ta økta likevel, eller kom tilbake på {DAYS[session.day]}.
+          </div>
+        )}
+        {todayIsRest && !finished && (
+          <div className="cal-note">
+            I dag er hviledag ({daysPerWeek} dager/uke). Neste økt: {session ? `${DAYS[session.day]} · ${session.title}` : "—"}.
           </div>
         )}
 
@@ -1521,6 +1579,35 @@ export default function App() {
               </>
             )}
           </div>
+        ) : todayIsRest ? (
+          <div className="hero fade" style={{ animationDelay: ".05s" }}>
+            <div className="hero-top">
+              <div className="tag">
+                <span className="dot" style={{ background: "var(--muted)" }} />
+                Hviledag · {DAYS[todayD]}
+              </div>
+              <div className="tag mono">Hvile</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div className="hicon"><Wind size={22} /></div>
+              <div>
+                <div className="htitle">I dag: hvile</div>
+              </div>
+            </div>
+            <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.5, marginTop: 14 }}>
+              Du trener {daysPerWeek} dager i uka — {DAYS[todayD]} er ikke en av dem.
+              {session ? ` Neste økt er ${DAYS[session.day]}: ${session.title}.` : ""}
+            </p>
+            {session && (
+              <button
+                className="skipbtn"
+                style={{ marginTop: 16, width: "100%" }}
+                onClick={() => setPreview(session)}
+              >
+                Se neste økt likevel
+              </button>
+            )}
+          </div>
         ) : (
           <>
             {/* hero — today's session */}
@@ -1528,7 +1615,7 @@ export default function App() {
               <div className="hero-top">
                 <div className="tag">
                   <span className="dot" style={{ background: "var(--flare)" }} />
-                  Dagens økt · {DAYS[session.day]}
+                  {calendarMode ? `Dagens økt · ${DAYS[session.day]}` : `Neste økt · ${DAYS[session.day]}`}
                 </div>
                 <div className="tag mono">{TYPE_LABEL[session.type]}</div>
               </div>
@@ -1603,26 +1690,32 @@ export default function App() {
             </button>
           </div>
           <div className="wk-grid">
-            {cells.map((c, i) => {
-              const gIdx = vWeekStart + i;
-              const skipped = logs[c.id] === SKIPPED;
-              const done = !!logs[c.id] && !skipped;
-              const isToday = gIdx === index;
-              const future = gIdx > index;
+            {cells.map((c) => {
+              const isRest = !!c.rest;
+              const gIdx = c.gIdx;
+              const skipped = !isRest && logs[c.id] === SKIPPED;
+              const done = !isRest && !!logs[c.id] && !skipped;
+              const isToday = isRest
+                ? (calendarMode && c.day === todayD)
+                : gIdx === index;
+              const future = !isRest && gIdx > index;
               const Ico = resolveIcon(c.icon || TYPE_ICON[c.type]);
               return (
                 <div
-                  className={`cell ${done ? "done" : ""} ${skipped ? "skip" : ""} ${isToday ? "today" : ""} ${future ? "future" : ""}`}
+                  className={`cell ${isRest ? "rest" : ""} ${done ? "done" : ""} ${skipped ? "skip" : ""} ${isToday ? "today" : ""} ${future ? "future" : ""}`}
                   key={c.id}
-                  onClick={() => setPreview(c)}
+                  onClick={() => { if (!isRest) setPreview(c); }}
+                  title={isRest ? "Hviledag" : c.title}
                 >
                   <div className="d">{DAYS[c.day]}</div>
-                  {done ? <Check size={15} /> : skipped ? <X size={15} /> : <Ico size={15} />}
+                  {isRest ? <Wind size={15} /> : done ? <Check size={15} /> : skipped ? <X size={15} /> : <Ico size={15} />}
                 </div>
               );
             })}
           </div>
-          <div className="hint">Bla mellom uker · trykk en dag for å se økten</div>
+          <div className="hint">
+            {daysPerWeek} treningsdager · hvile uten økt · trykk en økt for detaljer
+          </div>
         </div>
 
         </>)}
