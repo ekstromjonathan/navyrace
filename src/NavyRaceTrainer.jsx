@@ -11,7 +11,7 @@ import {
   KEY, BUILTIN_PROGRAM_ID, emptyProgress, activeLogs, withActiveLogs,
   paceInfo, todaySlot, serializeApp, parseApp, defaultBrand,
 } from "./state.js";
-import { Welcome, Coach } from "./Onboarding.jsx";
+import { Coach } from "./Onboarding.jsx";
 
 /* ----------------------------- storage shim ----------------------------- */
 /* Claude artifact storage when available, else localStorage, else memory.   */
@@ -557,6 +557,11 @@ button,input{font:inherit;color:inherit}
 .cal-note{margin:0 0 14px;padding:10px 12px;border-radius:11px;border:1px solid var(--line);
   background:rgba(236,232,224,.04);font-size:12.5px;color:var(--muted);line-height:1.4}
 .ob-hint{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:8px}
+.ob-inline{display:flex;gap:8px;align-items:stretch;margin-top:4px}
+.ob-inline .tinput{flex:1 1 auto;margin:0}
+.ob-inline-cta{margin:0;padding:0 16px;flex:0 0 auto;width:auto;min-width:72px}
+.ob-return-link{margin-top:14px;width:100%}
+.ob-err{margin-top:8px;font-size:12.5px;color:var(--hard);line-height:1.35}
 .sheet-warn{margin:0 0 16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(232,104,58,.4);
   background:rgba(232,104,58,.1);font-size:13.5px;line-height:1.45;color:var(--bone)}
 .sheet-warn strong{color:var(--flare);font-weight:700}
@@ -922,7 +927,7 @@ function SyncSheet({ user, sync, onClose }) {
 
 export default function App() {
   const [loaded, setLoaded] = useState(false);
-  const [gate, setGate] = useState("boot"); // boot | welcome | coach | app
+  const [gate, setGate] = useState("boot"); // boot | coach | app
   const [profile, setProfile] = useState(null);
   const [program, setProgram] = useState(null); // null = builtin
   const [progress, setProgress] = useState(emptyProgress());
@@ -973,7 +978,7 @@ export default function App() {
         localAt.current = prog.updatedAt || 0;
         setGate("app");
       } else {
-        setGate("welcome");
+        setGate("coach");
       }
       setLoaded(true);
     })();
@@ -993,11 +998,15 @@ export default function App() {
       try {
         const remote = await cloud.pull(user.id);
         if (cancelled) return;
-        /* Returning user on Welcome: hydrate from sky and skip onboarding. */
+        /* Returning user (magic link from chat): hydrate and skip onboarding. */
         if (!profileRef.current && remote?.profile) {
           applyRemote(remote);
           setGate("app");
           showToast("Hentet planen din fra skyen.", "var(--go)");
+          if (!cancelled) setSync("ok");
+          return;
+        }
+        if (gate === "coach") {
           if (!cancelled) setSync("ok");
           return;
         }
@@ -1157,7 +1166,7 @@ export default function App() {
     setProgress(emptyProgress());
     localAt.current = 0;
     store.set(KEY, "");
-    setGate("welcome");
+    setGate("coach");
     showToast("Alt glemt — snakk med treneren på nytt.", "var(--muted)");
   }
 
@@ -1187,32 +1196,23 @@ export default function App() {
     );
   }
 
-  if (gate === "welcome") {
-    return (
-      <>
-        <style>{CSS}</style>
-        <Welcome
-          appName={brand.appName}
-          coachName={brand.coachName}
-          cloudEnabled={cloud.enabled}
-          onStart={() => setGate("coach")}
-          onLogin={() => setAuthSheet(true)}
-        />
-        {authSheet && (
-          <SyncSheet user={user} sync={sync} onClose={() => {
-            setAuthSheet(false);
-            if (user) setGate("app");
-          }} />
-        )}
-      </>
-    );
-  }
-
   if (gate === "coach") {
     return (
       <>
         <style>{CSS}</style>
-        <Coach onComplete={onCoachDone} />
+        <Coach
+          user={user}
+          cloudEnabled={cloud.enabled}
+          onComplete={onCoachDone}
+          onCloudRestore={(remote) => {
+            applyRemote(remote);
+            setGate("app");
+            showToast("Hentet planen din fra skyen.", "var(--go)");
+          }}
+        />
+        {authSheet && (
+          <SyncSheet user={user} sync={sync} onClose={() => setAuthSheet(false)} />
+        )}
       </>
     );
   }

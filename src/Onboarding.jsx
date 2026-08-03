@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronRight, Wind, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { defaultBrand, weeksFromDate } from "./state.js";
+import * as cloud from "./cloud.js";
+
+const COACH_PRESETS = ["MAI", "Kai", "Nora"];
 
 const GOALS = [
   { kind: "navy_race", label: "Navy Race" },
@@ -111,77 +114,48 @@ function TypingDots() {
 }
 
 function CoachAvatar({ name }) {
-  const letter = (name || "M").trim().charAt(0).toUpperCase() || "M";
+  const letter = (name || "?").trim().charAt(0).toUpperCase() || "?";
   return <div className="ob-avatar" aria-hidden>{letter}</div>;
 }
 
-export function Welcome({ coachName, appName, cloudEnabled, onStart, onLogin }) {
-  const name = coachName || "MAI";
-  return (
-    <div className="nr-root">
-      <div className="nr-noise" />
-      <div className="nr-wrap ob-welcome">
-        <div className="fade ob-welcome-inner">
-          <div className="tag" style={{ justifyContent: "center", marginBottom: 22 }}>
-            <Wind size={12} /> {appName || "MAI TRAINER"}
-          </div>
-          <div className="ob-welcome-preview">
-            <div className="ob-row coach">
-              <CoachAvatar name={name} />
-              <div className="ob-bubble-card coach">
-                <div className="ob-who">{name}</div>
-                <div className="ob-text">
-                  Hei — jeg er {name}. Fortell meg hva du trener mot, så bygger vi et program som faktisk passer deg.
-                </div>
-              </div>
-            </div>
-          </div>
-          <button className="cta" onClick={onStart} style={{ marginTop: 28 }}>
-            Snakk med {name} <ChevronRight size={18} />
-          </button>
-          {cloudEnabled && (
-            <button className="skipbtn" onClick={onLogin} style={{ marginTop: 12 }}>
-              Jeg har allerede konto
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+const EMPTY_DRAFT = {
+  appName: "MAI TRAINER",
+  coachName: "",
+  goalKind: null,
+  goalLabel: "",
+  otherLabel: "",
+  periodMode: "weeks",
+  weeks: 10,
+  goalDate: "",
+  daysPerWeek: 4,
+  mode: "flexible",
+  level: null,
+  equipment: ["bodyweight"],
+  bodyWeight: "",
+  bodyHeight: "",
+  pickingOther: false,
+  customName: "",
+};
 
 /**
  * Conversational coach — transcript + chip composer.
- * onComplete(profile).
+ * First run lands here (no Welcome). Returning users: magic link → onCloudRestore.
  */
-export function Coach({ onComplete }) {
-  const [d, setD] = useState({
-    appName: "MAI TRAINER",
-    coachName: "MAI",
-    goalKind: null,
-    goalLabel: "",
-    otherLabel: "",
-    periodMode: "weeks", /* weeks | date — mutually exclusive */
-    weeks: 10,
-    goalDate: "",
-    daysPerWeek: 4,
-    mode: "flexible",
-    level: null,
-    equipment: ["bodyweight"],
-    bodyWeight: "",
-    bodyHeight: "",
-    pickingOther: false,
-  });
+export function Coach({ onComplete, user = null, cloudEnabled = false, onCloudRestore }) {
+  const [d, setD] = useState(() => ({ ...EMPTY_DRAFT }));
   const [turn, setTurn] = useState("boot");
   const [messages, setMessages] = useState([]);
   const [typing, setTyping] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [returnEmail, setReturnEmail] = useState("");
+  const [returnErr, setReturnErr] = useState("");
   const scrollRef = useRef(null);
   const draft = useRef(d);
   const booted = useRef(false);
+  const restoreTried = useRef(false);
   draft.current = d;
 
-  const coach = d.coachName || "MAI";
+  const coach = d.coachName || "Treneren";
   const set = (patch) => setD((x) => ({ ...x, ...patch }));
 
   const scrollBottom = useCallback(() => {
@@ -208,31 +182,111 @@ export function Coach({ onComplete }) {
     setMessages((m) => [...m, { id: mid(), role: "user", text }]);
   }, []);
 
+  const OPENING =
+    "Hei! La oss sette opp et treningsprogram til deg. Først — hva vil du kalle meg?";
+
   /* Boot: opening lines (guard against StrictMode double-mount). */
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
     (async () => {
-      await pushCoach(
-        `Hei — jeg er ${draft.current.coachName || "MAI"}. Jeg blir treneren din her. Skal vi beholde navnene, eller vil du endre?`,
-        380,
-      );
-      setTurn("brand");
+      await pushCoach(OPENING, 380);
+      setTurn("name");
     })();
   }, [pushCoach]);
 
+  /* Returning user completed magic link — pull plan or fall back to setup. */
+  useEffect(() => {
+    if (!user || !cloudEnabled) return;
+    if (turn !== "returning" && turn !== "returning-sent") return;
+    if (restoreTried.current) return;
+    restoreTried.current = true;
+    let cancelled = false;
+    (async () => {
+      setBusy(true);
+      setTyping(true);
+      try {
+        const remote = await cloud.pull(user.id);
+        if (cancelled) return;
+        setTyping(false);
+        if (remote?.profile) {
+          onCloudRestore?.(remote);
+          return;
+        }
+        setBusy(false);
+        await pushCoach(
+          "Fant ingen lagret plan på den kontoen. La oss sette opp et nytt — hva vil du kalle meg?",
+          420,
+        );
+        setTurn("name");
+      } catch {
+        if (cancelled) return;
+        setTyping(false);
+        setBusy(false);
+        setReturnErr("Kunne ikke hente planen. Prøv igjen, eller sett opp på nytt.");
+        setTurn("returning");
+        restoreTried.current = false;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, turn, cloudEnabled, onCloudRestore, pushCoach]);
+
   const coreDone = d.goalKind && d.level && d.equipment.length > 0;
 
-  async function afterBrand() {
-    const c = draft.current.coachName || "MAI";
-    const a = draft.current.appName || "MAI TRAINER";
-    pushUser(c === "MAI" && a === "MAI TRAINER" ? "Behold MAI TRAINER / MAI" : `${a} · ${c}`);
+  async function chooseCoachName(name) {
+    const c = (name || "").trim() || "MAI";
+    set({ coachName: c, customName: "" });
+    draft.current = { ...draft.current, coachName: c };
+    pushUser(c);
     setTurn("wait");
     await pushCoach(
-      `Supert — jeg er ${c}. Hva trener du mot — og innen når? Velg mål, så enten antall uker eller en måldato (ikke begge).`,
+      `Hyggelig — jeg er ${c}. Hva trener du mot — og innen når? Velg mål, så enten antall uker eller en måldato (ikke begge).`,
       480,
     );
     setTurn("goal");
+  }
+
+  async function startReturning() {
+    pushUser("Jeg har allerede et program");
+    setTurn("wait");
+    if (!cloudEnabled) {
+      await pushCoach(
+        "Sky-synk er ikke satt opp på denne enheten, så jeg kan ikke hente et program via e-post. Sett opp et nytt — hva vil du kalle meg?",
+        500,
+      );
+      setTurn("name");
+      return;
+    }
+    await pushCoach(
+      "Flott — skriv e-posten du brukte, så sender jeg en innloggingslenke. Åpne den på denne enheten, så henter jeg programmet ditt.",
+      480,
+    );
+    setReturnEmail("");
+    setReturnErr("");
+    restoreTried.current = false;
+    setTurn("returning");
+  }
+
+  async function sendReturnLink(e) {
+    e?.preventDefault?.();
+    const email = returnEmail.trim();
+    if (!email) return;
+    setReturnErr("");
+    setBusy(true);
+    try {
+      await cloud.sendMagicLink(email);
+      pushUser(email);
+      setTurn("wait");
+      await pushCoach(
+        `Lenke sendt til ${email}. Åpne den på denne enheten — jeg venter her og henter planen når du er inne.`,
+        420,
+      );
+      setTurn("returning-sent");
+    } catch (ex) {
+      setReturnErr(ex.message || "Kunne ikke sende lenke.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function afterGoal() {
@@ -335,32 +389,16 @@ export function Coach({ onComplete }) {
   function restart() {
     msgSeq = 0;
     setMessages([]);
-    setD({
-      appName: "MAI TRAINER",
-      coachName: "MAI",
-      goalKind: null,
-      goalLabel: "",
-      otherLabel: "",
-      periodMode: "weeks",
-      weeks: 10,
-      goalDate: "",
-      daysPerWeek: 4,
-      mode: "flexible",
-      level: null,
-      equipment: ["bodyweight"],
-      bodyWeight: "",
-      bodyHeight: "",
-      pickingOther: false,
-    });
+    setD({ ...EMPTY_DRAFT });
+    setReturnEmail("");
+    setReturnErr("");
+    restoreTried.current = false;
     setTurn("boot");
     setTyping(false);
     setBusy(false);
     window.setTimeout(async () => {
-      await pushCoach(
-        `Hei — jeg er MAI. Jeg blir treneren din her. Skal vi beholde navnene, eller vil du endre?`,
-        380,
-      );
-      setTurn("brand");
+      await pushCoach(OPENING, 380);
+      setTurn("name");
     }, 40);
   }
 
@@ -408,19 +446,82 @@ export function Coach({ onComplete }) {
         </div>
 
         <div className="ob-composer">
-          {turn === "brand" && !busy && (
+          {turn === "name" && !busy && (
             <>
-              <div className="ob-fields">
-                <label className="ob-label">App</label>
-                <input className="tinput" value={d.appName} onChange={(e) => set({ appName: e.target.value })} />
-                <label className="ob-label">Trener</label>
-                <input className="tinput" value={d.coachName} onChange={(e) => set({ coachName: e.target.value })} />
-              </div>
               <div className="ob-chips">
-                <Chip on onClick={afterBrand}>Behold defaults · videre</Chip>
-                <Chip on={false} onClick={afterBrand}>Bruk navnene over</Chip>
+                {COACH_PRESETS.map((n) => (
+                  <Chip key={n} on={false} onClick={() => chooseCoachName(n)}>{n}</Chip>
+                ))}
               </div>
+              <label className="ob-label">Eller skriv et navn</label>
+              <div className="ob-inline">
+                <input
+                  className="tinput"
+                  placeholder="F.eks. Sam"
+                  value={d.customName}
+                  onChange={(e) => set({ customName: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && d.customName.trim()) chooseCoachName(d.customName);
+                  }}
+                />
+                <button
+                  className="cta ob-inline-cta"
+                  disabled={!d.customName.trim()}
+                  onClick={() => chooseCoachName(d.customName)}
+                >
+                  Bruk
+                </button>
+              </div>
+              <button className="skipbtn ob-return-link" onClick={startReturning}>
+                Jeg har allerede et program
+              </button>
             </>
+          )}
+
+          {turn === "returning" && !busy && (
+            <form onSubmit={sendReturnLink}>
+              <label className="ob-label">E-post</label>
+              <input
+                className="tinput"
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="deg@epost.no"
+                value={returnEmail}
+                onChange={(e) => setReturnEmail(e.target.value)}
+              />
+              {returnErr && <div className="ob-err">{returnErr}</div>}
+              <button className="cta ob-composer-cta" type="submit" disabled={!returnEmail.trim()}>
+                Send innloggingslenke
+              </button>
+              <button
+                type="button"
+                className="skipbtn"
+                style={{ marginTop: 10, width: "100%" }}
+                onClick={async () => {
+                  pushUser("Sett opp på nytt");
+                  setTurn("wait");
+                  await pushCoach("Greit — hva vil du kalle meg?", 360);
+                  setTurn("name");
+                }}
+              >
+                Sett opp et nytt program i stedet
+              </button>
+            </form>
+          )}
+
+          {turn === "returning-sent" && !busy && (
+            <div className="ob-composer-idle mono">
+              Venter på at du åpner lenken…
+              <button
+                type="button"
+                className="skipbtn"
+                style={{ marginTop: 12, width: "100%", textTransform: "none", letterSpacing: 0 }}
+                onClick={() => { restoreTried.current = false; setTurn("returning"); }}
+              >
+                Send på nytt / annen e-post
+              </button>
+            </div>
           )}
 
           {turn === "goal" && !busy && (
