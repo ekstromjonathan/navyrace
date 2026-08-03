@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { ChevronRight, Wind } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { ChevronRight, Wind, RotateCcw } from "lucide-react";
 import { defaultBrand } from "./state.js";
 
 const GOALS = [
@@ -29,6 +29,13 @@ const EQUIP = [
 ];
 
 const WEEKS = [4, 6, 8, 10, 12];
+const CORE_TURNS = 4; /* goal, schedule, level, equip — brand is soft intro */
+
+let msgSeq = 0;
+function mid() {
+  msgSeq += 1;
+  return `m${msgSeq}`;
+}
 
 /** @returns profile object ready to persist */
 export function buildProfileFromDraft(d) {
@@ -66,46 +73,55 @@ export function buildProfileFromDraft(d) {
   };
 }
 
-function Chip({ on, children, onClick }) {
+function Chip({ on, children, onClick, disabled }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="ob-chip"
-      style={on ? { background: "var(--flare)", color: "#1a0a06", borderColor: "var(--flare)" } : undefined}
+      disabled={disabled}
+      className={`ob-chip${on ? " on" : ""}`}
     >
       {children}
     </button>
   );
 }
 
-function Bubble({ who, children }) {
+function TypingDots() {
   return (
-    <div className={`ob-bubble ${who}`}>
-      {who === "mai" && <div className="ob-who">MAI</div>}
-      <div className="ob-text">{children}</div>
+    <div className="ob-typing" aria-label="Skriver">
+      <span /><span /><span />
     </div>
   );
 }
 
+function CoachAvatar({ name }) {
+  const letter = (name || "M").trim().charAt(0).toUpperCase() || "M";
+  return <div className="ob-avatar" aria-hidden>{letter}</div>;
+}
+
 export function Welcome({ coachName, appName, cloudEnabled, onStart, onLogin }) {
+  const name = coachName || "MAI";
   return (
     <div className="nr-root">
       <div className="nr-noise" />
-      <div className="nr-wrap" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100dvh" }}>
-        <div className="fade" style={{ textAlign: "center", padding: "24px 0 40px" }}>
-          <div className="tag" style={{ justifyContent: "center", marginBottom: 18 }}>
+      <div className="nr-wrap ob-welcome">
+        <div className="fade ob-welcome-inner">
+          <div className="tag" style={{ justifyContent: "center", marginBottom: 22 }}>
             <Wind size={12} /> {appName || "MAI TRAINER"}
           </div>
-          <div className="htitle" style={{ fontSize: 34, marginBottom: 12 }}>
-            Hei, jeg er {coachName || "MAI"}
+          <div className="ob-welcome-preview">
+            <div className="ob-row coach">
+              <CoachAvatar name={name} />
+              <div className="ob-bubble-card coach">
+                <div className="ob-who">{name}</div>
+                <div className="ob-text">
+                  Hei — jeg er {name}. Fortell meg hva du trener mot, så bygger vi et program som faktisk passer deg.
+                </div>
+              </div>
+            </div>
           </div>
-          <p style={{ color: "var(--muted)", fontSize: 15, lineHeight: 1.5, maxWidth: 320, margin: "0 auto 28px" }}>
-            Vi bygger et program til <em style={{ color: "var(--bone)", fontStyle: "normal" }}>deg</em> —
-            mål, tid og utstyr. Ingen konto kreves for å starte.
-          </p>
-          <button className="cta" onClick={onStart} style={{ marginTop: 0 }}>
-            Start med {coachName || "MAI"} <ChevronRight size={18} />
+          <button className="cta" onClick={onStart} style={{ marginTop: 28 }}>
+            Snakk med {name} <ChevronRight size={18} />
           </button>
           {cloudEnabled && (
             <button className="skipbtn" onClick={onLogin} style={{ marginTop: 12 }}>
@@ -119,11 +135,10 @@ export function Welcome({ coachName, appName, cloudEnabled, onStart, onLogin }) 
 }
 
 /**
- * Chip-based coach flow. onComplete(profile).
- * Steps: brand → goal+timeline → days+mode → level → equipment → optional body → summary
+ * Conversational coach — transcript + chip composer.
+ * onComplete(profile).
  */
 export function Coach({ onComplete }) {
-  const [step, setStep] = useState(0);
   const [d, setD] = useState({
     appName: "MAI TRAINER",
     coachName: "MAI",
@@ -138,209 +153,400 @@ export function Coach({ onComplete }) {
     equipment: ["bodyweight"],
     bodyWeight: "",
     bodyHeight: "",
-    wantExtras: null,
     pickingOther: false,
   });
+  const [turn, setTurn] = useState("boot");
+  const [messages, setMessages] = useState([]);
+  const [typing, setTyping] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const scrollRef = useRef(null);
+  const draft = useRef(d);
+  const booted = useRef(false);
+  draft.current = d;
 
   const coach = d.coachName || "MAI";
   const set = (patch) => setD((x) => ({ ...x, ...patch }));
 
+  const scrollBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }, []);
+
+  useEffect(() => { scrollBottom(); }, [messages, typing, turn, scrollBottom]);
+
+  const pushCoach = useCallback((text, delay = 520) => new Promise((resolve) => {
+    setTyping(true);
+    setBusy(true);
+    window.setTimeout(() => {
+      setTyping(false);
+      setMessages((m) => [...m, { id: mid(), role: "coach", text }]);
+      setBusy(false);
+      resolve();
+    }, delay);
+  }), []);
+
+  const pushUser = useCallback((text) => {
+    setMessages((m) => [...m, { id: mid(), role: "user", text }]);
+  }, []);
+
+  /* Boot: opening lines (guard against StrictMode double-mount). */
+  useEffect(() => {
+    if (booted.current) return;
+    booted.current = true;
+    (async () => {
+      await pushCoach(
+        `Hei — jeg er ${draft.current.coachName || "MAI"}. Jeg blir treneren din her. Skal vi beholde navnene, eller vil du endre?`,
+        380,
+      );
+      setTurn("brand");
+    })();
+  }, [pushCoach]);
+
+  const coreDone = d.goalKind && d.level && d.equipment.length > 0;
+
+  async function afterBrand() {
+    const c = draft.current.coachName || "MAI";
+    const a = draft.current.appName || "MAI TRAINER";
+    pushUser(c === "MAI" && a === "MAI TRAINER" ? "Behold MAI TRAINER / MAI" : `${a} · ${c}`);
+    setTurn("wait");
+    await pushCoach(
+      `Supert — jeg er ${c}. Hva trener du mot, og innen når? Velg mål og varighet.`,
+      480,
+    );
+    setTurn("goal");
+  }
+
+  async function afterGoal() {
+    const cur = draft.current;
+    const label = cur.pickingOther && cur.otherLabel
+      ? cur.otherLabel
+      : cur.goalLabel || "målet ditt";
+    const dateBit = cur.goalDate ? ` · måldato ${cur.goalDate}` : "";
+    pushUser(`${label} · ${cur.weeks} uker${dateBit}`);
+    setTurn("wait");
+    await pushCoach(
+      `${label} på ${cur.weeks} uker — notert. Hvor mange dager i uka er realistisk, og vil du følge kalenderen eller ta neste økt når du er klar?`,
+      560,
+    );
+    setTurn("schedule");
+  }
+
+  async function afterSchedule() {
+    const cur = draft.current;
+    const modeLabel = cur.mode === "calendar" ? "kalender (man = man)" : "fleksibelt";
+    pushUser(`${cur.daysPerWeek} dager · ${modeLabel}`);
+    setTurn("wait");
+    await pushCoach(
+      `${cur.daysPerWeek} dager, ${modeLabel}. Nivå akkurat nå — helt ærlig?`,
+      480,
+    );
+    setTurn("level");
+  }
+
+  async function afterLevel(levelId) {
+    const lvl = LEVELS.find((l) => l.id === levelId);
+    pushUser(lvl?.label || levelId);
+    setTurn("wait");
+    const nudge = levelId === "new"
+      ? "Da starter vi rolig og bygger opp."
+      : levelId === "solid"
+        ? "Da kan vi presse litt mer."
+        : "Bra — da tilpasser vi dosen etter hvert.";
+    await pushCoach(
+      `${lvl?.label}. ${nudge} Hva har du tilgang til? Velg alt som gjelder — trykk «Ferdig» når du er klar.`,
+      560,
+    );
+    setTurn("equip");
+  }
+
+  async function afterEquip() {
+    const cur = draft.current;
+    const labels = cur.equipment
+      .map((id) => EQUIP.find((e) => e.id === id)?.label)
+      .filter(Boolean);
+    pushUser(labels.join(" · ") || "Kroppsvekt");
+    setTurn("wait");
+    await pushCoach(
+      "To ting til hvis du vil ha skarpere dose — vekt og høyde. Ellers hopper vi til oppsummering.",
+      500,
+    );
+    setTurn("extras");
+  }
+
+  async function goSummary(skipBody) {
+    if (!skipBody) {
+      const cur = draft.current;
+      const bits = [];
+      if (cur.bodyWeight) bits.push(`${cur.bodyWeight} kg`);
+      if (cur.bodyHeight) bits.push(`${cur.bodyHeight} cm`);
+      pushUser(bits.length ? bits.join(" · ") : "Hopp over");
+    } else {
+      pushUser("Hopp over");
+    }
+    setTurn("wait");
+    const cur = draft.current;
+    const goal = cur.pickingOther && cur.otherLabel ? cur.otherLabel : cur.goalLabel;
+    const lvl = LEVELS.find((l) => l.id === cur.level)?.label;
+    const mode = cur.mode === "calendar" ? "kalender" : "fleksibelt";
+    const eq = cur.equipment
+      .map((id) => EQUIP.find((e) => e.id === id)?.label)
+      .filter(Boolean)
+      .slice(0, 4)
+      .join(", ");
+    await pushCoach(
+      `Sånn hørte jeg deg: ${goal} over ${cur.weeks} uker, ${cur.daysPerWeek} dager ${mode}, nivå «${lvl}», med ${eq || "det du har"}. Stemmer det?`,
+      640,
+    );
+    setTurn("summary");
+  }
+
   function finish() {
+    const cur = draft.current;
     const profile = buildProfileFromDraft({
-      ...d,
-      goalLabel: d.goalKind === "general" && d.otherLabel
-        ? d.otherLabel
-        : d.goalLabel || GOALS.find((g) => g.kind === d.goalKind)?.label,
-      bodyWeight: d.bodyWeight ? Number(d.bodyWeight) : null,
-      bodyHeight: d.bodyHeight ? Number(d.bodyHeight) : null,
+      ...cur,
+      goalLabel: cur.goalKind === "general" && cur.otherLabel
+        ? cur.otherLabel
+        : cur.goalLabel || GOALS.find((g) => g.kind === cur.goalKind)?.label,
+      bodyWeight: cur.bodyWeight ? Number(cur.bodyWeight) : null,
+      bodyHeight: cur.bodyHeight ? Number(cur.bodyHeight) : null,
     });
     onComplete(profile);
   }
 
-  const coreDone = d.goalKind && d.level && d.equipment.length > 0;
+  function restart() {
+    msgSeq = 0;
+    setMessages([]);
+    setD({
+      appName: "MAI TRAINER",
+      coachName: "MAI",
+      goalKind: null,
+      goalLabel: "",
+      otherLabel: "",
+      weeks: 10,
+      goalDate: "",
+      daysPerWeek: 4,
+      mode: "flexible",
+      level: null,
+      equipment: ["bodyweight"],
+      bodyWeight: "",
+      bodyHeight: "",
+      pickingOther: false,
+    });
+    setTurn("boot");
+    setTyping(false);
+    setBusy(false);
+    window.setTimeout(async () => {
+      await pushCoach(
+        `Hei — jeg er MAI. Jeg blir treneren din her. Skal vi beholde navnene, eller vil du endre?`,
+        380,
+      );
+      setTurn("brand");
+    }, 40);
+  }
+
+  const answered = [d.goalKind, d.daysPerWeek && d.mode, d.level, d.equipment.length]
+    .filter(Boolean).length;
+  const dots = Math.min(answered, CORE_TURNS);
 
   return (
     <div className="nr-root">
       <div className="nr-noise" />
-      <div className="nr-wrap ob-wrap">
-        <div className="ob-progress mono">
-          {coach} · steg {Math.min(step + 1, 5)} / 5
+      <div className="ob-chat">
+        <header className="ob-chat-head">
+          <div className="ob-chat-head-left">
+            <CoachAvatar name={coach} />
+            <div>
+              <div className="ob-chat-name">{coach}</div>
+              <div className="ob-chat-sub mono">Din trener</div>
+            </div>
+          </div>
+          <div className="ob-dots" aria-label={`Steg ${dots} av ${CORE_TURNS}`}>
+            {Array.from({ length: CORE_TURNS }, (_, i) => (
+              <span key={i} className={i < dots ? "on" : ""} />
+            ))}
+          </div>
+        </header>
+
+        <div className="ob-transcript" ref={scrollRef}>
+          {messages.map((m) => (
+            <div key={m.id} className={`ob-row ${m.role === "coach" ? "coach" : "user"}`}>
+              {m.role === "coach" && <CoachAvatar name={coach} />}
+              <div className={`ob-bubble-card ${m.role === "coach" ? "coach" : "user"}`}>
+                {m.role === "coach" && <div className="ob-who">{coach}</div>}
+                <div className="ob-text">{m.text}</div>
+              </div>
+            </div>
+          ))}
+          {typing && (
+            <div className="ob-row coach">
+              <CoachAvatar name={coach} />
+              <div className="ob-bubble-card coach typing">
+                <TypingDots />
+              </div>
+            </div>
+          )}
         </div>
 
-        {step === 0 && (
-          <div className="fade">
-            <Bubble who="mai">
-              Først — hva skal appen og jeg hete? Du kan beholde defaultene.
-            </Bubble>
-            <label className="ob-label">App</label>
-            <input className="tinput" value={d.appName} onChange={(e) => set({ appName: e.target.value })} />
-            <label className="ob-label">Trener</label>
-            <input className="tinput" value={d.coachName} onChange={(e) => set({ coachName: e.target.value })} />
-            <button className="cta" style={{ marginTop: 18 }} onClick={() => setStep(1)}>
-              Videre
-            </button>
-          </div>
-        )}
+        <div className="ob-composer">
+          {turn === "brand" && !busy && (
+            <>
+              <div className="ob-fields">
+                <label className="ob-label">App</label>
+                <input className="tinput" value={d.appName} onChange={(e) => set({ appName: e.target.value })} />
+                <label className="ob-label">Trener</label>
+                <input className="tinput" value={d.coachName} onChange={(e) => set({ coachName: e.target.value })} />
+              </div>
+              <div className="ob-chips">
+                <Chip on onClick={afterBrand}>Behold defaults · videre</Chip>
+                <Chip on={false} onClick={afterBrand}>Bruk navnene over</Chip>
+              </div>
+            </>
+          )}
 
-        {step === 1 && (
-          <div className="fade">
-            <Bubble who="mai">Hva trener du mot — og innen når?</Bubble>
-            <div className="ob-chips">
-              {GOALS.map((g) => {
-                const selected = g.other
-                  ? d.goalKind === "general" && d.pickingOther
-                  : d.goalKind === g.kind && !d.pickingOther;
-                return (
-                  <Chip
-                    key={g.label}
-                    on={selected}
-                    onClick={() => {
-                      if (g.other) set({ goalKind: "general", goalLabel: "Annet", pickingOther: true });
-                      else set({ goalKind: g.kind, goalLabel: g.label, otherLabel: "", pickingOther: false });
-                    }}
-                  >
-                    {g.label}
-                  </Chip>
-                );
-              })}
-            </div>
-            {d.pickingOther && (
-              <input
-                className="tinput"
-                style={{ marginTop: 10 }}
-                placeholder="F.eks. Triatlon"
-                value={d.otherLabel}
-                onChange={(e) => set({ otherLabel: e.target.value, goalLabel: e.target.value || "Annet" })}
-              />
-            )}
-            <div className="ob-label" style={{ marginTop: 18 }}>Varighet</div>
-            <div className="ob-chips">
-              {WEEKS.map((w) => (
-                <Chip key={w} on={d.weeks === w} onClick={() => set({ weeks: w })}>{w} uker</Chip>
-              ))}
-            </div>
-            <label className="ob-label">Måldato (valgfritt)</label>
-            <input className="tinput" type="date" value={d.goalDate} onChange={(e) => set({ goalDate: e.target.value })} />
-            <button className="cta" style={{ marginTop: 18 }} disabled={!d.goalKind} onClick={() => setStep(2)}>
-              Videre
-            </button>
-          </div>
-        )}
+          {turn === "goal" && !busy && (
+            <>
+              <div className="ob-chips">
+                {GOALS.map((g) => {
+                  const selected = g.other
+                    ? d.goalKind === "general" && d.pickingOther
+                    : d.goalKind === g.kind && !d.pickingOther;
+                  return (
+                    <Chip
+                      key={g.label}
+                      on={selected}
+                      onClick={() => {
+                        if (g.other) set({ goalKind: "general", goalLabel: "Annet", pickingOther: true });
+                        else set({ goalKind: g.kind, goalLabel: g.label, otherLabel: "", pickingOther: false });
+                      }}
+                    >
+                      {g.label}
+                    </Chip>
+                  );
+                })}
+              </div>
+              {d.pickingOther && (
+                <input
+                  className="tinput"
+                  style={{ marginTop: 10 }}
+                  placeholder="F.eks. Triatlon"
+                  value={d.otherLabel}
+                  onChange={(e) => set({ otherLabel: e.target.value, goalLabel: e.target.value || "Annet" })}
+                />
+              )}
+              <div className="ob-label" style={{ marginTop: 14 }}>Varighet</div>
+              <div className="ob-chips">
+                {WEEKS.map((w) => (
+                  <Chip key={w} on={d.weeks === w} onClick={() => set({ weeks: w })}>{w} uker</Chip>
+                ))}
+              </div>
+              <label className="ob-label">Måldato (valgfritt)</label>
+              <input className="tinput" type="date" value={d.goalDate} onChange={(e) => set({ goalDate: e.target.value })} />
+              <button
+                className="cta ob-composer-cta"
+                disabled={!d.goalKind || (d.pickingOther && !d.otherLabel.trim())}
+                onClick={afterGoal}
+              >
+                Send til {coach}
+              </button>
+            </>
+          )}
 
-        {step === 2 && (
-          <div className="fade">
-            <Bubble who="mai">
-              Hvor mange dager i uka er realistisk — og vil du følge kalenderen?
-            </Bubble>
-            <div className="ob-chips">
-              {[3, 4, 5, 6].map((n) => (
-                <Chip key={n} on={d.daysPerWeek === n} onClick={() => set({ daysPerWeek: n })}>{n} dager</Chip>
-              ))}
-            </div>
-            <div className="ob-label" style={{ marginTop: 16 }}>Modus</div>
-            <div className="ob-chips">
-              <Chip on={d.mode === "calendar"} onClick={() => set({ mode: "calendar" })}>
-                Kalender · man = man
-              </Chip>
-              <Chip on={d.mode === "flexible"} onClick={() => set({ mode: "flexible" })}>
-                Fleksibel · neste når du er klar
-              </Chip>
-            </div>
-            <button className="cta" style={{ marginTop: 18 }} onClick={() => setStep(3)}>Videre</button>
-          </div>
-        )}
+          {turn === "schedule" && !busy && (
+            <>
+              <div className="ob-chips">
+                {[3, 4, 5, 6].map((n) => (
+                  <Chip key={n} on={d.daysPerWeek === n} onClick={() => set({ daysPerWeek: n })}>{n} dager</Chip>
+                ))}
+              </div>
+              <div className="ob-chips" style={{ marginTop: 10 }}>
+                <Chip on={d.mode === "calendar"} onClick={() => set({ mode: "calendar" })}>
+                  Kalender · man = man
+                </Chip>
+                <Chip on={d.mode === "flexible"} onClick={() => set({ mode: "flexible" })}>
+                  Fleksibel · når du er klar
+                </Chip>
+              </div>
+              <button className="cta ob-composer-cta" onClick={afterSchedule}>
+                Send til {coach}
+              </button>
+            </>
+          )}
 
-        {step === 3 && (
-          <div className="fade">
-            <Bubble who="mai">Nivå akkurat nå?</Bubble>
+          {turn === "level" && !busy && (
             <div className="ob-chips">
               {LEVELS.map((l) => (
-                <Chip key={l.id} on={d.level === l.id} onClick={() => set({ level: l.id })}>{l.label}</Chip>
+                <Chip key={l.id} on={d.level === l.id} onClick={() => { set({ level: l.id }); afterLevel(l.id); }}>
+                  {l.label}
+                </Chip>
               ))}
             </div>
-            <button className="cta" style={{ marginTop: 18 }} disabled={!d.level} onClick={() => setStep(4)}>
-              Videre
-            </button>
-          </div>
-        )}
+          )}
 
-        {step === 4 && (
-          <div className="fade">
-            <Bubble who="mai">Hva har du tilgang til? (velg flere)</Bubble>
+          {turn === "equip" && !busy && (
+            <>
+              <div className="ob-chips">
+                {EQUIP.map((e) => {
+                  const on = d.equipment.includes(e.id);
+                  return (
+                    <Chip
+                      key={e.id}
+                      on={on}
+                      onClick={() => set({
+                        equipment: on
+                          ? d.equipment.filter((x) => x !== e.id)
+                          : [...d.equipment, e.id],
+                      })}
+                    >
+                      {e.label}
+                    </Chip>
+                  );
+                })}
+              </div>
+              <button
+                className="cta ob-composer-cta"
+                disabled={!d.equipment.length}
+                onClick={afterEquip}
+              >
+                Ferdig · videre
+              </button>
+            </>
+          )}
+
+          {turn === "extras" && !busy && (
+            <>
+              <div className="ob-fields">
+                <label className="ob-label">Vekt (kg)</label>
+                <input className="tinput" inputMode="decimal" value={d.bodyWeight} onChange={(e) => set({ bodyWeight: e.target.value })} />
+                <label className="ob-label">Høyde (cm)</label>
+                <input className="tinput" inputMode="decimal" value={d.bodyHeight} onChange={(e) => set({ bodyHeight: e.target.value })} />
+              </div>
+              <div className="ob-chips">
+                <Chip on onClick={() => goSummary(false)}>Send til {coach}</Chip>
+                <Chip on={false} onClick={() => goSummary(true)}>Hopp over</Chip>
+              </div>
+            </>
+          )}
+
+          {turn === "summary" && !busy && (
             <div className="ob-chips">
-              {EQUIP.map((e) => {
-                const on = d.equipment.includes(e.id);
-                return (
-                  <Chip
-                    key={e.id}
-                    on={on}
-                    onClick={() => set({
-                      equipment: on
-                        ? d.equipment.filter((x) => x !== e.id)
-                        : [...d.equipment, e.id],
-                    })}
-                  >
-                    {e.label}
-                  </Chip>
-                );
-              })}
+              <Chip on disabled={!coreDone} onClick={finish}>
+                Ja — bygg programmet mitt
+              </Chip>
+              <Chip on={false} onClick={restart}>
+                <RotateCcw size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+                Start samtalen på nytt
+              </Chip>
             </div>
-            <button
-              className="cta"
-              style={{ marginTop: 18 }}
-              disabled={!d.equipment.length}
-              onClick={() => setStep(5)}
-            >
-              Videre
-            </button>
-          </div>
-        )}
+          )}
 
-        {step === 5 && d.wantExtras === null && (
-          <div className="fade">
-            <Bubble who="mai">
-              To ting til hvis du vil ha en skarpere plan — eller vi hopper rett til oppsummering.
-            </Bubble>
-            <button className="cta" onClick={() => set({ wantExtras: true })}>Legg til vekt / høyde</button>
-            <button className="skipbtn" onClick={() => setStep(6)}>Hopp over · oppsummer</button>
-          </div>
-        )}
-
-        {step === 5 && d.wantExtras === true && (
-          <div className="fade">
-            <Bubble who="mai">Vekt og høyde (valgfritt) — brukes bare til dose-forslag.</Bubble>
-            <label className="ob-label">Vekt (kg)</label>
-            <input className="tinput" inputMode="decimal" value={d.bodyWeight} onChange={(e) => set({ bodyWeight: e.target.value })} />
-            <label className="ob-label">Høyde (cm)</label>
-            <input className="tinput" inputMode="decimal" value={d.bodyHeight} onChange={(e) => set({ bodyHeight: e.target.value })} />
-            <button className="cta" style={{ marginTop: 18 }} onClick={() => setStep(6)}>Oppsummer</button>
-          </div>
-        )}
-
-        {step === 6 && (
-          <div className="fade">
-            <Bubble who="mai">Sånn hørte jeg deg — stemmer dette?</Bubble>
-            <div className="hero" style={{ marginTop: 12 }}>
-              <div className="metric" style={{ marginBottom: 10 }}>
-                <div className="k">App / trener</div>
-                <div className="v" style={{ fontSize: 16 }}>{d.appName} · {d.coachName}</div>
-              </div>
-              <div className="hmeta" style={{ borderTop: 0, paddingTop: 0, marginTop: 0, flexWrap: "wrap" }}>
-                <div className="metric"><div className="k">Mål</div><div className="v" style={{ fontSize: 15 }}>{d.otherLabel || d.goalLabel}</div></div>
-                <div className="metric"><div className="k">Tid</div><div className="v" style={{ fontSize: 15 }}>{d.weeks} uker</div></div>
-                <div className="metric"><div className="k">Uke</div><div className="v" style={{ fontSize: 15 }}>{d.daysPerWeek}d · {d.mode === "calendar" ? "kalender" : "fleksibel"}</div></div>
-                <div className="metric"><div className="k">Nivå</div><div className="v" style={{ fontSize: 15 }}>{LEVELS.find((l) => l.id === d.level)?.label}</div></div>
-              </div>
-              <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--muted)" }}>
-                Utstyr: {d.equipment.map((id) => EQUIP.find((e) => e.id === id)?.label).join(" · ")}
-              </div>
+          {(turn === "boot" || turn === "wait" || busy) && (
+            <div className="ob-composer-idle mono">
+              {typing ? `${coach} skriver…` : " "}
             </div>
-            <button className="cta" disabled={!coreDone} onClick={finish}>
-              Bygg programmet mitt
-            </button>
-            <button className="skipbtn" onClick={() => setStep(1)}>Endre svar</button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
