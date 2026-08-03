@@ -6,9 +6,9 @@ import * as cloud from "./cloud.js";
 const COACH_PRESETS = ["MAI", "Kai", "Nora"];
 
 const GOALS = [
-  { kind: "navy_race", label: "Navy Race" },
+  { kind: "navy_race", label: "Hinderløp / OCR" },
   { kind: "run_5_10", label: "5–10 km løp" },
-  { kind: "strength_obstacle", label: "Styrke & hinder" },
+  { kind: "strength_obstacle", label: "Styrke & funksjonelt" },
   { kind: "general", label: "Generell form" },
   { kind: "general", label: "Annet", other: true },
 ];
@@ -141,7 +141,14 @@ const EMPTY_DRAFT = {
  * Conversational coach — transcript + chip composer.
  * First run lands here (no Welcome). Returning users: magic link → onCloudRestore.
  */
-export function Coach({ onComplete, user = null, cloudEnabled = false, onCloudRestore }) {
+export function Coach({
+  onProgramReady,
+  onEnterApp,
+  onComplete,
+  user = null,
+  cloudEnabled = false,
+  onCloudRestore,
+}) {
   const [d, setD] = useState(() => ({ ...EMPTY_DRAFT }));
   const [turn, setTurn] = useState("boot");
   const [messages, setMessages] = useState([]);
@@ -149,14 +156,23 @@ export function Coach({ onComplete, user = null, cloudEnabled = false, onCloudRe
   const [busy, setBusy] = useState(false);
   const [returnEmail, setReturnEmail] = useState("");
   const [returnErr, setReturnErr] = useState("");
+  const [syncEmail, setSyncEmail] = useState("");
+  const [syncErr, setSyncErr] = useState("");
   const scrollRef = useRef(null);
   const draft = useRef(d);
+  const pendingProfile = useRef(null);
   const booted = useRef(false);
   const restoreTried = useRef(false);
   draft.current = d;
 
   const coach = d.coachName || "Treneren";
   const set = (patch) => setD((x) => ({ ...x, ...patch }));
+
+  function enterApp() {
+    const p = pendingProfile.current;
+    if (onEnterApp) onEnterApp(p);
+    else if (onComplete && p) onComplete(p);
+  }
 
   const scrollBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -230,6 +246,18 @@ export function Coach({ onComplete, user = null, cloudEnabled = false, onCloudRe
     })();
     return () => { cancelled = true; };
   }, [user, turn, cloudEnabled, onCloudRestore, pushCoach]);
+
+  /* New user chose to save — magic link opened → enter app. */
+  useEffect(() => {
+    if (!user || turn !== "sync_email_sent") return;
+    let cancelled = false;
+    (async () => {
+      setBusy(true);
+      await pushCoach("Du er inne — planen er trygg. Klar for første økt.", 360);
+      if (!cancelled) enterApp();
+    })();
+    return () => { cancelled = true; };
+  }, [user, turn, pushCoach]);
 
   const coreDone = d.goalKind && d.level && d.equipment.length > 0;
 
@@ -373,9 +401,9 @@ export function Coach({ onComplete, user = null, cloudEnabled = false, onCloudRe
     setTurn("summary");
   }
 
-  function finish() {
+  function buildPendingProfile() {
     const cur = draft.current;
-    const profile = buildProfileFromDraft({
+    return buildProfileFromDraft({
       ...cur,
       goalLabel: cur.goalKind === "general" && cur.otherLabel
         ? cur.otherLabel
@@ -383,7 +411,76 @@ export function Coach({ onComplete, user = null, cloudEnabled = false, onCloudRe
       bodyWeight: cur.bodyWeight ? Number(cur.bodyWeight) : null,
       bodyHeight: cur.bodyHeight ? Number(cur.bodyHeight) : null,
     });
-    onComplete(profile);
+  }
+
+  async function confirmBuild() {
+    const profile = buildPendingProfile();
+    pendingProfile.current = profile;
+    onProgramReady?.(profile);
+    pushUser("Ja — bygg programmet mitt");
+    setTurn("wait");
+    await pushCoach(
+      "Programmet er klart. Vil du bare tracke på denne enheten, eller lagre med e-post så informasjonen ikke forsvinner hvis du bytter telefon?",
+      520,
+    );
+    setTurn("sync_choice");
+  }
+
+  async function syncLocalOnly() {
+    pushUser("Bare denne enheten");
+    setTurn("wait");
+    await pushCoach(
+      "Greit — planen ligger her lokalt. Du kan slå på lagring senere via sky-ikonet. Klar for første økt.",
+      420,
+    );
+    enterApp();
+  }
+
+  async function syncWantSave() {
+    pushUser("Lagre med e-post");
+    setTurn("wait");
+    if (!cloudEnabled) {
+      await pushCoach(
+        "Lagring via e-post er ikke satt opp på denne enheten ennå. Vi kjører lokalt — du kan prøve sky-ikonet senere. Klar for første økt.",
+        480,
+      );
+      enterApp();
+      return;
+    }
+    if (user) {
+      await pushCoach("Du er allerede innlogget — jeg synker planen nå. Klar for første økt.", 400);
+      enterApp();
+      return;
+    }
+    await pushCoach(
+      "Skriv e-posten din — jeg sender en innloggingslenke. Ingen passord. Åpne lenken på denne enheten.",
+      460,
+    );
+    setSyncEmail("");
+    setSyncErr("");
+    setTurn("sync_email");
+  }
+
+  async function sendSyncLink(e) {
+    e?.preventDefault?.();
+    const email = syncEmail.trim();
+    if (!email) return;
+    setSyncErr("");
+    setBusy(true);
+    try {
+      await cloud.sendMagicLink(email);
+      pushUser(email);
+      setTurn("wait");
+      await pushCoach(
+        `Lenke sendt til ${email}. Åpne den her — så er planen lagret og klar.`,
+        420,
+      );
+      setTurn("sync_email_sent");
+    } catch (ex) {
+      setSyncErr(ex.message || "Kunne ikke sende lenke.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function restart() {
@@ -684,13 +781,65 @@ export function Coach({ onComplete, user = null, cloudEnabled = false, onCloudRe
 
           {turn === "summary" && !busy && (
             <div className="ob-chips">
-              <Chip on disabled={!coreDone} onClick={finish}>
+              <Chip on disabled={!coreDone} onClick={confirmBuild}>
                 Ja — bygg programmet mitt
               </Chip>
               <Chip on={false} onClick={restart}>
                 <RotateCcw size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
                 Start samtalen på nytt
               </Chip>
+            </div>
+          )}
+
+          {turn === "sync_choice" && !busy && (
+            <div className="ob-chips">
+              <Chip on onClick={syncWantSave}>
+                Lagre med e-post
+              </Chip>
+              <Chip on={false} onClick={syncLocalOnly}>
+                Bare denne enheten
+              </Chip>
+            </div>
+          )}
+
+          {turn === "sync_email" && !busy && (
+            <form onSubmit={sendSyncLink}>
+              <label className="ob-label">E-post</label>
+              <input
+                className="tinput"
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="deg@epost.no"
+                value={syncEmail}
+                onChange={(e) => setSyncEmail(e.target.value)}
+              />
+              {syncErr && <div className="ob-err">{syncErr}</div>}
+              <button className="cta ob-composer-cta" type="submit" disabled={!syncEmail.trim()}>
+                Send innloggingslenke
+              </button>
+              <button
+                type="button"
+                className="skipbtn"
+                style={{ marginTop: 10, width: "100%" }}
+                onClick={syncLocalOnly}
+              >
+                Fortsett bare på denne enheten
+              </button>
+            </form>
+          )}
+
+          {turn === "sync_email_sent" && !busy && (
+            <div className="ob-composer-idle mono">
+              Venter på at du åpner lenken…
+              <button
+                type="button"
+                className="skipbtn"
+                style={{ marginTop: 12, width: "100%", textTransform: "none", letterSpacing: 0 }}
+                onClick={() => enterApp()}
+              >
+                Fortsett uten å vente
+              </button>
             </div>
           )}
 

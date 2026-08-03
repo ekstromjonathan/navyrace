@@ -77,7 +77,7 @@ const WK = [
   { runEasy: 45, long: 9,   int: "Bakkedrag 10 × 30 s",          str: 4, brick: 6 },
   { runEasy: 40, long: 9.5, int: "5 × 4 min terskel / 2 min",    str: 4, brick: 7 },
   { runEasy: 40, long: 8,   int: "8 × 45 s bakke",               str: 4, brick: 8 },
-  { runEasy: 35, long: 6,   int: "6 × 2 min race-fart",          str: 4, brick: 7 },
+  { runEasy: 35, long: 6,   int: "6 × 2 min tempo",              str: 4, brick: 7 },
   { runEasy: 25, long: 4,   int: "4 × 1 min løst, så hvil",      str: 2, brick: 4 },
 ];
 
@@ -131,16 +131,16 @@ function buildDay(w, d, p = WK[w - 1]) {
       ex("Push-ups · føtter på stol", Activity, `${p.str} × 12–20`, "Tyngre med føtter hevet."),
       ex("Bulgarsk utfall", Mountain, "3 × 10 / bein", "Bakfot på stol."),
       ex("Step-ups m/KB 16 kg", Mountain, "3 × 10 / bein", "Kontrollert ned."),
-      ex("Bjørnekrabb", Move, "4 × 20 m", "Race-spesifikk. Lav, jevn."),
+      ex("Bjørnekrabb", Move, "4 × 20 m", "Hold hofta lav og rytmen jevn."),
       ex("Heng-utholdenhet", Hand, "3 × 45–60 s", "Til failure på siste."),
     ] };
 
   if (d === 5) {
-    if (p.brick > 0) return { ...base, type: "brick", title: "Brick · løp + hinder",
+    if (p.brick > 0) return { ...base, type: "brick", title: "Brick · løp + styrke",
       icon: Waves, est: `~${p.brick * 12} min`, loadKey: "brick", load: p.brick, unit: "runder",
       estFromLoad: (load) => `~${load * 12} min`,
       items: [
-        ex("Format", Flame, `Løp 1 km → stasjon · ${p.brick} runder`, "Hinder i tretthet — som race-dag."),
+        ex("Format", Flame, `Løp 1 km → stasjon · ${p.brick} runder`, "Styrke i tretthet — som på løpsdagen."),
         ex("Stasjon: trekk", Activity, "5 pull-ups + 30 s heng", null),
         ex("Stasjon: bæring", Anchor, "40 m vektplate 10 kg", null),
         ex("Stasjon: kraft", Zap, "15 KB swing + 10 goblet squat", null),
@@ -207,7 +207,7 @@ const LIB = {
   "Vegg-overgang": { how: "Øv på å dra deg opp til brysthøyde (pull) og presse over kanten (dip), som over en klatrevegg.", focus: "Eksplosivt opp, rull over hofta.", rest: "90–120 s" },
   "Burpees": { how: "Fra stående: ned i planke, evt. push-up, hopp inn og opp. Jevnt tempo.", focus: "Tempo, ikke maks — pust jevnt.", rest: "45–60 s" },
   "Langt rolig løp · sone 2": { how: "Ukas lengste økt, holdt i rolig snakketempo hele veien.", focus: "Bygger motoren. Tål å løpe sakte.", rest: null },
-  "Underlag": { how: "Legg gjerne deler av turen på terreng, grus eller sand.", focus: "Løypa i Horten er ikke flat asfalt.", rest: null },
+  "Underlag": { how: "Legg gjerne deler av turen på terreng, grus eller sand.", focus: "Variert underlag bygger stødighet til løpsdagen.", rest: null },
 };
 
 /* reusable expandable exercise row */
@@ -942,7 +942,6 @@ export default function App() {
   const [sync, setSync] = useState("idle");
   const [authSheet, setAuthSheet] = useState(false);
   const [settingsSheet, setSettingsSheet] = useState(false);
-  const [softAuth, setSoftAuth] = useState(false);
   const localAt = useRef(0);
   const profileRef = useRef(null);
   const programRef = useRef(null);
@@ -1170,7 +1169,8 @@ export default function App() {
     showToast("Alt glemt — snakk med treneren på nytt.", "var(--muted)");
   }
 
-  function onCoachDone(nextProfile) {
+  function persistCoachProfile(nextProfile) {
+    if (!nextProfile) return;
     setProfile(nextProfile);
     setProgram(null);
     const next = emptyProgress();
@@ -1178,9 +1178,18 @@ export default function App() {
     localAt.current = next.updatedAt;
     setProgress(next);
     store.set(KEY, serializeApp(nextProfile, null, next));
+  }
+
+  function enterAppFromCoach(nextProfile) {
+    if (nextProfile) persistCoachProfile(nextProfile);
     setGate("app");
-    if (cloud.enabled && !user) setSoftAuth(true);
     showToast("Program klart — velkommen.", "var(--go)");
+    if (cloud.enabled && user) {
+      const prof = nextProfile || profileRef.current;
+      const prog = null;
+      const payload = cloudPayload(0, {}, prof, prog, Date.now());
+      cloud.push(user.id, payload).catch(() => {});
+    }
   }
 
   if (!loaded || gate === "boot") {
@@ -1203,7 +1212,8 @@ export default function App() {
         <Coach
           user={user}
           cloudEnabled={cloud.enabled}
-          onComplete={onCoachDone}
+          onProgramReady={persistCoachProfile}
+          onEnterApp={enterAppFromCoach}
           onCloudRestore={(remote) => {
             applyRemote(remote);
             setGate("app");
@@ -1222,7 +1232,7 @@ export default function App() {
   const cells = sessions.slice(vWeekStart, vWeekStart + 7);
   const pace = paceInfo(profile, index);
   const calMismatch = profile?.schedule?.mode === "calendar" && session && session.day !== todaySlot();
-  const goalLabel = profile?.goal?.label || "Navy Race";
+  const goalLabel = profile?.goal?.label || "Trening";
 
   return (
     <div className="nr-root">
@@ -1277,8 +1287,8 @@ export default function App() {
           <div className="hero fade">
             <div className="htitle">Blokk fullført</div>
             <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.5, marginTop: 8 }}>
-              10 uker i boks. Hvil, spis, sov — du blir ikke sterkere de siste dagene, bare sliten.
-              Vi sees på startstreken på Karljohansvern.
+              Blokka er i boks. Hvil, spis, sov — du blir ikke sterkere de siste dagene, bare sliten.
+              Når du er klar, kan du starte en ny periode i innstillinger.
             </p>
             <button className="cta" onClick={() => setSettingsSheet(true)} style={{ marginTop: 20 }}>
               <RotateCcw size={18} /> Innstillinger
@@ -1388,15 +1398,6 @@ export default function App() {
           <div className="hint">Bla mellom uker · trykk en dag for å se økten</div>
         </div>
 
-        {profile?.goal?.kind === "navy_race" && (
-          <div className="race fade" style={{ animationDelay: ".3s" }}>
-            <Anchor size={20} style={{ color: "var(--flare)", flex: "0 0 auto" }} />
-            <div>
-              <div className="f">NAVY RACE · HORTEN</div>
-              <div className="s">8 KM · 30 HINDRE · KARLJOHANSVERN</div>
-            </div>
-          </div>
-        )}
         </>)}
 
         {tab === "food" && <FoodView />}
@@ -1419,26 +1420,6 @@ export default function App() {
           </button>
         </div>
       </div>
-
-      {/* soft auth after first program — value before account */}
-      {softAuth && cloud.enabled && !user && (
-        <div className="scrim" onClick={() => setSoftAuth(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-h">
-              <div className="sheet-t">Ta planen med deg</div>
-              <button className="iconbtn" onClick={() => setSoftAuth(false)}><X size={16} /></button>
-            </div>
-            <div className="sheet-sub">
-              {brand.coachName} har bygget programmet ditt. Vil du ha fremdriften på telefon og laptop?
-              Ingen passord — bare en lenke på e-post.
-            </div>
-            <button className="cta" onClick={() => { setSoftAuth(false); setAuthSheet(true); }}>
-              <Mail size={18} /> Send innloggingslenke
-            </button>
-            <button className="skipbtn" onClick={() => setSoftAuth(false)}>Ikke nå</button>
-          </div>
-        </div>
-      )}
 
       {/* sync sheet */}
       {authSheet && (
