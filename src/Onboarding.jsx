@@ -56,9 +56,11 @@ function periodLabel(d) {
 
 /** @returns profile object ready to persist */
 export function buildProfileFromDraft(d) {
+  const coachName = (d.coachName || "MAI").trim() || "MAI";
   const brand = {
-    appName: (d.appName || "MAI TRAINER").trim() || "MAI TRAINER",
-    coachName: (d.coachName || "MAI").trim() || "MAI",
+    /* App title follows coach name (Nora → NORA TRAINER). */
+    appName: `${coachName.toUpperCase()} TRAINER`,
+    coachName,
   };
   const period = resolvePeriod(d);
   return {
