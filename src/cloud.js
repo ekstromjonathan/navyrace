@@ -6,8 +6,10 @@
 /* supabase-js is imported dynamically so it stays out of the main bundle when   */
 /* sync is not configured — it roughly doubles the gzipped payload otherwise.    */
 
-const URL = import.meta.env?.VITE_SUPABASE_URL;
-const ANON = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+/* Vite injects import.meta.env at build time; process.env lets jsdom-tests
+   enable the same path with ordinary shell env vars. */
+const URL = import.meta.env?.VITE_SUPABASE_URL || (typeof process !== "undefined" && process.env?.VITE_SUPABASE_URL);
+const ANON = import.meta.env?.VITE_SUPABASE_ANON_KEY || (typeof process !== "undefined" && process.env?.VITE_SUPABASE_ANON_KEY);
 
 export const enabled = Boolean(URL && ANON);
 

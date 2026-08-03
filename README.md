@@ -38,8 +38,19 @@ All styling ligger som en `CSS`-konstant i `NavyRaceTrainer.jsx` og injiseres vi
 Nivå 2 sjekkes med en faktisk skrivetest, ikke bare `typeof`, fordi `localStorage`
 kan finnes og likevel kaste ved skriving. Resultatet caches.
 
-State lagres under nøkkelen `navyrace:v1` som `{ index, logs }` — hvilken økt du står
-på, og loggen per økt: RPE-svaret (`lett` / `passe` / `brutalt`), eller `hoppet` for
-økter som ble hoppet over. Hoppede økter teller ikke inn i dose-tilpasningen.
-Lagringen er per enhet; Supabase-synk for historikk på tvers av telefon og laptop er
-neste steg hvis det trengs.
+State lagres under nøkkelen `navyrace:v1` som `{ index, logs, updatedAt }` — hvilken økt
+du står på, loggen per økt (RPE `lett` / `passe` / `brutalt`, eller `hoppet`), og
+tidspunkt for last-write-wins. Hoppede økter teller ikke inn i dose-tilpasningen.
+
+## Valgfri sky-synk (Supabase)
+
+Uten env-variabler er synk av, og appen oppfører seg som localStorage-only.
+
+```bash
+# .env.local
+VITE_SUPABASE_URL=https://xxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+```
+
+Schema: `supabase/migrations/0001_navyrace_progress.sql` (RLS: hver bruker leser/skriver
+kun egen rad). Magic link-auth; redirect URL må inkludere appen sin origin.

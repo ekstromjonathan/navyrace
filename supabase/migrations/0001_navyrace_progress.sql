@@ -1,6 +1,7 @@
 -- Fremdrift per bruker for Navy Race-appen.
--- Én rad per bruker: hvilken økt du står på, og RPE-loggen per fullførte økt.
--- Speiler localStorage-nøkkelen `navyrace:v1` ({ index, logs }).
+-- Én rad per bruker: hvilken økt du står på, og loggen per økt.
+-- Speiler localStorage-nøkkelen `navyrace:v1` ({ index, logs, updatedAt }).
+-- `logs` er et objekt sessionId → "lett" | "passe" | "brutalt" | "hoppet".
 
 create table if not exists public.navyrace_progress (
   user_id       uuid primary key references auth.users (id) on delete cascade,
