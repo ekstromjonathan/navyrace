@@ -292,8 +292,12 @@ const CSS = `
   --go:#5FD08A; --hold:#E8B23A; --hard:#FF5436;
   --disp:'Saira Condensed',sans-serif; --body:'Saira',sans-serif; --mono:'IBM Plex Mono',monospace;
 }
+html,body,#root{margin:0;padding:0;background:var(--ink);color-scheme:dark}
+html{height:100%;-webkit-text-size-adjust:100%}
+body{min-height:100%;min-height:100dvh;overscroll-behavior:none}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-.nr-root{min-height:100vh;background:var(--ink);color:var(--bone);font-family:var(--body);
+button,input{font:inherit;color:inherit}
+.nr-root{min-height:100vh;min-height:100dvh;background:var(--ink);color:var(--bone);font-family:var(--body);
   position:relative;overflow-x:hidden}
 .nr-root::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
   background:
@@ -303,9 +307,13 @@ const CSS = `
 .nr-noise{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.035;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
 .nr-wrap{position:relative;z-index:1;max-width:460px;margin:0 auto;
-  padding:22px 18px calc(96px + env(safe-area-inset-bottom,0px));min-height:100vh}
+  padding:calc(22px + env(safe-area-inset-top,0px)) 18px calc(96px + env(safe-area-inset-bottom,0px));
+  min-height:100vh;min-height:100dvh}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .disp{font-family:var(--disp);text-transform:uppercase;letter-spacing:.04em}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
 
 /* header */
 .hd{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:6px}
@@ -413,7 +421,7 @@ const CSS = `
 .opt .chev{margin-left:auto;color:var(--muted)}
 
 /* toast */
-.toast{position:fixed;left:50%;bottom:calc(26px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;
+.toast{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;
   max-width:420px;width:calc(100% - 36px);background:var(--panel2);border:1px solid var(--line);
   border-radius:13px;padding:13px 15px;display:flex;align-items:center;gap:11px;
   box-shadow:0 12px 40px rgba(0,0,0,.5);animation:up .3s ease}
@@ -485,14 +493,17 @@ const CSS = `
 
 /* bottom tab bar */
 .tabbar{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:15;
-  width:calc(100% - 36px);max-width:300px;display:flex;gap:5px;padding:5px;
-  background:rgba(20,25,30,.92);backdrop-filter:blur(10px);border:1px solid var(--line);
-  border-radius:16px;box-shadow:0 10px 36px rgba(0,0,0,.45)}
+  width:min(380px, calc(100% - 36px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));
+  display:flex;gap:5px;padding:5px;
+  background:rgba(20,25,30,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 36px rgba(0,0,0,.45)}
 .tabbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border:0;
   border-radius:12px;background:transparent;color:var(--muted);font-family:var(--disp);font-weight:600;
   font-size:14px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer}
 .tabbtn.on{background:var(--flare);color:#1a0a06}
 .tabbtn:not(.on):active{background:rgba(236,232,224,.06)}
+.tabbtn:focus-visible,.iconbtn:focus-visible,.cta:focus-visible,.st-btn:focus-visible{
+  outline:2px solid var(--flare);outline-offset:2px}
 
 /* stretch routine */
 .st-hero{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
@@ -1127,7 +1138,7 @@ export default function App() {
         </div>
 
         {/* bottom tab bar */}
-        <div className="tabbar" style={{ maxWidth: 380 }}>
+        <div className="tabbar">
           <button className={`tabbtn ${tab === "train" ? "on" : ""}`} onClick={() => setTab("train")}>
             <Footprints size={18} /><span>I dag</span>
           </button>
