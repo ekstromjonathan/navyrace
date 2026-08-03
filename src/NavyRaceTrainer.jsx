@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Footprints, Timer, Dumbbell, Activity, Waves, Anchor, Mountain,
   Flame, Move, Check, RotateCcw, ChevronRight, Zap, Target, Hand, X,
-  Utensils, ShoppingCart, Apple, Play, Pause, SkipForward, Wind
+  Utensils, ShoppingCart, Apple, Play, Pause, SkipForward, Wind,
+  Cloud, CloudOff, RefreshCw, Mail
 } from "lucide-react";
+import * as cloud from "./cloud.js";
 
 /* ----------------------------- storage shim ----------------------------- */
 /* Claude artifact storage when available, else localStorage, else memory.   */
@@ -355,12 +357,20 @@ const CSS = `
   font-family:var(--disp);font-weight:700;font-size:16px;letter-spacing:.06em;padding:17px;
   display:flex;align-items:center;justify-content:center;gap:9px;cursor:pointer}
 .cta:active{transform:scale(.985)}
+.cta:disabled{opacity:.6;cursor:default}
 .skipbtn{margin-top:10px;width:100%;border:1px solid var(--line);border-radius:12px;background:transparent;
   color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
   padding:12px;cursor:pointer}
 .skipbtn:active{transform:scale(.985)}
 .done-banner{margin-top:22px;border:1px solid var(--line);border-radius:14px;padding:16px;
   text-align:center;background:var(--panel);color:var(--muted);font-size:13px}
+
+/* sync */
+.tinput{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;
+  background:var(--panel2);color:var(--bone);font-family:var(--body);font-size:15px;padding:14px 15px}
+.tinput:focus{outline:none;border-color:var(--flare)}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* week strip */
 .wk{margin-top:30px}
@@ -735,6 +745,74 @@ function FoodView() {
   );
 }
 
+function SyncSheet({ user, sync, onClose }) {
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState("form");   // form | sending | sent | error
+  const [err, setErr] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setState("sending");
+    try { await cloud.sendMagicLink(email.trim()); setState("sent"); }
+    catch (ex) { setErr(ex.message || "Ukjent feil"); setState("error"); }
+  }
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-h">
+          <div className="sheet-t">{user ? "Synk på tvers av enheter" : "Slå på synk"}</div>
+          <button className="iconbtn" onClick={onClose}><X size={16} /></button>
+        </div>
+
+        {user ? (
+          <>
+            <div className="sheet-sub">
+              Innlogget som {user.email}.{" "}
+              {sync === "error"
+                ? "Siste synk feilet — fremdriften ligger trygt lokalt og sendes ved neste økt."
+                : "Fremdriften lagres lokalt og speiles til skyen."}
+            </div>
+            <button className="cta" onClick={async () => { await cloud.signOut(); onClose(); }}>
+              Logg ut
+            </button>
+          </>
+        ) : state === "sent" ? (
+          <div className="sheet-sub">
+            Sjekk e-posten din — vi sendte en lenke til {email}. Åpne den på denne enheten,
+            så er du logget inn.
+          </div>
+        ) : (
+          <>
+            <div className="sheet-sub">
+              Uten innlogging lagres fremdriften kun på denne enheten. Logg inn med e-post
+              for å dele den mellom telefon og laptop. Ingen passord — du får en lenke.
+            </div>
+            <form onSubmit={submit}>
+              <input
+                className="tinput"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="din@epost.no"
+                autoComplete="email"
+              />
+              {state === "error" && (
+                <div className="sheet-sub" style={{ color: "var(--hard)", marginTop: 10 }}>{err}</div>
+              )}
+              <button className="cta" type="submit" disabled={state === "sending"} style={{ marginTop: 14 }}>
+                <Mail size={18} /> {state === "sending" ? "Sender …" : "Send innloggingslenke"}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [index, setIndex] = useState(0);
@@ -746,6 +824,10 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const lastAction = useRef(null);
+  const [user, setUser] = useState(null);
+  const [sync, setSync] = useState("idle");   // idle | syncing | ok | error
+  const [authSheet, setAuthSheet] = useState(false);
+  const localAt = useRef(0);                  // updatedAt of what's on screen
 
   const finished = index >= SESSIONS.length;
   const session = finished ? null : SESSIONS[index];
@@ -757,13 +839,60 @@ export default function App() {
     (async () => {
       const raw = await store.get(KEY);
       if (raw) {
-        try { const s = JSON.parse(raw); setIndex(s.index || 0); setLogs(s.logs || {}); } catch (e) {}
+        try {
+          const s = JSON.parse(raw);
+          setIndex(s.index || 0); setLogs(s.logs || {}); localAt.current = s.updatedAt || 0;
+        } catch (e) {}
       }
       setLoaded(true);
     })();
   }, []);
 
-  const persist = (i, l) => store.set(KEY, JSON.stringify({ index: i, logs: l }));
+  /* Cloud sync is additive: the app above never waits on it, and every path
+     here is skipped entirely when the env vars are absent. */
+  useEffect(() => {
+    if (!cloud.enabled) return;
+    cloud.getUser().then(setUser).catch(() => {});
+    return cloud.onAuthChange(setUser);
+  }, []);
+
+  /* On login (and on load when already logged in): reconcile once, both ways. */
+  useEffect(() => {
+    if (!cloud.enabled || !user || !loaded) return;
+    let cancelled = false;
+    (async () => {
+      setSync("syncing");
+      try {
+        const local = { index, logs, updatedAt: localAt.current };
+        const remote = await cloud.pull(user.id);
+        if (cancelled) return;
+        const winner = cloud.newer(local, remote);
+        if (winner === remote) {
+          setIndex(remote.index); setLogs(remote.logs); localAt.current = remote.updatedAt;
+          await store.set(KEY, JSON.stringify(remote));
+          showToast("Hentet fremdrift fra skyen.", "var(--go)");
+        } else if (!remote || winner.updatedAt > (remote.updatedAt ?? 0)) {
+          await cloud.push(user.id, local);
+        }
+        if (!cancelled) setSync("ok");
+      } catch (e) {
+        if (!cancelled) setSync("error");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, loaded]);
+
+  const persist = (i, l) => {
+    const state = { index: i, logs: l, updatedAt: Date.now() };
+    localAt.current = state.updatedAt;
+    store.set(KEY, JSON.stringify(state));
+    /* Fire and forget — a failed push must never block logging a session.
+       The next successful sync carries it, since updatedAt still wins. */
+    if (cloud.enabled && user) {
+      setSync("syncing");
+      cloud.push(user.id, state).then(() => setSync("ok"), () => setSync("error"));
+    }
+  };
 
   const a = session ? adapt(session, index, logs) : null;
   /* what the hero + list render: the session with the adapted dose applied */
@@ -845,7 +974,22 @@ export default function App() {
             <div className="hd-title">NAVY RACE<span style={{ color: "var(--flare)" }}>·</span>10</div>
             <div className="hd-sub">Uke {w} / 10 &nbsp;·&nbsp; {phase}</div>
           </div>
-          <button className="iconbtn" onClick={reset} aria-label="Nullstill"><RotateCcw size={15} /></button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {cloud.enabled && (
+              <button
+                className="iconbtn"
+                onClick={() => setAuthSheet(true)}
+                aria-label={user ? "Sky-synk på" : "Slå på sky-synk"}
+                title={user ? `Synk: ${user.email}` : "Ikke innlogget"}
+                style={sync === "error" ? { color: "var(--hard)" } : user ? { color: "var(--go)" } : undefined}
+              >
+                {sync === "syncing"
+                  ? <RefreshCw size={15} className="spin" />
+                  : user ? <Cloud size={15} /> : <CloudOff size={15} />}
+              </button>
+            )}
+            <button className="iconbtn" onClick={reset} aria-label="Nullstill"><RotateCcw size={15} /></button>
+          </div>
         </div>
         <div className="prog fade"><i style={{ width: `${pct}%` }} /></div>
 
@@ -995,6 +1139,11 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* sync sheet */}
+      {authSheet && (
+        <SyncSheet user={user} sync={sync} onClose={() => setAuthSheet(false)} />
+      )}
 
       {/* check-in sheet */}
       {sheet && (
