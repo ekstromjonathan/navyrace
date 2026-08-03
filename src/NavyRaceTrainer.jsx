@@ -1068,11 +1068,16 @@ export default function App() {
   const logs = activeLogs(progress, programId);
   const finished = index >= sessions.length;
   const session = finished ? null : sessions[index];
+  const sampleWeek = session?.week || sessions[0]?.week || 1;
+  const inferredTrainDays = [...new Set(
+    sessions.filter((s) => s.week === sampleWeek).map((s) => s.day),
+  )].sort((a, b) => a - b);
+  const trainDays = (program?.trainDays?.length ? program.trainDays : null)
+    || (inferredTrainDays.length ? inferredTrainDays : trainDaysFor(profile?.schedule?.daysPerWeek || 4));
   const daysPerWeek = program?.daysPerWeek
     || profile?.schedule?.daysPerWeek
-    || Math.max(1, Math.round(sessions.filter((s) => s.week === 1).length)) || 7;
-  const trainDays = program?.trainDays
-    || trainDaysFor(daysPerWeek);
+    || trainDays.length
+    || 4;
   /* Weeks from stored program / session.week — never invent past the plan (B6). */
   const totalWeeks = Math.max(
     1,
