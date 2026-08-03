@@ -28,6 +28,16 @@ export function withActiveLogs(progress, logs, programId = BUILTIN_PROGRAM_ID) {
   };
 }
 
+/** Whole weeks from today until YYYY-MM-DD (clamped 1–52). */
+export function weeksFromDate(dateStr, fromMs = Date.now()) {
+  if (!dateStr) return null;
+  const end = new Date(`${dateStr}T12:00:00`);
+  if (Number.isNaN(end.getTime())) return null;
+  const days = Math.round((end.getTime() - fromMs) / 86400000);
+  if (days < 1) return null;
+  return Math.max(1, Math.min(52, Math.round(days / 7) || 1));
+}
+
 /** Pace vs timeline: expected sessions by now vs completed index. */
 export function paceInfo(profile, index) {
   if (!profile?.startedAt || !profile?.schedule?.daysPerWeek) return null;

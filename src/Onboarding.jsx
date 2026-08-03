@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ChevronRight, Wind, RotateCcw } from "lucide-react";
-import { defaultBrand } from "./state.js";
+import { defaultBrand, weeksFromDate } from "./state.js";
 
 const GOALS = [
   { kind: "navy_race", label: "Navy Race" },
@@ -37,19 +37,35 @@ function mid() {
   return `m${msgSeq}`;
 }
 
+function resolvePeriod(d) {
+  if (d.periodMode === "date" && d.goalDate) {
+    const weeks = weeksFromDate(d.goalDate) || 10;
+    return { date: d.goalDate, weeks, periodMode: "date" };
+  }
+  return { date: null, weeks: d.weeks || 10, periodMode: "weeks" };
+}
+
+function periodLabel(d) {
+  const p = resolvePeriod(d);
+  if (p.periodMode === "date") return `til ${p.date} (~${p.weeks} uker)`;
+  return `${p.weeks} uker`;
+}
+
 /** @returns profile object ready to persist */
 export function buildProfileFromDraft(d) {
   const brand = {
     appName: (d.appName || "MAI TRAINER").trim() || "MAI TRAINER",
     coachName: (d.coachName || "MAI").trim() || "MAI",
   };
+  const period = resolvePeriod(d);
   return {
     brand,
     goal: {
       kind: d.goalKind || "general",
       label: d.goalLabel || GOALS.find((g) => g.kind === d.goalKind && !g.other)?.label || "Trening",
-      date: d.goalDate || null,
-      weeks: d.weeks || 10,
+      date: period.date,
+      weeks: period.weeks,
+      periodMode: period.periodMode,
     },
     startedAt: Date.now(),
     level: d.level || "some",
@@ -65,7 +81,7 @@ export function buildProfileFromDraft(d) {
     coachSummary: [
       brand.coachName,
       d.goalLabel || d.goalKind,
-      `${d.weeks || 10} uker`,
+      periodLabel(d),
       `${d.daysPerWeek || 4} d/uke`,
       d.mode === "calendar" ? "kalender" : "fleksibel",
       d.level,
@@ -145,6 +161,7 @@ export function Coach({ onComplete }) {
     goalKind: null,
     goalLabel: "",
     otherLabel: "",
+    periodMode: "weeks", /* weeks | date — mutually exclusive */
     weeks: 10,
     goalDate: "",
     daysPerWeek: 4,
@@ -212,7 +229,7 @@ export function Coach({ onComplete }) {
     pushUser(c === "MAI" && a === "MAI TRAINER" ? "Behold MAI TRAINER / MAI" : `${a} · ${c}`);
     setTurn("wait");
     await pushCoach(
-      `Supert — jeg er ${c}. Hva trener du mot, og innen når? Velg mål og varighet.`,
+      `Supert — jeg er ${c}. Hva trener du mot — og innen når? Velg mål, så enten antall uker eller en måldato (ikke begge).`,
       480,
     );
     setTurn("goal");
@@ -223,11 +240,11 @@ export function Coach({ onComplete }) {
     const label = cur.pickingOther && cur.otherLabel
       ? cur.otherLabel
       : cur.goalLabel || "målet ditt";
-    const dateBit = cur.goalDate ? ` · måldato ${cur.goalDate}` : "";
-    pushUser(`${label} · ${cur.weeks} uker${dateBit}`);
+    const when = periodLabel(cur);
+    pushUser(`${label} · ${when}`);
     setTurn("wait");
     await pushCoach(
-      `${label} på ${cur.weeks} uker — notert. Hvor mange dager i uka er realistisk, og vil du følge kalenderen eller ta neste økt når du er klar?`,
+      `${label} ${when} — notert. Hvor mange dager i uka er realistisk, og vil du følge kalenderen eller ta neste økt når du er klar?`,
       560,
     );
     setTurn("schedule");
@@ -296,7 +313,7 @@ export function Coach({ onComplete }) {
       .slice(0, 4)
       .join(", ");
     await pushCoach(
-      `Sånn hørte jeg deg: ${goal} over ${cur.weeks} uker, ${cur.daysPerWeek} dager ${mode}, nivå «${lvl}», med ${eq || "det du har"}. Stemmer det?`,
+      `Sånn hørte jeg deg: ${goal} ${periodLabel(cur)}, ${cur.daysPerWeek} dager ${mode}, nivå «${lvl}», med ${eq || "det du har"}. Stemmer det?`,
       640,
     );
     setTurn("summary");
@@ -324,6 +341,7 @@ export function Coach({ onComplete }) {
       goalKind: null,
       goalLabel: "",
       otherLabel: "",
+      periodMode: "weeks",
       weeks: 10,
       goalDate: "",
       daysPerWeek: 4,
@@ -435,17 +453,51 @@ export function Coach({ onComplete }) {
                   onChange={(e) => set({ otherLabel: e.target.value, goalLabel: e.target.value || "Annet" })}
                 />
               )}
-              <div className="ob-label" style={{ marginTop: 14 }}>Varighet</div>
+              <div className="ob-label" style={{ marginTop: 14 }}>Periode — velg én</div>
               <div className="ob-chips">
-                {WEEKS.map((w) => (
-                  <Chip key={w} on={d.weeks === w} onClick={() => set({ weeks: w })}>{w} uker</Chip>
-                ))}
+                <Chip
+                  on={d.periodMode === "weeks"}
+                  onClick={() => set({ periodMode: "weeks", goalDate: "" })}
+                >
+                  Antall uker
+                </Chip>
+                <Chip
+                  on={d.periodMode === "date"}
+                  onClick={() => set({ periodMode: "date" })}
+                >
+                  Måldato
+                </Chip>
               </div>
-              <label className="ob-label">Måldato (valgfritt)</label>
-              <input className="tinput" type="date" value={d.goalDate} onChange={(e) => set({ goalDate: e.target.value })} />
+              {d.periodMode === "weeks" ? (
+                <div className="ob-chips" style={{ marginTop: 10 }}>
+                  {WEEKS.map((w) => (
+                    <Chip key={w} on={d.weeks === w} onClick={() => set({ weeks: w, goalDate: "", periodMode: "weeks" })}>
+                      {w} uker
+                    </Chip>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <label className="ob-label">Måldato</label>
+                  <input
+                    className="tinput"
+                    type="date"
+                    value={d.goalDate}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => set({ goalDate: e.target.value, periodMode: "date" })}
+                  />
+                  {d.goalDate && weeksFromDate(d.goalDate) && (
+                    <div className="ob-hint mono">≈ {weeksFromDate(d.goalDate)} uker fra i dag</div>
+                  )}
+                </>
+              )}
               <button
                 className="cta ob-composer-cta"
-                disabled={!d.goalKind || (d.pickingOther && !d.otherLabel.trim())}
+                disabled={
+                  !d.goalKind
+                  || (d.pickingOther && !d.otherLabel.trim())
+                  || (d.periodMode === "date" && !weeksFromDate(d.goalDate))
+                }
                 onClick={afterGoal}
               >
                 Send til {coach}

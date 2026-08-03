@@ -556,6 +556,11 @@ button,input{font:inherit;color:inherit}
 .pace.ahead{color:var(--go)}.pace.behind{color:var(--hold)}.pace.on{color:var(--muted)}
 .cal-note{margin:0 0 14px;padding:10px 12px;border-radius:11px;border:1px solid var(--line);
   background:rgba(236,232,224,.04);font-size:12.5px;color:var(--muted);line-height:1.4}
+.ob-hint{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:8px}
+.sheet-warn{margin:0 0 16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(232,104,58,.4);
+  background:rgba(232,104,58,.1);font-size:13.5px;line-height:1.45;color:var(--bone)}
+.sheet-warn strong{color:var(--flare);font-weight:700}
+.cta.danger{background:var(--hard);color:#fff}
 `;
 
 /* ------------------------- 5-min stretch routine ------------------------ */
@@ -778,6 +783,75 @@ function FoodView() {
   );
 }
 
+function SettingsSheet({ coachName, onRestartProgram, onReonboard, onClose }) {
+  const [confirm, setConfirm] = useState(null); // null | "restart" | "reonboard"
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-h">
+          <div className="sheet-t">Innstillinger</div>
+          <button className="iconbtn" onClick={onClose} aria-label="Lukk"><X size={16} /></button>
+        </div>
+
+        {!confirm && (
+          <>
+            <div className="sheet-sub">
+              Styr programmet ditt. Begge handlingene under sletter tracking — det går ikke an å angre.
+            </div>
+            <button
+              className="cta"
+              style={{ marginTop: 4 }}
+              onClick={() => setConfirm("restart")}
+            >
+              <RotateCcw size={16} /> Start programmet på nytt
+            </button>
+            <button
+              className="skipbtn"
+              style={{ marginTop: 10, width: "100%" }}
+              onClick={() => setConfirm("reonboard")}
+            >
+              Kjør onboarding på nytt
+            </button>
+          </>
+        )}
+
+        {confirm === "restart" && (
+          <>
+            <div className="sheet-warn">
+              <strong>Advarsel:</strong> All økt-tracking (fullført, RPE, fremdrift) slettes.
+              Profilen og målet ditt beholdes, men {coachName || "MAI"} husker ikke hva du har gjort.
+              Dette kan ikke angres.
+            </div>
+            <button className="cta danger" onClick={() => { onRestartProgram(); onClose(); }}>
+              Ja — slett tracking og start på nytt
+            </button>
+            <button className="skipbtn" style={{ marginTop: 10, width: "100%" }} onClick={() => setConfirm(null)}>
+              Avbryt
+            </button>
+          </>
+        )}
+
+        {confirm === "reonboard" && (
+          <>
+            <div className="sheet-warn">
+              <strong>Advarsel:</strong> Profil, programvalg og all tracking slettes.
+              Du må snakke med {coachName || "MAI"} på nytt — appen husker ikke den trackede løsningen din.
+              Dette kan ikke angres.
+            </div>
+            <button className="cta danger" onClick={() => { onReonboard(); onClose(); }}>
+              Ja — glem alt og start onboarding
+            </button>
+            <button className="skipbtn" style={{ marginTop: 10, width: "100%" }} onClick={() => setConfirm(null)}>
+              Avbryt
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SyncSheet({ user, sync, onClose }) {
   const [email, setEmail] = useState("");
   const [state, setState] = useState("form");   // form | sending | sent | error
@@ -862,6 +936,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [sync, setSync] = useState("idle");
   const [authSheet, setAuthSheet] = useState(false);
+  const [settingsSheet, setSettingsSheet] = useState(false);
   const [softAuth, setSoftAuth] = useState(false);
   const localAt = useRef(0);
   const profileRef = useRef(null);
@@ -1051,20 +1126,39 @@ export default function App() {
   }
 
   function resetProgress() {
-    if (!window.confirm("Starte programmet på nytt? Profilen beholdes.")) return;
-    persistProgress(0, {});
-    showToast("Programmet startet på nytt.", "var(--muted)");
+    const pid = programId;
+    const prevLogs = activeLogs(progress, pid);
+    const next = {
+      ...emptyProgress(),
+      archive: {
+        ...(progress.archive || {}),
+        ...(Object.keys(prevLogs).length ? { [`${pid}:${Date.now()}`]: prevLogs } : {}),
+      },
+      updatedAt: Date.now(),
+    };
+    const nextProfile = profile
+      ? { ...profile, startedAt: Date.now() }
+      : profile;
+    localAt.current = next.updatedAt;
+    setProgress(next);
+    if (nextProfile) setProfile(nextProfile);
+    store.set(KEY, serializeApp(nextProfile, program, next));
+    if (cloud.enabled && user) {
+      cloud.pushProfile(user.id, cloudPayload(0, {}, nextProfile, program, next.updatedAt)).catch(() => {
+        cloud.push(user.id, cloudPayload(0, {}, nextProfile, program, next.updatedAt)).catch(() => {});
+      });
+    }
+    showToast("Tracking slettet — programmet starter på nytt.", "var(--muted)");
   }
 
   function resetAll() {
-    if (!window.confirm("Glemme profil og starte onboarding på nytt?")) return;
     setProfile(null);
     setProgram(null);
     setProgress(emptyProgress());
     localAt.current = 0;
     store.set(KEY, "");
     setGate("welcome");
-    showToast("Profil slettet.", "var(--muted)");
+    showToast("Alt glemt — snakk med treneren på nytt.", "var(--muted)");
   }
 
   function onCoachDone(nextProfile) {
@@ -1142,6 +1236,7 @@ export default function App() {
             <div className="hd-title">{brand.appName}</div>
             <div className="hd-sub">
               Uke {w} / {totalWeeks} &nbsp;·&nbsp; {goalLabel}
+              {profile?.goal?.date ? ` · til ${profile.goal.date}` : ""}
             </div>
             {pace && <div className={`pace ${pace.kind}`}>{pace.label}</div>}
           </div>
@@ -1161,15 +1256,9 @@ export default function App() {
             )}
             <button
               className="iconbtn"
-              onClick={() => {
-                const choice = window.prompt(
-                  "1 = start program på nytt\n2 = glem profil (onboarding)\nAvbryt = ingenting",
-                  "1"
-                );
-                if (choice === "1") resetProgress();
-                else if (choice === "2") resetAll();
-              }}
-              aria-label="Nullstill"
+              onClick={() => setSettingsSheet(true)}
+              aria-label="Innstillinger"
+              title="Innstillinger"
             >
               <RotateCcw size={15} />
             </button>
@@ -1191,8 +1280,8 @@ export default function App() {
               10 uker i boks. Hvil, spis, sov — du blir ikke sterkere de siste dagene, bare sliten.
               Vi sees på startstreken på Karljohansvern.
             </p>
-            <button className="cta" onClick={reset} style={{ marginTop: 20 }}>
-              <RotateCcw size={18} /> Start på nytt
+            <button className="cta" onClick={() => setSettingsSheet(true)} style={{ marginTop: 20 }}>
+              <RotateCcw size={18} /> Innstillinger
             </button>
           </div>
         ) : (
@@ -1354,6 +1443,15 @@ export default function App() {
       {/* sync sheet */}
       {authSheet && (
         <SyncSheet user={user} sync={sync} onClose={() => setAuthSheet(false)} />
+      )}
+
+      {settingsSheet && (
+        <SettingsSheet
+          coachName={brand.coachName}
+          onRestartProgram={resetProgress}
+          onReonboard={resetAll}
+          onClose={() => setSettingsSheet(false)}
+        />
       )}
 
       {/* check-in sheet */}
