@@ -955,9 +955,8 @@ function SettingsSheet({ coachName, onRestartProgram, onReonboard, onClose }) {
         {confirm === "reonboard" && (
           <>
             <div className="sheet-warn">
-              <strong>Advarsel:</strong> Profil, programvalg og all tracking slettes.
-              Du må snakke med {coachName || "MAI"} på nytt — appen husker ikke den trackede løsningen din.
-              Dette kan ikke angres.
+              <strong>Advarsel:</strong> Profil, programvalg og all tracking slettes — også i skyen hvis du er innlogget.
+              Du må snakke med {coachName || "MAI"} på nytt. Dette kan ikke angres.
             </div>
             <button className="cta danger" onClick={() => { onReonboard(); onClose(); }}>
               Ja — glem alt og start onboarding
@@ -1362,13 +1361,28 @@ export default function App() {
     showToast("Tracking slettet — programmet starter på nytt.", "var(--muted)");
   }
 
-  function resetAll() {
+  async function resetAll() {
     setProfile(null);
     setProgram(null);
+    profileRef.current = null;
+    programRef.current = null;
     setProgress(emptyProgress());
     localAt.current = 0;
     store.set(KEY, "");
     setGate("coach");
+    if (cloud.enabled && user) {
+      setSync("syncing");
+      try {
+        const at = await cloud.clearProgress(user.id);
+        localAt.current = at;
+        setSync("ok");
+        showToast("Alt glemt — også i skyen. Snakk med treneren på nytt.", "var(--muted)");
+      } catch {
+        setSync("error");
+        showToast("Lokalt glemt, men skyen lot seg ikke tømme. Prøv igjen når du er på nett.", "var(--hard)");
+      }
+      return;
+    }
     showToast("Alt glemt — snakk med treneren på nytt.", "var(--muted)");
   }
 

@@ -105,6 +105,23 @@ export async function push(userId, state) {
   if (error) throw error;
 }
 
+/**
+ * Wipe cloud progress for this user (reonboard / forget-everything).
+ * RLS only allows select/insert/update — no DELETE — so we null the row via upsert.
+ * Returns the updatedAt used so callers can keep LWW in sync.
+ */
+export async function clearProgress(userId) {
+  const updatedAt = Date.now();
+  await push(userId, {
+    index: 0,
+    logs: {},
+    profile: null,
+    program: null,
+    updatedAt,
+  });
+  return updatedAt;
+}
+
 /** Pull-then-push for rare profile writes (B4 damping). */
 export async function pushProfile(userId, local) {
   const remote = await pull(userId);
