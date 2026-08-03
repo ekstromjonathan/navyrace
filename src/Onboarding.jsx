@@ -45,11 +45,16 @@ function resolvePeriod(d) {
     const weeks = weeksFromDate(d.goalDate) || 10;
     return { date: d.goalDate, weeks, periodMode: "date" };
   }
-  return { date: null, weeks: d.weeks || 10, periodMode: "weeks" };
+  if (d.periodMode === "weeks") {
+    return { date: null, weeks: d.weeks || 10, periodMode: "weeks" };
+  }
+  /* Default / explicit ongoing — no deadline; program uses a rolling block. */
+  return { date: null, weeks: null, periodMode: "ongoing" };
 }
 
 function periodLabel(d) {
   const p = resolvePeriod(d);
+  if (p.periodMode === "ongoing") return "kontinuerlig";
   if (p.periodMode === "date") return `til ${p.date} (~${p.weeks} uker)`;
   return `${p.weeks} uker`;
 }
@@ -126,8 +131,8 @@ const EMPTY_DRAFT = {
   goalKind: null,
   goalLabel: "",
   otherLabel: "",
-  periodMode: "weeks",
-  weeks: 10,
+  periodMode: "ongoing",
+  weeks: 8,
   goalDate: "",
   daysPerWeek: 4,
   mode: "flexible",
@@ -270,7 +275,7 @@ export function Coach({
     pushUser(c);
     setTurn("wait");
     await pushCoach(
-      `Hyggelig — jeg er ${c}. Hva trener du mot — og innen når? Velg mål, så enten antall uker eller en måldato (ikke begge).`,
+      `Hyggelig — jeg er ${c}. Hva trener du mot? Periode er valgfritt — standard er kontinuerlig tracking uten deadline.`,
       480,
     );
     setTurn("goal");
@@ -655,8 +660,14 @@ export function Coach({
                   onChange={(e) => set({ otherLabel: e.target.value, goalLabel: e.target.value || "Annet" })}
                 />
               )}
-              <div className="ob-label" style={{ marginTop: 14 }}>Periode — velg én</div>
+              <div className="ob-label" style={{ marginTop: 14 }}>Periode (valgfritt)</div>
               <div className="ob-chips">
+                <Chip
+                  on={d.periodMode === "ongoing"}
+                  onClick={() => set({ periodMode: "ongoing", goalDate: "" })}
+                >
+                  Kontinuerlig
+                </Chip>
                 <Chip
                   on={d.periodMode === "weeks"}
                   onClick={() => set({ periodMode: "weeks", goalDate: "" })}
@@ -670,7 +681,12 @@ export function Coach({
                   Måldato
                 </Chip>
               </div>
-              {d.periodMode === "weeks" ? (
+              {d.periodMode === "ongoing" && (
+                <p style={{ marginTop: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.45 }}>
+                  Ingen deadline — du tracker videre i rullerende blokker. Bra når målet bare er å holde seg i form.
+                </p>
+              )}
+              {d.periodMode === "weeks" && (
                 <div className="ob-chips" style={{ marginTop: 10 }}>
                   {WEEKS.map((w) => (
                     <Chip key={w} on={d.weeks === w} onClick={() => set({ weeks: w, goalDate: "", periodMode: "weeks" })}>
@@ -678,7 +694,8 @@ export function Coach({
                     </Chip>
                   ))}
                 </div>
-              ) : (
+              )}
+              {d.periodMode === "date" && (
                 <>
                   <label className="ob-label">Måldato</label>
                   <input
@@ -699,6 +716,7 @@ export function Coach({
                   !d.goalKind
                   || (d.pickingOther && !d.otherLabel.trim())
                   || (d.periodMode === "date" && !weeksFromDate(d.goalDate))
+                  || (d.periodMode === "weeks" && !d.weeks)
                 }
                 onClick={afterGoal}
               >

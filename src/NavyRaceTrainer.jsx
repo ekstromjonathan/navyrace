@@ -64,9 +64,15 @@ const store = {
   },
 };
 /* ----------------------------- program data ----------------------------- */
-/** Phase label scaled to program length (10w: 1–3 Base … 10 Nedtrapping). */
-const PHASES = (w, total = 10) => {
+/** Phase label scaled to program length (10w: 1–3 Base … 10 Nedtrapping).
+ *  Ongoing blocks never taper — last third is vedlikehold. */
+const PHASES = (w, total = 10, ongoing = false) => {
   const t = w / Math.max(total, 1);
+  if (ongoing) {
+    if (t <= 0.34) return "Base";
+    if (t <= 0.67) return "Bygg";
+    return "Vedlikehold";
+  }
   if (t <= 0.3) return "Base";
   if (t <= 0.6) return "Bygg";
   if (t <= 0.9) return "Spesifikk topp";
@@ -114,8 +120,8 @@ function templateWeekIndex(week, totalWeeks) {
   return Math.round(t * (src - 1));
 }
 
-function buildDay(w, d, p = WK[w - 1], totalWeeks = 10) {
-  const phase = PHASES(w, totalWeeks);
+function buildDay(w, d, p = WK[w - 1], totalWeeks = 10, ongoing = false) {
+  const phase = PHASES(w, totalWeeks, ongoing);
   const base = { week: w, day: d, phase };
 
   if (d === 0) return { ...base, type: "easyrun", title: "Rolig løp + grep",
@@ -216,14 +222,22 @@ function resolveSessions(program) {
   return raw.map(withRuntime);
 }
 
-/** Resample the 10-week curve to `totalWeeks` (B6). Keeps base+taper ends. */
-function buildProgramSessions(totalWeeks = 10) {
+/** Rolling block length when the user has no deadline (kontinuerlig). */
+const CONTINUOUS_BLOCK_WEEKS = 8;
+
+/** Resample the 10-week curve to `totalWeeks` (B6). Keeps base+taper ends
+ *  (taper skipped when ongoing — last third is vedlikehold via PHASES). */
+function buildProgramSessions(totalWeeks = 10, { ongoing = false } = {}) {
   const n = Math.max(2, Math.min(24, Number(totalWeeks) || 10));
   const out = [];
   for (let w = 1; w <= n; w++) {
-    const p = WK[templateWeekIndex(w, n)];
+    /* Ongoing: map onto source weeks 1..(src-1) so we never land on the race taper row. */
+    const srcIdx = ongoing
+      ? Math.min(WK.length - 2, templateWeekIndex(w, n + 1))
+      : templateWeekIndex(w, n);
+    const p = WK[srcIdx];
     for (let d = 0; d < 7; d++) {
-      const s = buildDay(w, d, p, n);
+      const s = buildDay(w, d, p, n, ongoing);
       s.id = `w${w}d${d}`;
       out.push(s);
     }
@@ -236,14 +250,18 @@ const SESSIONS = buildProgramSessions(10);
 /** Materialize a resampled program once at onboarding (§4.3 / B3 / B6).
  *  Never call from render — session ids must stay stable under stored logs. */
 function buildProgram(profile) {
-  const weeks = Math.max(2, Math.min(24, Number(profile?.goal?.weeks) || 10));
+  const ongoing = profile?.goal?.periodMode === "ongoing";
+  const weeks = ongoing
+    ? CONTINUOUS_BLOCK_WEEKS
+    : Math.max(2, Math.min(24, Number(profile?.goal?.weeks) || 10));
   const startedAt = profile?.startedAt || Date.now();
   return {
-    id: `prog_${weeks}_${startedAt}`,
+    id: `prog_${ongoing ? "cont" : weeks}_${startedAt}`,
     weeks,
-    sessions: buildProgramSessions(weeks),
+    ongoing: !!ongoing,
+    sessions: buildProgramSessions(weeks, { ongoing: !!ongoing }),
     generatedAt: Date.now(),
-    source: "resample_v1",
+    source: ongoing ? "continuous_v1" : "resample_v1",
   };
 }
 
@@ -1315,6 +1333,40 @@ export default function App() {
     showToast("Alt glemt — snakk med treneren på nytt.", "var(--muted)");
   }
 
+  /** Start the next rolling block for continuous tracking (archive current logs). */
+  function continueOngoing() {
+    if (!profile) return;
+    const nextProfile = {
+      ...profile,
+      startedAt: Date.now(),
+      goal: { ...(profile.goal || {}), periodMode: "ongoing", weeks: null, date: null },
+    };
+    const oldPid = programId;
+    const prevLogs = activeLogs(progress, oldPid);
+    const nextProgram = buildProgram(nextProfile);
+    const next = {
+      index: 0,
+      logsByProgram: { [nextProgram.id]: {} },
+      archive: {
+        ...(progress.archive || {}),
+        ...(Object.keys(prevLogs).length ? { [oldPid]: prevLogs } : {}),
+      },
+      updatedAt: Date.now(),
+    };
+    localAt.current = next.updatedAt;
+    setProfile(nextProfile);
+    setProgram(nextProgram);
+    profileRef.current = nextProfile;
+    programRef.current = nextProgram;
+    setProgress(next);
+    setViewWeek(1);
+    store.set(KEY, serializeApp(nextProfile, nextProgram, next));
+    if (cloud.enabled && user) {
+      cloud.push(user.id, cloudPayload(0, {}, nextProfile, nextProgram, next.updatedAt)).catch(() => {});
+    }
+    showToast("Ny blokk klar — kjør videre.", "var(--go)");
+  }
+
   function persistCoachProfile(nextProfile) {
     if (!nextProfile) return null;
     const nextProgram = buildProgram(nextProfile);
@@ -1392,6 +1444,7 @@ export default function App() {
   const pace = paceInfo(profile, index);
   const calMismatch = profile?.schedule?.mode === "calendar" && session && session.day !== todaySlot();
   const goalLabel = profile?.goal?.label || "Trening";
+  const ongoing = !!(program?.ongoing || profile?.goal?.periodMode === "ongoing");
 
   return (
     <div className="nr-root">
@@ -1404,8 +1457,9 @@ export default function App() {
           <div>
             <div className="hd-title">{brand.appName}</div>
             <div className="hd-sub">
-              Uke {w} / {totalWeeks} &nbsp;·&nbsp; {goalLabel}
-              {profile?.goal?.date ? ` · til ${profile.goal.date}` : ""}
+              {ongoing
+                ? <>Uke {w} &nbsp;·&nbsp; kontinuerlig &nbsp;·&nbsp; {goalLabel}</>
+                : <>Uke {w} / {totalWeeks} &nbsp;·&nbsp; {goalLabel}{profile?.goal?.date ? ` · til ${profile.goal.date}` : ""}</>}
             </div>
             {pace && <div className={`pace ${pace.kind}`}>{pace.label}</div>}
           </div>
@@ -1444,14 +1498,28 @@ export default function App() {
         {tab === "train" && (<>
         {finished ? (
           <div className="hero fade">
-            <div className="htitle">Blokk fullført</div>
-            <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.5, marginTop: 8 }}>
-              Blokka er i boks. Hvil, spis, sov — du blir ikke sterkere de siste dagene, bare sliten.
-              Når du er klar, kan du starte en ny periode i innstillinger.
-            </p>
-            <button className="cta" onClick={() => setSettingsSheet(true)} style={{ marginTop: 20 }}>
-              <RotateCcw size={18} /> Innstillinger
-            </button>
+            {ongoing ? (
+              <>
+                <div className="htitle">Blokk fullført</div>
+                <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.5, marginTop: 8 }}>
+                  {totalWeeks} uker i boks. Kontinuerlig tracking fortsetter med en ny blokk — samme rytme, frisk dose.
+                </p>
+                <button className="cta" onClick={continueOngoing} style={{ marginTop: 20 }}>
+                  Fortsett med neste blokk
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="htitle">Program fullført</div>
+                <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.5, marginTop: 8 }}>
+                  Perioden er i boks. Hvil, spis, sov — du blir ikke sterkere de siste dagene, bare sliten.
+                  Når du er klar, kan du starte på nytt eller kjøre onboarding i innstillinger.
+                </p>
+                <button className="cta" onClick={() => setSettingsSheet(true)} style={{ marginTop: 20 }}>
+                  <RotateCcw size={18} /> Innstillinger
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -1529,7 +1597,7 @@ export default function App() {
             <button className="navb" disabled={viewWeek <= 1} onClick={() => setViewWeek((v) => Math.max(1, v - 1))} aria-label="Forrige uke">
               <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
             </button>
-            <div className="lbl">Uke {viewWeek} · {PHASES(viewWeek, totalWeeks)}{viewWeek === w ? " · nå" : ""}</div>
+            <div className="lbl">Uke {viewWeek} · {PHASES(viewWeek, totalWeeks, ongoing)}{viewWeek === w ? " · nå" : ""}</div>
             <button className="navb" disabled={viewWeek >= totalWeeks} onClick={() => setViewWeek((v) => Math.min(totalWeeks, v + 1))} aria-label="Neste uke">
               <ChevronRight size={15} />
             </button>
