@@ -93,7 +93,7 @@ export function buildProfileFromDraft(d) {
       d.goalLabel || d.goalKind,
       periodLabel(d),
       `${d.daysPerWeek || 4} d/uke`,
-      d.mode === "calendar" ? "kalender" : "fleksibel",
+      d.mode === "calendar" ? "faste ukedager" : "når det passer",
       d.level,
     ].filter(Boolean).join(" · "),
   };
@@ -333,7 +333,7 @@ export function Coach({
     pushUser(`${label} · ${when}`);
     setTurn("wait");
     await pushCoach(
-      `${label} ${when} — notert. Hvor mange dager i uka er realistisk, og vil du følge kalenderen eller ta neste økt når du er klar?`,
+      `${label} ${when} — notert. Hvor mange dager i uka er realistisk? Og vil du ha faste ukedager (mandagsøkt på mandag), eller ta neste økt når det passer deg?`,
       560,
     );
     setTurn("schedule");
@@ -341,7 +341,7 @@ export function Coach({
 
   async function afterSchedule() {
     const cur = draft.current;
-    const modeLabel = cur.mode === "calendar" ? "kalender (man = man)" : "fleksibelt";
+    const modeLabel = cur.mode === "calendar" ? "faste ukedager" : "når det passer";
     pushUser(`${cur.daysPerWeek} dager · ${modeLabel}`);
     setTurn("wait");
     await pushCoach(
@@ -395,7 +395,7 @@ export function Coach({
     const cur = draft.current;
     const goal = cur.pickingOther && cur.otherLabel ? cur.otherLabel : cur.goalLabel;
     const lvl = LEVELS.find((l) => l.id === cur.level)?.label;
-    const mode = cur.mode === "calendar" ? "kalender" : "fleksibelt";
+    const mode = cur.mode === "calendar" ? "faste ukedager" : "når det passer";
     const eq = cur.equipment
       .map((id) => EQUIP.find((e) => e.id === id)?.label)
       .filter(Boolean)
@@ -727,19 +727,26 @@ export function Coach({
 
           {turn === "schedule" && !busy && (
             <>
+              <div className="ob-label">Dager per uke</div>
               <div className="ob-chips">
                 {[3, 4, 5, 6].map((n) => (
                   <Chip key={n} on={d.daysPerWeek === n} onClick={() => set({ daysPerWeek: n })}>{n} dager</Chip>
                 ))}
               </div>
-              <div className="ob-chips" style={{ marginTop: 10 }}>
+              <div className="ob-label" style={{ marginTop: 14 }}>Hvordan følge planen?</div>
+              <div className="ob-chips">
                 <Chip on={d.mode === "calendar"} onClick={() => set({ mode: "calendar" })}>
-                  Kalender · man = man
+                  Faste ukedager
                 </Chip>
                 <Chip on={d.mode === "flexible"} onClick={() => set({ mode: "flexible" })}>
-                  Fleksibel · når du er klar
+                  Når det passer
                 </Chip>
               </div>
+              <p style={{ marginTop: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.45 }}>
+                {d.mode === "calendar"
+                  ? "Planen følger ukedagen — mandagsøkt på mandag. På hviledager sier appen ifra."
+                  : "Du tar neste økt når du er klar. Ingen binding til mandag/tirsdag — bare rekkefølgen i planen."}
+              </p>
               <button className="cta ob-composer-cta" onClick={afterSchedule}>
                 Send til {coach}
               </button>
