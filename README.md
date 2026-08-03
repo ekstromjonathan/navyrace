@@ -39,5 +39,7 @@ Nivå 2 sjekkes med en faktisk skrivetest, ikke bare `typeof`, fordi `localStora
 kan finnes og likevel kaste ved skriving. Resultatet caches.
 
 State lagres under nøkkelen `navyrace:v1` som `{ index, logs }` — hvilken økt du står
-på, og RPE-loggen per fullførte økt. Lagringen er per enhet; Supabase-synk for historikk
-på tvers av telefon og laptop er neste steg hvis det trengs.
+på, og loggen per økt: RPE-svaret (`lett` / `passe` / `brutalt`), eller `hoppet` for
+økter som ble hoppet over. Hoppede økter teller ikke inn i dose-tilpasningen.
+Lagringen er per enhet; Supabase-synk for historikk på tvers av telefon og laptop er
+neste steg hvis det trengs.

@@ -79,8 +79,7 @@ const DAYS = ["MAN", "TIR", "ONS", "TOR", "FRE", "LØR", "SØN"];
 
 function ex(name, icon, detail, cue) { return { name, icon, detail, cue }; }
 
-function buildDay(w, d) {
-  const p = WK[w - 1];
+function buildDay(w, d, p = WK[w - 1]) {
   const phase = PHASES(w);
   const base = { week: w, day: d, phase };
 
@@ -131,7 +130,7 @@ function buildDay(w, d) {
 
   if (d === 5) {
     if (p.brick > 0) return { ...base, type: "brick", title: "Brick · løp + hinder",
-      icon: Waves, est: "~50 min", loadKey: "brick", load: p.brick, unit: "runder",
+      icon: Waves, est: `~${p.brick * 12} min`, loadKey: "brick", load: p.brick, unit: "runder",
       items: [
         ex("Format", Flame, `Løp 1 km → stasjon · ${p.brick} runder`, "Hinder i tretthet — som race-dag."),
         ex("Stasjon: trekk", Activity, "5 pull-ups + 30 s heng", null),
@@ -164,6 +163,21 @@ for (let w = 1; w <= 10; w++) for (let d = 0; d < 7; d++) {
   const s = buildDay(w, d);
   s.id = `w${w}d${d}`;
   SESSIONS.push(s);
+}
+
+/* Rebuild a session with the adapted load written into items/est, so the
+   exercise list shows the same dose as the hero metric. Display-only —
+   SESSIONS and log identity are untouched. */
+const LOAD_FIELD = {
+  easyrun: "runEasy", strA: "str", strB: "str",
+  skills: "str", brick: "brick", longrun: "long",
+};
+function withLoad(session, load) {
+  if (load == null || load === session.load) return session;
+  const field = LOAD_FIELD[session.loadKey];
+  if (!field) return session;
+  const p = { ...WK[session.week - 1], [field]: load };
+  return { ...buildDay(session.week, session.day, p), id: session.id };
 }
 
 /* --------------------------- exercise library --------------------------- */
@@ -249,12 +263,15 @@ const RPE = {
   brutalt: { mult: 0.9,  color: "var(--hard)", label: "Brutalt", msg: "Forrige var hard — letter litt." },
 };
 
+/* log value for a session that was skipped instead of completed */
+const SKIPPED = "hoppet";
+
 function adapt(session, index, logs) {
   if (session.load == null) return { load: null, note: null };
   let prev = null;
   for (let i = index - 1; i >= 0; i--) {
     const s = SESSIONS[i];
-    if (s.loadKey === session.loadKey && logs[s.id]) { prev = logs[s.id]; break; }
+    if (s.loadKey === session.loadKey && RPE[logs[s.id]]) { prev = logs[s.id]; break; }
   }
   if (!prev) return { load: session.load, note: null };
   const r = RPE[prev];
@@ -283,7 +300,8 @@ const CSS = `
     repeating-linear-gradient(90deg, rgba(236,232,224,.02) 0 1px, transparent 1px 30px);}
 .nr-noise{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.035;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
-.nr-wrap{position:relative;z-index:1;max-width:460px;margin:0 auto;padding:22px 18px 96px;min-height:100vh}
+.nr-wrap{position:relative;z-index:1;max-width:460px;margin:0 auto;
+  padding:22px 18px calc(96px + env(safe-area-inset-bottom,0px));min-height:100vh}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .disp{font-family:var(--disp);text-transform:uppercase;letter-spacing:.04em}
 
@@ -337,6 +355,10 @@ const CSS = `
   font-family:var(--disp);font-weight:700;font-size:16px;letter-spacing:.06em;padding:17px;
   display:flex;align-items:center;justify-content:center;gap:9px;cursor:pointer}
 .cta:active{transform:scale(.985)}
+.skipbtn{margin-top:10px;width:100%;border:1px solid var(--line);border-radius:12px;background:transparent;
+  color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  padding:12px;cursor:pointer}
+.skipbtn:active{transform:scale(.985)}
 .done-banner{margin-top:22px;border:1px solid var(--line);border-radius:14px;padding:16px;
   text-align:center;background:var(--panel);color:var(--muted);font-size:13px}
 
@@ -350,6 +372,8 @@ const CSS = `
 .cell .d{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;color:var(--muted)}
 .cell.done{background:rgba(95,208,138,.08);border-color:rgba(95,208,138,.3)}
 .cell.done svg{color:var(--go)}
+.cell.skip{opacity:.55}
+.cell.skip svg{color:var(--muted)}
 .cell.today{border-color:var(--flare);background:rgba(255,84,54,.08)}
 .cell.today svg{color:var(--flare)}
 .cell svg{color:var(--muted)}
@@ -364,7 +388,8 @@ const CSS = `
 .scrim{position:fixed;inset:0;background:rgba(5,7,9,.66);z-index:20;backdrop-filter:blur(3px);
   display:flex;align-items:flex-end;justify-content:center}
 .sheet{width:100%;max-width:460px;background:var(--panel);border:1px solid var(--line);
-  border-radius:22px 22px 0 0;padding:22px 18px 30px;animation:up .32s cubic-bezier(.2,.85,.2,1)}
+  border-radius:22px 22px 0 0;padding:22px 18px calc(30px + env(safe-area-inset-bottom,0px));
+  animation:up .32s cubic-bezier(.2,.85,.2,1)}
 .sheet-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
 .sheet-t{font-family:var(--disp);font-weight:700;font-size:21px}
 .sheet-sub{font-size:12.5px;color:var(--muted);margin-bottom:18px}
@@ -378,12 +403,16 @@ const CSS = `
 .opt .chev{margin-left:auto;color:var(--muted)}
 
 /* toast */
-.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:40;
+.toast{position:fixed;left:50%;bottom:calc(26px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;
   max-width:420px;width:calc(100% - 36px);background:var(--panel2);border:1px solid var(--line);
   border-radius:13px;padding:13px 15px;display:flex;align-items:center;gap:11px;
   box-shadow:0 12px 40px rgba(0,0,0,.5);animation:up .3s ease}
 .toast .ti{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:0 0 auto}
 .toast .tt{font-size:13px;line-height:1.3}
+.toast .tundo{margin-left:auto;flex:0 0 auto;border:1px solid var(--line);background:transparent;
+  color:var(--bone);font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  padding:7px 10px;border-radius:8px;cursor:pointer}
+.toast .tundo:active{transform:scale(.95)}
 
 @keyframes up{from{transform:translateY(22px);opacity:0}to{transform:translateY(0);opacity:1}}
 .fade{animation:fu .5s cubic-bezier(.2,.8,.2,1) both}
@@ -445,7 +474,7 @@ const CSS = `
 .flist li{font-size:13px;line-height:1.45;color:var(--bone)}
 
 /* bottom tab bar */
-.tabbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:15;
+.tabbar{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:15;
   width:calc(100% - 36px);max-width:300px;display:flex;gap:5px;padding:5px;
   background:rgba(20,25,30,.92);backdrop-filter:blur(10px);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 10px 36px rgba(0,0,0,.45)}
@@ -509,37 +538,65 @@ function StretchView() {
   const [left, setLeft] = useState(ST_SECONDS);
   const [running, setRunning] = useState(false);
   const [doneAll, setDoneAll] = useState(false);
+  const deadline = useRef(null);
+  /* mirrors idx so the interval can advance without an impure state updater
+     (StrictMode double-invokes updaters) */
+  const idxRef = useRef(0);
+  const setIdxBoth = (v) => { idxRef.current = v; setIdx(v); };
 
+  /* Remaining time is derived from the clock, not counted in ticks —
+     setInterval is throttled hard in background tabs and locked phones. */
   useEffect(() => {
     if (!running) return;
+    deadline.current = Date.now() + left * 1000;
     const t = setInterval(() => {
-      setLeft((s) => {
-        if (s > 1) return s - 1;
-        // advance
-        try { navigator.vibrate && navigator.vibrate(30); } catch (e) {}
-        setIdx((i) => {
-          if (i + 1 >= STRETCH.length) {
-            setRunning(false);
-            setDoneAll(true);
-            return i;
-          }
-          return i + 1;
-        });
-        return ST_SECONDS;
-      });
-    }, 1000);
+      const now = Date.now();
+      const rem = Math.ceil((deadline.current - now) / 1000);
+      if (rem > 0) { setLeft(rem); return; }
+      try { navigator.vibrate && navigator.vibrate(30); } catch (e) {}
+      // catch up: a throttled tab can wake up several exercises late
+      let ni = idxRef.current, d = deadline.current;
+      while (d <= now && ni + 1 < STRETCH.length) { ni += 1; d += ST_SECONDS * 1000; }
+      if (d <= now) { setIdxBoth(ni); setRunning(false); setDoneAll(true); setLeft(0); return; }
+      deadline.current = d;
+      setIdxBoth(ni);
+      setLeft(Math.ceil((d - now) / 1000));
+    }, 250);
     return () => clearInterval(t);
   }, [running]);
 
+  /* Keep the screen awake while the routine runs. The OS releases the lock
+     when the page is hidden, so re-request when it becomes visible again. */
+  useEffect(() => {
+    if (!running || typeof navigator === "undefined" || !navigator.wakeLock) return;
+    let lock = null, active = true;
+    const acquire = async () => {
+      try {
+        const l = await navigator.wakeLock.request("screen");
+        if (!active) { l.release(); return; }
+        lock = l;
+      } catch (e) { /* denied — timer still runs on the clock */ }
+    };
+    acquire();
+    const onVis = () => { if (document.visibilityState === "visible") acquire(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVis);
+      try { lock && lock.release(); } catch (e) {}
+    };
+  }, [running]);
+
   function toggle() {
-    if (doneAll) { setIdx(0); setLeft(ST_SECONDS); setDoneAll(false); setRunning(true); return; }
+    if (doneAll) { setIdxBoth(0); setLeft(ST_SECONDS); setDoneAll(false); setRunning(true); return; }
     setRunning((r) => !r);
   }
   function skip() {
     if (idx + 1 >= STRETCH.length) { setRunning(false); setDoneAll(true); return; }
-    setIdx((i) => i + 1); setLeft(ST_SECONDS);
+    deadline.current = Date.now() + ST_SECONDS * 1000;
+    setIdxBoth(idx + 1); setLeft(ST_SECONDS);
   }
-  function restart() { setIdx(0); setLeft(ST_SECONDS); setDoneAll(false); setRunning(false); }
+  function restart() { deadline.current = null; setIdxBoth(0); setLeft(ST_SECONDS); setDoneAll(false); setRunning(false); }
 
   const cur = STRETCH[idx];
   const totalDone = idx * ST_SECONDS + (ST_SECONDS - left);
@@ -688,6 +745,7 @@ export default function App() {
   const [tab, setTab] = useState("train");
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
+  const lastAction = useRef(null);
 
   const finished = index >= SESSIONS.length;
   const session = finished ? null : SESSIONS[index];
@@ -708,8 +766,11 @@ export default function App() {
   const persist = (i, l) => store.set(KEY, JSON.stringify({ index: i, logs: l }));
 
   const a = session ? adapt(session, index, logs) : null;
+  /* what the hero + list render: the session with the adapted dose applied */
+  const shown = session && a ? withLoad(session, a.load) : session;
 
   function complete(rpeKey) {
+    lastAction.current = { index, logs };
     const newLogs = { ...logs, [session.id]: rpeKey };
     const newIndex = index + 1;
     setLogs(newLogs); setIndex(newIndex); setSheet(false);
@@ -721,13 +782,31 @@ export default function App() {
       const na = adapt(next, newIndex, newLogs);
       msg = na.note ? na.note : "Neste økt: planen holder.";
     }
-    showToast(msg, RPE[rpeKey].color);
+    showToast(msg, RPE[rpeKey].color, true);
   }
 
-  function showToast(msg, color) {
-    setToast({ msg, color });
+  function skipSession() {
+    lastAction.current = { index, logs };
+    const newLogs = { ...logs, [session.id]: SKIPPED };
+    const newIndex = index + 1;
+    setLogs(newLogs); setIndex(newIndex); setSheet(false);
+    persist(newIndex, newLogs);
+    showToast("Økt hoppet over — programmet går videre.", "var(--muted)", true);
+  }
+
+  function undo() {
+    const prev = lastAction.current;
+    if (!prev) return;
+    lastAction.current = null;
+    setIndex(prev.index); setLogs(prev.logs);
+    persist(prev.index, prev.logs);
+    showToast("Angret — økten er åpen igjen.", "var(--muted)");
+  }
+
+  function showToast(msg, color, undoable = false) {
+    setToast({ msg, color, undoable });
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 3200);
+    toastTimer.current = setTimeout(() => setToast(null), undoable ? 6000 : 3200);
   }
 
   function reset() {
@@ -804,7 +883,7 @@ export default function App() {
               <div className="hmeta">
                 <div className="metric">
                   <div className="k">Varighet</div>
-                  <div className="v">{session.est}</div>
+                  <div className="v">{shown.est}</div>
                 </div>
                 {a && a.load != null && (
                   <div className="metric">
@@ -816,7 +895,7 @@ export default function App() {
                 )}
                 <div className="metric">
                   <div className="k">Øvelser</div>
-                  <div className="v">{session.items.length}</div>
+                  <div className="v">{shown.items.length}</div>
                 </div>
               </div>
 
@@ -839,12 +918,15 @@ export default function App() {
 
             {/* exercise list */}
             <div className="list fade" style={{ animationDelay: ".12s" }}>
-              {session.items.map((it, i) => <ExerciseRow item={it} key={i} />)}
+              {shown.items.map((it, i) => <ExerciseRow item={it} key={i} />)}
             </div>
             <div className="hint">Trykk en øvelse for teknikk + pause</div>
 
             <button className="cta fade" style={{ animationDelay: ".18s" }} onClick={() => setSheet(true)}>
               <Check size={19} /> Fullfør økt
+            </button>
+            <button className="skipbtn fade" style={{ animationDelay: ".2s" }} onClick={skipSession}>
+              Hopp over økt · hvile / ikke gjort
             </button>
           </>
         )}
@@ -863,18 +945,19 @@ export default function App() {
           <div className="wk-grid">
             {cells.map((c, i) => {
               const gIdx = vWeekStart + i;
-              const done = !!logs[c.id];
+              const skipped = logs[c.id] === SKIPPED;
+              const done = !!logs[c.id] && !skipped;
               const isToday = gIdx === index;
               const future = gIdx > index;
               const Ico = c.icon;
               return (
                 <div
-                  className={`cell ${done ? "done" : ""} ${isToday ? "today" : ""} ${future ? "future" : ""}`}
+                  className={`cell ${done ? "done" : ""} ${skipped ? "skip" : ""} ${isToday ? "today" : ""} ${future ? "future" : ""}`}
                   key={c.id}
                   onClick={() => setPreview(c)}
                 >
                   <div className="d">{DAYS[c.day]}</div>
-                  {done ? <Check size={15} /> : <Ico size={15} />}
+                  {done ? <Check size={15} /> : skipped ? <X size={15} /> : <Ico size={15} />}
                 </div>
               );
             })}
@@ -894,7 +977,10 @@ export default function App() {
 
         {tab === "food" && <FoodView />}
 
-        {tab === "stretch" && <StretchView />}
+        {/* kept mounted so the running timer survives tab switches */}
+        <div style={{ display: tab === "stretch" ? undefined : "none" }}>
+          <StretchView />
+        </div>
 
         {/* bottom tab bar */}
         <div className="tabbar" style={{ maxWidth: 380 }}>
@@ -942,7 +1028,8 @@ export default function App() {
       {/* day preview sheet */}
       {preview && (() => {
         const pIdx = SESSIONS.indexOf(preview);
-        const isDone = !!logs[preview.id];
+        const isSkipped = logs[preview.id] === SKIPPED;
+        const isDone = !!logs[preview.id] && !isSkipped;
         const isToday = pIdx === index;
         const isFuture = pIdx > index;
         return (
@@ -955,6 +1042,9 @@ export default function App() {
               <div className="sheet-sub">Uke {preview.week} · {DAYS[preview.day]} · {preview.est}</div>
               {isDone && (
                 <div className="prov go"><Check size={13} /> Fullført · du svarte «{RPE[logs[preview.id]].label}»</div>
+              )}
+              {isSkipped && (
+                <div className="prov"><X size={13} /> Hoppet over</div>
               )}
               {isToday && (
                 <div className="prov flare"><Target size={13} /> Dette er dagens økt</div>
@@ -978,6 +1068,9 @@ export default function App() {
             <Activity size={15} style={{ color: toast.color }} />
           </div>
           <div className="tt">{toast.msg}</div>
+          {toast.undoable && (
+            <button className="tundo" onClick={undo}>Angre</button>
+          )}
         </div>
       )}
     </div>
