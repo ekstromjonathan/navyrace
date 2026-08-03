@@ -6,6 +6,12 @@ import {
   Cloud, CloudOff, RefreshCw, Mail
 } from "lucide-react";
 import * as cloud from "./cloud.js";
+import { adapt, withLoad, RPE, SKIPPED } from "./adapt.js";
+import {
+  KEY, BUILTIN_PROGRAM_ID, emptyProgress, activeLogs, withActiveLogs,
+  paceInfo, todaySlot, serializeApp, parseApp, defaultBrand,
+} from "./state.js";
+import { Welcome, Coach } from "./Onboarding.jsx";
 
 /* ----------------------------- storage shim ----------------------------- */
 /* Claude artifact storage when available, else localStorage, else memory.   */
@@ -57,8 +63,6 @@ const store = {
     mem[k] = v;
   },
 };
-const KEY = "navyrace:v1";
-
 /* ----------------------------- program data ----------------------------- */
 const PHASES = (w) =>
   w <= 3 ? "Base" : w <= 6 ? "Bygg" : w <= 9 ? "Spesifikk topp" : "Nedtrapping";
@@ -88,6 +92,7 @@ function buildDay(w, d, p = WK[w - 1]) {
   if (d === 0) return { ...base, type: "easyrun", title: "Rolig løp + grep",
     icon: Footprints, est: `~${p.runEasy + 10} min`, loadKey: "easyrun",
     load: p.runEasy, unit: "min",
+    estFromLoad: (load) => `~${load + 10} min`,
     items: [
       ex("Rolig løp · sone 2", Footprints, `${p.runEasy} min`, "Snakketempo. Skal føles for lett."),
       ex("Dødheng", Hand, "3 × maks tid", "Rett etter løpet. Bygger grep."),
@@ -133,6 +138,7 @@ function buildDay(w, d, p = WK[w - 1]) {
   if (d === 5) {
     if (p.brick > 0) return { ...base, type: "brick", title: "Brick · løp + hinder",
       icon: Waves, est: `~${p.brick * 12} min`, loadKey: "brick", load: p.brick, unit: "runder",
+      estFromLoad: (load) => `~${load * 12} min`,
       items: [
         ex("Format", Flame, `Løp 1 km → stasjon · ${p.brick} runder`, "Hinder i tretthet — som race-dag."),
         ex("Stasjon: trekk", Activity, "5 pull-ups + 30 s heng", null),
@@ -154,6 +160,7 @@ function buildDay(w, d, p = WK[w - 1]) {
   return { ...base, type: "longrun", title: "Langtur",
     icon: Footprints, est: `~${Math.round(p.long * 6)} min`, loadKey: "longrun",
     load: p.long, unit: "km",
+    estFromLoad: (load) => `~${Math.round(load * 6)} min`,
     items: [
       ex("Langt rolig løp · sone 2", Footprints, `${p.long} km`, "Bygg motoren. Lavt tempo."),
       ex("Underlag", Mountain, "Terreng / sand om mulig", "Løypa er ikke flat asfalt."),
@@ -165,21 +172,6 @@ for (let w = 1; w <= 10; w++) for (let d = 0; d < 7; d++) {
   const s = buildDay(w, d);
   s.id = `w${w}d${d}`;
   SESSIONS.push(s);
-}
-
-/* Rebuild a session with the adapted load written into items/est, so the
-   exercise list shows the same dose as the hero metric. Display-only —
-   SESSIONS and log identity are untouched. */
-const LOAD_FIELD = {
-  easyrun: "runEasy", strA: "str", strB: "str",
-  skills: "str", brick: "brick", longrun: "long",
-};
-function withLoad(session, load) {
-  if (load == null || load === session.load) return session;
-  const field = LOAD_FIELD[session.loadKey];
-  if (!field) return session;
-  const p = { ...WK[session.week - 1], [field]: load };
-  return { ...buildDay(session.week, session.day, p), id: session.id };
 }
 
 /* --------------------------- exercise library --------------------------- */
@@ -256,31 +248,6 @@ function ExerciseRow({ item }) {
       )}
     </div>
   );
-}
-
-/* --------------------------- adaptation engine --------------------------- */
-const RPE = {
-  lett:    { mult: 1.08, color: "var(--go)",   label: "Lett",    msg: "Forrige føltes lett — skrur opp litt." },
-  passe:   { mult: 1.0,  color: "var(--hold)", label: "Passe",   msg: "Holder planen." },
-  brutalt: { mult: 0.9,  color: "var(--hard)", label: "Brutalt", msg: "Forrige var hard — letter litt." },
-};
-
-/* log value for a session that was skipped instead of completed */
-const SKIPPED = "hoppet";
-
-function adapt(session, index, logs) {
-  if (session.load == null) return { load: null, note: null };
-  let prev = null;
-  for (let i = index - 1; i >= 0; i--) {
-    const s = SESSIONS[i];
-    if (s.loadKey === session.loadKey && RPE[logs[s.id]]) { prev = logs[s.id]; break; }
-  }
-  if (!prev) return { load: session.load, note: null };
-  const r = RPE[prev];
-  let v = session.load * r.mult;
-  v = session.unit === "km" ? Math.round(v * 2) / 2 : Math.round(v);
-  const note = v !== session.load ? r.msg : null;
-  return { load: v, note, dir: v > session.load ? "up" : v < session.load ? "down" : "flat" };
 }
 
 /* -------------------------------- styles -------------------------------- */
@@ -534,6 +501,24 @@ button,input{font:inherit;color:inherit}
 .st-num{font-family:var(--mono);font-size:11px;color:var(--muted);width:20px;flex:0 0 auto}
 .st-nm{font-weight:600;font-size:13.5px}
 .st-sec{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* onboarding */
+.ob-wrap{padding-top:calc(18px + env(safe-area-inset-top,0px))}
+.ob-progress{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:18px}
+.ob-bubble{margin-bottom:16px}
+.ob-bubble.mai .ob-who{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--flare);text-transform:uppercase;margin-bottom:6px}
+.ob-text{font-size:16px;line-height:1.45;color:var(--bone)}
+.ob-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.ob-chip{border:1px solid var(--line);background:var(--panel);color:var(--bone);border-radius:999px;
+  padding:10px 14px;font-family:var(--disp);font-weight:600;font-size:13px;letter-spacing:.03em;
+  text-transform:uppercase;cursor:pointer}
+.ob-chip:active{transform:scale(.97)}
+.ob-label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:14px 0 7px}
+.pace{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin-top:6px}
+.pace.ahead{color:var(--go)}.pace.behind{color:var(--hold)}.pace.on{color:var(--muted)}
+.cal-note{margin:0 0 14px;padding:10px 12px;border-radius:11px;border:1px solid var(--line);
+  background:rgba(236,232,224,.04);font-size:12.5px;color:var(--muted);line-height:1.4}
 `;
 
 /* ------------------------- 5-min stretch routine ------------------------ */
@@ -826,8 +811,10 @@ function SyncSheet({ user, sync, onClose }) {
 
 export default function App() {
   const [loaded, setLoaded] = useState(false);
-  const [index, setIndex] = useState(0);
-  const [logs, setLogs] = useState({});
+  const [gate, setGate] = useState("boot"); // boot | welcome | coach | app
+  const [profile, setProfile] = useState(null);
+  const [program, setProgram] = useState(null); // null = builtin
+  const [progress, setProgress] = useState(emptyProgress());
   const [sheet, setSheet] = useState(false);
   const [preview, setPreview] = useState(null);
   const [viewWeek, setViewWeek] = useState(1);
@@ -836,53 +823,82 @@ export default function App() {
   const toastTimer = useRef(null);
   const lastAction = useRef(null);
   const [user, setUser] = useState(null);
-  const [sync, setSync] = useState("idle");   // idle | syncing | ok | error
+  const [sync, setSync] = useState("idle");
   const [authSheet, setAuthSheet] = useState(false);
-  const localAt = useRef(0);                  // updatedAt of what's on screen
+  const [softAuth, setSoftAuth] = useState(false);
+  const localAt = useRef(0);
+  const profileRef = useRef(null);
+  const programRef = useRef(null);
 
-  const finished = index >= SESSIONS.length;
-  const session = finished ? null : SESSIONS[index];
+  const sessions = program?.weeks?.flat?.() || program?.sessions || SESSIONS;
+  const programId = program?.id || BUILTIN_PROGRAM_ID;
+  const index = progress.index || 0;
+  const logs = activeLogs(progress, programId);
+  const finished = index >= sessions.length;
+  const session = finished ? null : sessions[index];
   const w = session ? session.week : 10;
+  const brand = profile?.brand || defaultBrand();
+  const totalWeeks = profile?.goal?.weeks || 10;
 
   useEffect(() => { setViewWeek(w); }, [w]);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+  useEffect(() => { programRef.current = program; }, [program]);
 
   useEffect(() => {
     (async () => {
       const raw = await store.get(KEY);
-      if (raw) {
-        try {
-          const s = JSON.parse(raw);
-          setIndex(s.index || 0); setLogs(s.logs || {}); localAt.current = s.updatedAt || 0;
-        } catch (e) {}
+      const s = parseApp(raw);
+      if (s?.profile) {
+        setProfile(s.profile);
+        setProgram(s.program ?? null);
+        const prog = s.progress || emptyProgress();
+        // accept legacy flat logs if somehow present
+        if (prog.logs && !prog.logsByProgram) {
+          prog.logsByProgram = { [BUILTIN_PROGRAM_ID]: prog.logs };
+          delete prog.logs;
+        }
+        setProgress(prog);
+        localAt.current = prog.updatedAt || 0;
+        setGate("app");
+      } else {
+        setGate("welcome");
       }
       setLoaded(true);
     })();
   }, []);
 
-  /* Cloud sync is additive: the app above never waits on it, and every path
-     here is skipped entirely when the env vars are absent. */
   useEffect(() => {
     if (!cloud.enabled) return;
     cloud.getUser().then(setUser).catch(() => {});
     return cloud.onAuthChange(setUser);
   }, []);
 
-  /* On login (and on load when already logged in): reconcile once, both ways. */
   useEffect(() => {
     if (!cloud.enabled || !user || !loaded) return;
     let cancelled = false;
     (async () => {
       setSync("syncing");
       try {
-        const local = { index, logs, updatedAt: localAt.current };
         const remote = await cloud.pull(user.id);
         if (cancelled) return;
+        /* Returning user on Welcome: hydrate from sky and skip onboarding. */
+        if (!profileRef.current && remote?.profile) {
+          applyRemote(remote);
+          setGate("app");
+          showToast("Hentet planen din fra skyen.", "var(--go)");
+          if (!cancelled) setSync("ok");
+          return;
+        }
+        if (gate !== "app") {
+          if (!cancelled) setSync("ok");
+          return;
+        }
+        const local = cloudPayload(index, logs, profileRef.current, programRef.current, localAt.current);
         const winner = cloud.newer(local, remote);
-        if (winner === remote) {
-          setIndex(remote.index); setLogs(remote.logs); localAt.current = remote.updatedAt;
-          await store.set(KEY, JSON.stringify(remote));
+        if (winner === remote && remote) {
+          applyRemote(remote);
           showToast("Hentet fremdrift fra skyen.", "var(--go)");
-        } else if (!remote || winner.updatedAt > (remote.updatedAt ?? 0)) {
+        } else if (!remote || (winner?.updatedAt ?? 0) > (remote?.updatedAt ?? 0)) {
           await cloud.push(user.id, local);
         }
         if (!cancelled) setSync("ok");
@@ -891,35 +907,84 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, loaded]);
+  }, [user, loaded, gate]);
 
-  const persist = (i, l) => {
-    const state = { index: i, logs: l, updatedAt: Date.now() };
-    localAt.current = state.updatedAt;
-    store.set(KEY, JSON.stringify(state));
-    /* Fire and forget — a failed push must never block logging a session.
-       The next successful sync carries it, since updatedAt still wins. */
+  function cloudPayload(i, l, prof, prog, at) {
+    return {
+      index: i,
+      logs: l,
+      profile: prof,
+      program: prog,
+      updatedAt: at || Date.now(),
+    };
+  }
+
+  function applyRemote(remote) {
+    const pid = remote.program?.id || BUILTIN_PROGRAM_ID;
+    const nextProgress = {
+      index: remote.index || 0,
+      logsByProgram: { [pid]: remote.logs || {} },
+      archive: {},
+      updatedAt: remote.updatedAt || 0,
+    };
+    localAt.current = nextProgress.updatedAt;
+    setProgress(nextProgress);
+    if (remote.profile) setProfile(remote.profile);
+    if (remote.program !== undefined) setProgram(remote.program);
+    store.set(KEY, serializeApp(remote.profile || profileRef.current, remote.program ?? programRef.current, nextProgress));
+  }
+
+  function persistProgress(i, l, opts = {}) {
+    const next = {
+      ...withActiveLogs(progress, l, programId),
+      index: i,
+      updatedAt: Date.now(),
+    };
+    localAt.current = next.updatedAt;
+    setProgress(next);
+    const prof = opts.profile !== undefined ? opts.profile : profile;
+    const prog = opts.program !== undefined ? opts.program : program;
+    store.set(KEY, serializeApp(prof, prog, next));
     if (cloud.enabled && user) {
       setSync("syncing");
-      cloud.push(user.id, state).then(() => setSync("ok"), () => setSync("error"));
+      const payload = cloudPayload(i, l, prof, prog, next.updatedAt);
+      cloud.push(user.id, payload).then(() => setSync("ok"), () => setSync("error"));
     }
-  };
+  }
 
-  const a = session ? adapt(session, index, logs) : null;
-  /* what the hero + list render: the session with the adapted dose applied */
+  async function persistProfile(nextProfile, nextProgram = program) {
+    setProfile(nextProfile);
+    setProgram(nextProgram);
+    const next = { ...progress, updatedAt: Date.now() };
+    localAt.current = next.updatedAt;
+    setProgress(next);
+    store.set(KEY, serializeApp(nextProfile, nextProgram, next));
+    if (cloud.enabled && user) {
+      setSync("syncing");
+      try {
+        const local = cloudPayload(index, logs, nextProfile, nextProgram, next.updatedAt);
+        const merged = await cloud.pushProfile(user.id, local);
+        if (merged) applyRemote(merged);
+        setSync("ok");
+      } catch (e) {
+        setSync("error");
+      }
+    }
+  }
+
+  const a = session ? adapt(session, index, logs, sessions) : null;
   const shown = session && a ? withLoad(session, a.load) : session;
 
   function complete(rpeKey) {
     lastAction.current = { index, logs };
     const newLogs = { ...logs, [session.id]: rpeKey };
     const newIndex = index + 1;
-    setLogs(newLogs); setIndex(newIndex); setSheet(false);
-    persist(newIndex, newLogs);
-    // preview next adaptation
-    const next = SESSIONS[newIndex];
+    setSheet(false);
+    persistProgress(newIndex, newLogs);
+    const next = sessions[newIndex];
     let msg = "Økt logget.";
     if (next && next.load != null) {
-      const na = adapt(next, newIndex, newLogs);
+      const na = adapt(next, newIndex, newLogs, sessions);
       msg = na.note ? na.note : "Neste økt: planen holder.";
     }
     showToast(msg, RPE[rpeKey].color, true);
@@ -929,8 +994,8 @@ export default function App() {
     lastAction.current = { index, logs };
     const newLogs = { ...logs, [session.id]: SKIPPED };
     const newIndex = index + 1;
-    setLogs(newLogs); setIndex(newIndex); setSheet(false);
-    persist(newIndex, newLogs);
+    setSheet(false);
+    persistProgress(newIndex, newLogs);
     showToast("Økt hoppet over — programmet går videre.", "var(--muted)", true);
   }
 
@@ -938,8 +1003,7 @@ export default function App() {
     const prev = lastAction.current;
     if (!prev) return;
     lastAction.current = null;
-    setIndex(prev.index); setLogs(prev.logs);
-    persist(prev.index, prev.logs);
+    persistProgress(prev.index, prev.logs);
     showToast("Angret — økten er åpen igjen.", "var(--muted)");
   }
 
@@ -949,13 +1013,37 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), undoable ? 6000 : 3200);
   }
 
-  function reset() {
-    if (!window.confirm("Nullstille all fremdrift?")) return;
-    setIndex(0); setLogs({}); persist(0, {});
-    showToast("Fremdrift nullstilt.", "var(--muted)");
+  function resetProgress() {
+    if (!window.confirm("Starte programmet på nytt? Profilen beholdes.")) return;
+    persistProgress(0, {});
+    showToast("Programmet startet på nytt.", "var(--muted)");
   }
 
-  if (!loaded) {
+  function resetAll() {
+    if (!window.confirm("Glemme profil og starte onboarding på nytt?")) return;
+    setProfile(null);
+    setProgram(null);
+    setProgress(emptyProgress());
+    localAt.current = 0;
+    store.set(KEY, "");
+    setGate("welcome");
+    showToast("Profil slettet.", "var(--muted)");
+  }
+
+  function onCoachDone(nextProfile) {
+    setProfile(nextProfile);
+    setProgram(null);
+    const next = emptyProgress();
+    next.updatedAt = Date.now();
+    localAt.current = next.updatedAt;
+    setProgress(next);
+    store.set(KEY, serializeApp(nextProfile, null, next));
+    setGate("app");
+    if (cloud.enabled && !user) setSoftAuth(true);
+    showToast("Program klart — velkommen.", "var(--go)");
+  }
+
+  if (!loaded || gate === "boot") {
     return (
       <div className="nr-root">
         <style>{CSS}</style>
@@ -968,10 +1056,42 @@ export default function App() {
     );
   }
 
-  const phase = session ? session.phase : "Fullført";
-  const pct = Math.round((index / SESSIONS.length) * 100);
+  if (gate === "welcome") {
+    return (
+      <>
+        <style>{CSS}</style>
+        <Welcome
+          appName={brand.appName}
+          coachName={brand.coachName}
+          cloudEnabled={cloud.enabled}
+          onStart={() => setGate("coach")}
+          onLogin={() => setAuthSheet(true)}
+        />
+        {authSheet && (
+          <SyncSheet user={user} sync={sync} onClose={() => {
+            setAuthSheet(false);
+            if (user) setGate("app");
+          }} />
+        )}
+      </>
+    );
+  }
+
+  if (gate === "coach") {
+    return (
+      <>
+        <style>{CSS}</style>
+        <Coach onComplete={onCoachDone} />
+      </>
+    );
+  }
+
+  const pct = Math.round((index / Math.max(sessions.length, 1)) * 100);
   const vWeekStart = (viewWeek - 1) * 7;
-  const cells = SESSIONS.slice(vWeekStart, vWeekStart + 7);
+  const cells = sessions.slice(vWeekStart, vWeekStart + 7);
+  const pace = paceInfo(profile, index);
+  const calMismatch = profile?.schedule?.mode === "calendar" && session && session.day !== todaySlot();
+  const goalLabel = profile?.goal?.label || "Navy Race";
 
   return (
     <div className="nr-root">
@@ -982,8 +1102,11 @@ export default function App() {
         {/* header */}
         <div className="hd fade">
           <div>
-            <div className="hd-title">NAVY RACE<span style={{ color: "var(--flare)" }}>·</span>10</div>
-            <div className="hd-sub">Uke {w} / 10 &nbsp;·&nbsp; {phase}</div>
+            <div className="hd-title">{brand.appName}</div>
+            <div className="hd-sub">
+              Uke {w} / {totalWeeks} &nbsp;·&nbsp; {goalLabel}
+            </div>
+            {pace && <div className={`pace ${pace.kind}`}>{pace.label}</div>}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {cloud.enabled && (
@@ -999,10 +1122,29 @@ export default function App() {
                   : user ? <Cloud size={15} /> : <CloudOff size={15} />}
               </button>
             )}
-            <button className="iconbtn" onClick={reset} aria-label="Nullstill"><RotateCcw size={15} /></button>
+            <button
+              className="iconbtn"
+              onClick={() => {
+                const choice = window.prompt(
+                  "1 = start program på nytt\n2 = glem profil (onboarding)\nAvbryt = ingenting",
+                  "1"
+                );
+                if (choice === "1") resetProgress();
+                else if (choice === "2") resetAll();
+              }}
+              aria-label="Nullstill"
+            >
+              <RotateCcw size={15} />
+            </button>
           </div>
         </div>
         <div className="prog fade"><i style={{ width: `${pct}%` }} /></div>
+        {calMismatch && (
+          <div className="cal-note">
+            I dag er {DAYS[todaySlot()]}, planen viser {DAYS[session.day]}.
+            Kalender-modus — ta økta likevel, eller kom tilbake på {DAYS[session.day]}.
+          </div>
+        )}
 
         {tab === "train" && (<>
         {finished ? (
@@ -1093,7 +1235,7 @@ export default function App() {
               <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
             </button>
             <div className="lbl">Uke {viewWeek} · {PHASES(viewWeek)}{viewWeek === w ? " · nå" : ""}</div>
-            <button className="navb" disabled={viewWeek >= 10} onClick={() => setViewWeek((v) => Math.min(10, v + 1))} aria-label="Neste uke">
+            <button className="navb" disabled={viewWeek >= totalWeeks} onClick={() => setViewWeek((v) => Math.min(totalWeeks, v + 1))} aria-label="Neste uke">
               <ChevronRight size={15} />
             </button>
           </div>
@@ -1120,14 +1262,15 @@ export default function App() {
           <div className="hint">Bla mellom uker · trykk en dag for å se økten</div>
         </div>
 
-        {/* race marker */}
-        <div className="race fade" style={{ animationDelay: ".3s" }}>
-          <Anchor size={20} style={{ color: "var(--flare)", flex: "0 0 auto" }} />
-          <div>
-            <div className="f">NAVY RACE · HORTEN</div>
-            <div className="s">8 KM · 30 HINDRE · KARLJOHANSVERN</div>
+        {profile?.goal?.kind === "navy_race" && (
+          <div className="race fade" style={{ animationDelay: ".3s" }}>
+            <Anchor size={20} style={{ color: "var(--flare)", flex: "0 0 auto" }} />
+            <div>
+              <div className="f">NAVY RACE · HORTEN</div>
+              <div className="s">8 KM · 30 HINDRE · KARLJOHANSVERN</div>
+            </div>
           </div>
-        </div>
+        )}
         </>)}
 
         {tab === "food" && <FoodView />}
@@ -1150,6 +1293,26 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* soft auth after first program — value before account */}
+      {softAuth && cloud.enabled && !user && (
+        <div className="scrim" onClick={() => setSoftAuth(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-h">
+              <div className="sheet-t">Ta planen med deg</div>
+              <button className="iconbtn" onClick={() => setSoftAuth(false)}><X size={16} /></button>
+            </div>
+            <div className="sheet-sub">
+              {brand.coachName} har bygget programmet ditt. Vil du ha fremdriften på telefon og laptop?
+              Ingen passord — bare en lenke på e-post.
+            </div>
+            <button className="cta" onClick={() => { setSoftAuth(false); setAuthSheet(true); }}>
+              <Mail size={18} /> Send innloggingslenke
+            </button>
+            <button className="skipbtn" onClick={() => setSoftAuth(false)}>Ikke nå</button>
+          </div>
+        </div>
+      )}
 
       {/* sync sheet */}
       {authSheet && (
@@ -1187,7 +1350,7 @@ export default function App() {
 
       {/* day preview sheet */}
       {preview && (() => {
-        const pIdx = SESSIONS.indexOf(preview);
+        const pIdx = sessions.findIndex((s) => s.id === preview.id);
         const isSkipped = logs[preview.id] === SKIPPED;
         const isDone = !!logs[preview.id] && !isSkipped;
         const isToday = pIdx === index;
