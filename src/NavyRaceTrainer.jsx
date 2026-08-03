@@ -6,8 +6,27 @@ import {
 } from "lucide-react";
 
 /* ----------------------------- storage shim ----------------------------- */
-/* Uses Claude artifact persistent storage when available, else in-memory.   */
+/* Claude artifact storage when available, else localStorage, else memory.   */
 const mem = {};
+
+/* Resolved once. localStorage can exist but throw on write (Safari private   */
+/* browsing, blocked third-party storage), so probe with a real write.        */
+let lsCache;
+function ls() {
+  if (lsCache !== undefined) return lsCache;
+  lsCache = null;
+  try {
+    const s = typeof window !== "undefined" && window.localStorage;
+    if (s) {
+      const probe = "navyrace:probe";
+      s.setItem(probe, "1");
+      s.removeItem(probe);
+      lsCache = s;
+    }
+  } catch (e) { /* unavailable — stay on in-memory fallback */ }
+  return lsCache;
+}
+
 const store = {
   async get(k) {
     try {
@@ -16,6 +35,10 @@ const store = {
         return r ? r.value : null;
       }
     } catch (e) { /* key missing or unavailable */ }
+    const s = ls();
+    if (s) {
+      try { return s.getItem(k); } catch (e) { /* fall through */ }
+    }
     return mem[k] ?? null;
   },
   async set(k, v) {
@@ -25,6 +48,10 @@ const store = {
         return;
       }
     } catch (e) { /* fall through */ }
+    const s = ls();
+    if (s) {
+      try { s.setItem(k, v); return; } catch (e) { /* quota — fall through */ }
+    }
     mem[k] = v;
   },
 };

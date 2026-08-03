@@ -28,7 +28,16 @@ All styling ligger som en `CSS`-konstant i `NavyRaceTrainer.jsx` og injiseres vi
 
 ## Lagring
 
-`store`-shimen øverst i `NavyRaceTrainer.jsx` bruker `window.storage` når den finnes
-(Claude-artifact-miljøet), ellers et in-memory-objekt. Utenfor artifact-miljøet betyr
-det at fremdrift **ikke overlever en refresh**. Neste steg er å bytte fallbacken til
-`localStorage`, eventuelt synke til Supabase for historikk på tvers av enheter.
+`store`-shimen øverst i `NavyRaceTrainer.jsx` prøver tre nivåer i rekkefølge:
+
+1. `window.storage` — Claude-artifact-miljøet, hvis appen kjøres der
+2. `localStorage` — vanlig nettleser. Fremdrift overlever refresh
+3. In-memory — siste utvei hvis `localStorage` er blokkert (Safari privat modus,
+   avslått tredjeparts-lagring). Appen kjører, men husker ingenting
+
+Nivå 2 sjekkes med en faktisk skrivetest, ikke bare `typeof`, fordi `localStorage`
+kan finnes og likevel kaste ved skriving. Resultatet caches.
+
+State lagres under nøkkelen `navyrace:v1` som `{ index, logs }` — hvilken økt du står
+på, og RPE-loggen per fullførte økt. Lagringen er per enhet; Supabase-synk for historikk
+på tvers av telefon og laptop er neste steg hvis det trengs.
