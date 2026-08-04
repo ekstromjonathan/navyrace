@@ -94,7 +94,13 @@ async function sendText(waId: string, body: string): Promise<string | null> {
 
 /* ---------------------------------------------------------------- handle -- */
 
-async function handleMessage(waId: string, msgId: string, text: string, tsMs: number) {
+async function handleMessage(
+  waId: string,
+  msgId: string,
+  text: string,
+  tsMs: number,
+  isText = true,
+) {
   // 1. bruker
   const { data: user, error: uErr } = await db
     .schema("mai")
@@ -122,8 +128,14 @@ async function handleMessage(waId: string, msgId: string, text: string, tsMs: nu
     throw new Error(`insert inbound: ${eErr.message}`);
   }
 
-  // 3. svar
-  const { reply, next } = replyFor((user.profile ?? {}) as Profile, text);
+  // 3. svar. Ikke-tekst (bilde/lyd/sticker) får et fast svar, men går gjennom
+  //    samme dedup-port over — ellers dobbeltsvarer vi på Meta-retry.
+  const { reply, next } = isText
+    ? replyFor((user.profile ?? {}) as Profile, text)
+    : {
+      reply: "Jeg leser bare tekst foreløpig — skriv det gjerne med ord.",
+      next: (user.profile ?? {}) as Profile,
+    };
 
   await db.schema("mai").from("users")
     .update({ profile: next, updated_at: new Date().toISOString() })
@@ -171,15 +183,12 @@ Deno.serve(async (req) => {
     for (const entry of body?.entry ?? []) {
       for (const change of entry?.changes ?? []) {
         for (const m of change?.value?.messages ?? []) {
-          if (m.type !== "text") {
-            await sendText(m.from, "Jeg leser bare tekst foreløpig — skriv det gjerne med ord.");
-            continue;
-          }
           await handleMessage(
             m.from,
             m.id,
             m.text?.body ?? "",
             Number(m.timestamp) * 1000 || Date.now(),
+            m.type === "text",
           );
         }
       }

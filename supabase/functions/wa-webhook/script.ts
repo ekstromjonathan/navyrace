@@ -29,6 +29,16 @@ const LEVELS: Record<string, string> = {
   "annen idrett": "Annen idrett",
 };
 
+/** Manus Q0-open. MAI hilser FØR hun spør — ellers blir «ja» til recruit-pingen
+ *  lagret som mål. */
+export const OPENING = [
+  "Hei! Jeg er MAI — treningskompisen din her.",
+  "Vi bruker ca. 5 min, så har du en plan og tidspunkt for første økt.",
+  "",
+  "Hva trener du mest mot akkurat nå?",
+  "(f.eks. generell form / styrke / løp / hinderløp — eller bare skriv med egne ord)",
+].join("\n");
+
 export const MINIMUM_PACK = [
   "20 knebøy med kroppsvekt",
   "10 push-ups (knær er helt greit)",
@@ -59,7 +69,7 @@ export function replyFor(profile: Profile, text: string): { reply: string; next:
   const p: Profile = { ...profile };
   const t = text.trim();
   const low = t.toLowerCase();
-  const step = p.step ?? "q0_goal";
+  const step = p.step ?? "boot";
 
   // Alltid tilgjengelig: dårlig dag / pause (manus §4)
   if (["pause", "pause 3 dager"].includes(low)) {
@@ -70,6 +80,13 @@ export function replyFor(profile: Profile, text: string): { reply: string; next:
   }
 
   switch (step) {
+    // Første melding er svaret på Jonos recruit-ping («ja»), ikke et mål.
+    // MAI hilser her og tar målet på neste tur.
+    case "boot": {
+      p.step = "q0_goal";
+      return { reply: OPENING, next: p };
+    }
+
     case "q0_goal": {
       if (!t) return { reply: "Hva trener du mest mot akkurat nå?", next: p };
       p.goal = t;
@@ -144,9 +161,12 @@ export function replyFor(profile: Profile, text: string): { reply: string; next:
       if (low.startsWith("ja")) {
         p.step = "ready";
         return {
+          /* Lover IKKE at jeg skriver først — cue-motoren (skive 2) er av.
+             Ikke si noe appen ikke kan holde. */
           reply: [
-            `Notert. Jeg skriver til deg ${p.first_session}.`,
+            `Notert — første økt: ${p.first_session}.`,
             "",
+            "Si *start* her når det er tid, så kjører vi.",
             "Første økt blir ~25–30 min — eller 8–12 min hvis dagen er tung, si bare *lett*.",
             "Du trenger ikke åpne noen app. Vi tar det her.",
           ].join("\n"),
