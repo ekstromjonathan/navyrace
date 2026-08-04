@@ -38,7 +38,13 @@ const db = createClient(
 
 /** Meta signerer body med app secret. Uten dette kan hvem som helst poste hit. */
 async function signatureValid(raw: string, header: string | null): Promise<boolean> {
-  if (!APP_SECRET) return true; // ikke konfigurert ennå (lokal test)
+  // Feiler LUKKET. Funksjonen deployes på en offentlig URL før Meta-oppsettet
+  // er ferdig, og uten denne ville alle usignerte POST-er blitt behandlet —
+  // hvem som helst kunne skrevet brukere og events inn i basen.
+  if (!APP_SECRET) {
+    console.error("wa-webhook: WA_APP_SECRET mangler — avviser POST");
+    return false;
+  }
   if (!header?.startsWith("sha256=")) return false;
 
   const key = await crypto.subtle.importKey(
