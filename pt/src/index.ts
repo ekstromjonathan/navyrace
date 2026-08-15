@@ -10,7 +10,13 @@ getDb();
 const app = new Hono();
 
 app.get("/health", (c) =>
-  c.json({ ok: true, coach: env.coachName, model: env.model, provider: env.provider }),
+  c.json({
+    ok: true,
+    coach: env.coachName,
+    provider: env.provider,
+    model: env.model,
+    smartModel: env.smartModel || null,
+  }),
 );
 
 app.post("/webhook", async (c) => {
@@ -40,5 +46,5 @@ app.post("/webhook", async (c) => {
 
 serve({ fetch: app.fetch, port: env.port }, (info) => {
   console.log(`${env.coachName} PT listening on http://localhost:${info.port}/webhook`);
-  console.log(`model=${env.model} allowlist=${env.allowlist.join(",")}`);
+  console.log(`model=${env.model} smart=${env.smartModel || "—"} allowlist=${env.allowlist.join(",")}`);
 });

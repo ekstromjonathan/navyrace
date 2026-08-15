@@ -51,6 +51,9 @@ export const env = {
     }
     return raw || "claude-sonnet-4-6";
   },
+  get smartModel() {
+    return optional("PT_MODEL_SMART");
+  },
   get provider() {
     return env.openrouterKey ? "openrouter" : env.anthropicKey ? "anthropic" : "none";
   },

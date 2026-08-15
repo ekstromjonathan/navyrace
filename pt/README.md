@@ -4,14 +4,9 @@ Journal + Linq webhook. The Vite app is unchanged. V1 is one allowlisted phone, 
 
 ## Model
 
-**Claude Sonnet 4.6 via OpenRouter** (`anthropic/claude-sonnet-4.6`) for both hats. Set `OPENROUTER_API_KEY`. Direct `ANTHROPIC_API_KEY` is a fallback.
+OpenRouter. Floor: `PT_MODEL` (e.g. `x-ai/grok-4.1-fast`). Programmer hat: `PT_MODEL_SMART` (`x-ai/grok-4.6`) writes draft plans only.
 
-- Floor PT (every unclear message): tools against the journal
-- Programmer (rare): same model writes a **draft** plan; it does not go live until you text `kjør programmet`
-
-Obvious logs (`mediterte i 30 sekunder`, `drakk et glass`, `lett`/`passe`/`brutalt`) skip the model.
-
-Set `ANTHROPIC_API_KEY`. Override with `PT_MODEL` if needed.
+Obvious logs skip the model. Drafts go live only after `kjør programmet`.
 
 ## Run locally
 

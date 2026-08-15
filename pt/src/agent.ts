@@ -67,13 +67,15 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   },
   {
     name: "propose_plan",
-    description: "Skriv et treningsutkast på et draft-spor. Aktiveres ikke før brukeren skriver «kjør programmet».",
+    description:
+      "Be programmer-hatten skrive et treningsutkast (draft). Aktiveres ikke før brukeren skriver «kjør programmet». Fyll brief + uker/dager; sessions kan være tomme.",
     input_schema: {
       type: "object",
       properties: {
         trackId: { type: "string" },
         weeks: { type: "number" },
         daysPerWeek: { type: "number" },
+        brief: { type: "string", description: "Mål, utstyr, skader, nivå — det programmeren trenger." },
         sessions: {
           type: "array",
           items: {
@@ -99,7 +101,6 @@ const TOOLS: Anthropic.Messages.Tool[] = [
           },
         },
       },
-      required: ["sessions"],
     },
   },
   {
@@ -128,13 +129,63 @@ function systemPrompt(): string {
 Du eier ikke sannheten — journalen gjør det. Kall get_snapshot før du anbefaler.
 Svar maks 4–6 linjer. Én neste handling. Still maks ett spørsmål, og bare hvis feltet mangler for *denne* avgjørelsen.
 Ikke dump hele programmet. Send i dag / denne uken.
+Når brukeren vil ha et nytt opplegg: samle det som mangler, så kall propose_plan (programmer-hatten skriver øktene). Ikke finn opp en 10-ukersplan i chatten.
 Ikke slett eller overskriv et aktivt program. Bruk request_archive. Aktivering krever request_activate.
 Du er ikke lege. Ved smerte: logg, lett belastning, henvis til fagperson hvis det vedvarer.
 Ingen lenker i svaret med mindre brukeren ber om det.
 Effekter og mas er forbudt. Høres ut som en venn som kan trening.`;
 }
 
-function runTool(user: UserRow, name: string, input: Record<string, unknown>, messageId: string): string {
+function extractJsonObject(text: string): unknown {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const raw = (fenced?.[1] ?? text).trim();
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("no json");
+  return JSON.parse(raw.slice(start, end + 1));
+}
+
+async function generatePlanWithSmart(user: UserRow, input: Record<string, unknown>): Promise<Plan> {
+  const hinted = Array.isArray(input.sessions) ? (input.sessions as Plan["sessions"]) : [];
+  const client = llmClient();
+  if (!client || !env.smartModel) {
+    return {
+      weeks: input.weeks != null ? Number(input.weeks) : undefined,
+      daysPerWeek: input.daysPerWeek != null ? Number(input.daysPerWeek) : undefined,
+      sessions: hinted,
+    };
+  }
+  const res = await client.messages.create({
+    model: env.smartModel,
+    max_tokens: 4096,
+    system: `Du er programmer-hatten til ${env.coachName}. Skriv KUN JSON:
+{"weeks":number,"daysPerWeek":number,"sessions":[{"id":"w1d1","week":1,"title":string,"loadKey":string,"load":number,"unit":string,"est":string,"items":[{"name":string,"detail":string}]}]}
+Regler: utstyr og skader i facts styrer øvelsene. loadKey grupperer like økter for RPE-tilpasning. 3–6 økter per uke. Ikke prosa.`,
+    messages: [
+      {
+        role: "user",
+        content: JSON.stringify({
+          facts: journal.factsOf(user),
+          notes: journal.recentNotes(user.id, 8),
+          brief: input.brief ?? null,
+          weeks: input.weeks ?? null,
+          daysPerWeek: input.daysPerWeek ?? null,
+        }),
+      },
+    ],
+  });
+  const text = res.content
+    .filter((c): c is Anthropic.Messages.TextBlock => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+  const parsed = extractJsonObject(text) as Plan;
+  if (!Array.isArray(parsed.sessions) || parsed.sessions.length < 1) {
+    throw new Error("programmer returned no sessions");
+  }
+  return parsed;
+}
+
+async function runTool(user: UserRow, name: string, input: Record<string, unknown>, messageId: string): Promise<string> {
   switch (name) {
     case "get_snapshot":
       return JSON.stringify(journal.snapshot(user));
@@ -187,13 +238,19 @@ function runTool(user: UserRow, name: string, input: Record<string, unknown>, me
       return JSON.stringify({ id: track.id, status: track.status });
     }
     case "propose_plan": {
-      const sessions = input.sessions as Plan["sessions"];
-      if (!Array.isArray(sessions) || sessions.length < 1) return JSON.stringify({ error: "sessions required" });
-      const plan: Plan = {
-        weeks: input.weeks != null ? Number(input.weeks) : undefined,
-        daysPerWeek: input.daysPerWeek != null ? Number(input.daysPerWeek) : undefined,
-        sessions,
-      };
+      let plan: Plan;
+      try {
+        plan = env.smartModel
+          ? await generatePlanWithSmart(user, input)
+          : {
+              weeks: input.weeks != null ? Number(input.weeks) : undefined,
+              daysPerWeek: input.daysPerWeek != null ? Number(input.daysPerWeek) : undefined,
+              sessions: (input.sessions as Plan["sessions"]) ?? [],
+            };
+      } catch (err) {
+        return JSON.stringify({ error: err instanceof Error ? err.message : "programmer failed" });
+      }
+      if (!plan.sessions?.length) return JSON.stringify({ error: "sessions required" });
       let track = input.trackId ? journal.getTrack(String(input.trackId)) : journal.draftTraining(user.id);
       if (!track) {
         track = journal.createTrack({
@@ -212,13 +269,18 @@ function runTool(user: UserRow, name: string, input: Record<string, unknown>, me
       journal.setPending(user.id, {
         type: "activate_confirm",
         trackId: track.id,
-        summary: activatePrompt(track.name, sessions.length),
+        summary: activatePrompt(track.name, plan.sessions.length),
         askedAt: new Date().toISOString(),
       });
       return JSON.stringify({
         trackId: track.id,
         status: "draft",
-        confirm: activatePrompt(track.name, sessions.length),
+        weeks: plan.weeks,
+        daysPerWeek: plan.daysPerWeek,
+        sessionCount: plan.sessions.length,
+        titles: plan.sessions.slice(0, 8).map((s) => s.title),
+        confirm: activatePrompt(track.name, plan.sessions.length),
+        writer: env.smartModel || env.model,
       });
     }
     case "request_archive": {
@@ -303,11 +365,14 @@ export async function runAgent(user: UserRow, body: string, messageId: string): 
         return (texts.join("\n").trim() || "Ok.").slice(0, 1200);
       }
       messages.push({ role: "assistant", content: res.content });
-      const results: Anthropic.Messages.ToolResultBlockParam[] = toolUses.map((tu) => ({
-        type: "tool_result",
-        tool_use_id: tu.id,
-        content: runTool(user, tu.name, (tu.input ?? {}) as Record<string, unknown>, messageId),
-      }));
+      const results: Anthropic.Messages.ToolResultBlockParam[] = [];
+      for (const tu of toolUses) {
+        results.push({
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: await runTool(user, tu.name, (tu.input ?? {}) as Record<string, unknown>, messageId),
+        });
+      }
       messages.push({ role: "user", content: results });
     }
     return "Jeg måtte stoppe — send gjerne én ting om gangen.";
