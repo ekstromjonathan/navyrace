@@ -1,21 +1,10 @@
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-/* Prefer cwd so Docker (/app) and local both resolve the MPA pages. */
-const pages = {
-  landing: resolve(process.cwd(), "index.html"),
-  app: resolve(process.cwd(), "app/index.html"),
-  vilkar: resolve(process.cwd(), "vilkar/index.html"),
-};
-
-for (const [name, file] of Object.entries(pages)) {
-  if (!existsSync(file)) {
-    throw new Error(`vite.config: missing ${name} page at ${file}`);
-  }
-}
-
+/* Dev: HTML files at /, /app/, /vilkar/ are served as an MPA.
+ * Production entries are chosen in scripts/build.mjs — do not set a named
+ * rollup input object here. Docker dropped dist/index.html when the landing
+ * was keyed as "main" / "landing" instead of Vite's default index.html entry. */
 export default defineConfig({
   appType: "mpa",
   plugins: [react()],
@@ -28,10 +17,5 @@ export default defineConfig({
     host: true,
     port: 8080,
     strictPort: true,
-  },
-  build: {
-    rollupOptions: {
-      input: pages,
-    },
   },
 });
