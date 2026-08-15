@@ -74,13 +74,13 @@ export function activatePrompt(lang: Lang, name: string, sessionCount: number): 
     return [
       `Draft “${name}” — ${sessionCount} sessions.`,
       "It adapts from how each session felt (easy / about right / brutal).",
-      'Write exactly “run the program” to lock it in. Anything else cancels.',
+      "Say yes / ok / run it when you want to lock it and start.",
     ].join("\n");
   }
   return [
     `Utkast «${name}» — ${sessionCount} økter.`,
     "Det tilpasses etter hvordan hver økt føles (lett / passe / brutalt).",
-    'Skriv nøyaktig «kjør programmet» for å låse. Alt annet avbryter.',
+    "Si ja / ok / kjør når du vil låse og starte.",
   ].join("\n");
 }
 
@@ -137,8 +137,8 @@ export function todayNoPlan(lang: Lang): string {
 
 export function todayDraft(lang: Lang, name: string): string {
   return lang === "en"
-    ? `You have a draft (“${name}”), but it isn't locked. Write “run the program” to activate, or tell me what to change.`
-    : `Du har et utkast («${name}»), men det er ikke låst. Skriv «kjør programmet» for å aktivere, eller fortell hva som skal endres.`;
+    ? `You have a draft (“${name}”). Say yes / ok / run it to lock it, or tell me what to change.`
+    : `Du har et utkast («${name}»). Si ja / ok / kjør for å låse, eller fortell hva som skal endres.`;
 }
 
 export function todayDone(lang: Lang, name: string): string {

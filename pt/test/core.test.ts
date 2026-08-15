@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseMessage } from "../src/parser.ts";
 import { isOptOut, isLinqKeywordOptOut } from "../src/optout.ts";
-import { isActivatePhrase, isArchivePhrase } from "../src/gates.ts";
+import { isActivatePhrase, isActivateCancel, isArchivePhrase } from "../src/gates.ts";
 import { normalizeEvent } from "../src/webhook.ts";
 import { detectLang } from "../src/locale.ts";
 
@@ -39,6 +39,10 @@ describe("parser", () => {
     assert.equal(parseMessage("hva trener jeg i dag").kind, "today");
     assert.equal(parseMessage("kjør programmet").kind, "activate");
     assert.equal(parseMessage("run the program").kind, "activate");
+    assert.equal(parseMessage("kjør").kind, "activate");
+    assert.equal(parseMessage("sett i gang").kind, "activate");
+    assert.equal(parseMessage("ok kjør").kind, "activate");
+    assert.equal(parseMessage("ja").kind, "unknown");
     assert.equal(parseMessage("arkiver og lag nytt").kind, "archive");
     assert.equal(parseMessage("archive and start new").kind, "archive");
     assert.equal(parseMessage("what am i training today").kind, "today");
@@ -110,10 +114,19 @@ describe("opt-out", () => {
 });
 
 describe("gates", () => {
-  it("requires exact confirmation phrases", () => {
+  it("accepts soft assent to lock a draft, keeps archive exact", () => {
     assert.equal(isActivatePhrase("kjør programmet"), true);
     assert.equal(isActivatePhrase("run the program"), true);
-    assert.equal(isActivatePhrase("ok kjør"), false);
+    assert.equal(isActivatePhrase("kjør"), true);
+    assert.equal(isActivatePhrase("ja"), true);
+    assert.equal(isActivatePhrase("ok"), true);
+    assert.equal(isActivatePhrase("Vi kan begynne"), true);
+    assert.equal(isActivatePhrase("Vi kan begynne med første pass og heller tilpasse senere?"), true);
+    assert.equal(isActivatePhrase("ok kjør"), true);
+    assert.equal(isActivatePhrase("Får jeg mer detaljer for de ulike øktene?"), false);
+    assert.equal(isActivateCancel("avbryt"), true);
+    assert.equal(isActivateCancel("nei"), true);
+    assert.equal(isActivateCancel("Får jeg mer detaljer?"), false);
     assert.equal(isArchivePhrase("arkiver og lag nytt"), true);
     assert.equal(isArchivePhrase("archive and start new"), true);
     assert.equal(isArchivePhrase("slett alt"), false);

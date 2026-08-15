@@ -24,7 +24,7 @@ User rows store `chat_id` + `phone_e164`. Tracks, entries, notes, `message_log`,
 
 OpenRouter. Floor: `PT_MODEL` (e.g. `x-ai/grok-4.3`). Programmer hat: `PT_MODEL_SMART` (`x-ai/grok-4.6`) writes draft plans only.
 
-Obvious logs skip the model. Drafts go live only after `kjør programmet`.
+Obvious logs skip the model. Drafts go live after a normal yes/ok/kjør (soft confirm).
 
 ## Memory
 
@@ -77,15 +77,15 @@ Text `+14044465379` from the allowlisted number.
 
 ## Confirmation
 
-| Action | Phrase (exact) |
+| Action | How |
 |---|---|
-| Activate a draft program | `kjør programmet` / `run the program` (twice: first shows summary) |
-| Archive the active program | `arkiver og lag nytt` / `archive and start new` (twice) |
+| Activate a draft program | Soft confirm: `ja` / `ok` / `kjør` / `run it` (also works as a direct command when a draft exists) |
+| Archive the active program | Exact: `arkiver og lag nytt` / `archive and start new` |
 | Archive one log | `slett siste` / `fjern loggen` / `delete the last log` (no extra confirm) |
 | Daily training reminder | `minn meg på å trene kl 8` / `remind me to train at 8` |
 | Cancel reminder | `slutt å minne meg` / `stop reminding me` |
 
-Nothing is hard-deleted. Program and individual log archives stay in the same DB.
+Locking a program is ordinary assent. Only archiving the whole program uses a strict phrase. Nothing is hard-deleted.
 
 ## iMessage rules baked in
 
