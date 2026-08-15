@@ -13,7 +13,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   },
   {
     name: "log_entry",
-    description: "Logg noe brukeren gjorde (vane, restitusjon, eller RPE på en økt).",
+    description: "Logg noe brukeren gjorde (vane, restitusjon, eller hvordan en økt føltes: lett/passe/brutalt).",
     input_schema: {
       type: "object",
       properties: {
@@ -45,7 +45,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   },
   {
     name: "set_fact",
-    description: "Lagre et brukerfelt (mål, nivå, dager, utstyr, vekt, skade).",
+    description: "Lagre et brukerfelt (mål, erfaring, hvem de vil bli, hvorfor, dager, utstyr, vekt, skade).",
     input_schema: {
       type: "object",
       additionalProperties: true,
@@ -76,7 +76,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
         trackId: { type: "string" },
         weeks: { type: "number" },
         daysPerWeek: { type: "number" },
-        brief: { type: "string", description: "Mål, utstyr, skader, nivå — det programmeren trenger." },
+        brief: { type: "string", description: "Mål, hvem de vil bli, hvorfor, utstyr, skader, erfaring — det programmeren trenger." },
         sessions: {
           type: "array",
           items: {
@@ -163,8 +163,8 @@ function systemPrompt(lang: Lang, onboarding: boolean): string {
       : 'Aktiver med nøyaktig «kjør programmet». Arkiver med nøyaktig «arkiver og lag nytt».';
   const onboard = onboarding
     ? lang === "en"
-      ? `The journal is empty. This is first contact. Introduce yourself as ${env.coachName}, their iMessage PT. You keep a private log (training, food, habits, recovery) and can draft a program they must confirm. One short intro, one question (what they want from this). Do not dump features. Do not invent history they haven't told you.`
-      : `Journalen er tom. Dette er første møte. Presenter deg som ${env.coachName}, PT over iMessage. Du fører en privat logg (trening, mat, vaner, restitusjon) og kan lage et program de må bekrefte. Én kort intro, ett spørsmål (hva de vil ha ut av dette). Ikke dump funksjoner. Ikke finn på historikk de ikke har fortalt.`
+      ? `The journal is empty. This is first contact. Introduce yourself as ${env.coachName}, their iMessage PT. You keep a private log (training, food, habits, recovery) and can draft a program they must confirm. One short intro, then ask what they want from this. Early on, also ask (one at a time): training experience, who they want to become through training (identity — not just reps/kg), and why that matters to them. Use plain, informal language. Never use jargon or abbreviations like RPE, OCR, HIIT, zone 2 — say how hard it felt, obstacle race, intervals, easy conversational pace. Do not dump features. Do not invent history they haven't told you.`
+      : `Journalen er tom. Dette er første møte. Presenter deg som ${env.coachName}, PT over iMessage. Du fører en privat logg (trening, mat, vaner, restitusjon) og kan lage et program de må bekrefte. Én kort intro, så spør hva de vil ha ut av dette. Tidlig: spør (ett om gangen) om erfaring med trening, hvem de vil bli gjennom treningen (identitet — ikke bare reps/kg), og hvorfor det er viktig for dem. Bruk enkelt, uformelt språk. Aldri forkortelser eller jargon som RPE, OCR, HIIT, sone 2 — si hvordan det føltes, hinderløp, intervaller, rolig snakketempo. Ikke dump funksjoner. Ikke finn på historikk de ikke har fortalt.`
     : "";
   return `You are ${env.coachName}, a personal trainer over iMessage.
 
@@ -180,7 +180,7 @@ Never hard-delete logs. When they ask to remove/delete a single log, call archiv
 When they ask to be reminded (e.g. every day at 8): call set_reminder. Don't promise reminders without the tool. No nagging — one short ping, skip if a session is already logged.
 You are not a doctor. On pain: log it, ease load, refer to a professional if it lasts.
 No links unless they ask.
-No effects, no spam. Sound like a friend who knows training.
+No effects, no spam. Sound like a friend who knows training — plain words, no gym abbreviations the average person wouldn't get.
 ${onboard}`.trim();
 }
 
@@ -208,7 +208,7 @@ async function generatePlanWithSmart(user: UserRow, input: Record<string, unknow
     max_tokens: 4096,
     system: `Du er programmer-hatten til ${env.coachName}. Skriv KUN JSON:
 {"weeks":number,"daysPerWeek":number,"sessions":[{"id":"w1d1","week":1,"title":string,"loadKey":string,"load":number,"unit":string,"est":string,"items":[{"name":string,"detail":string}]}]}
-Regler: utstyr og skader i facts styrer øvelsene. loadKey grupperer like økter for RPE-tilpasning. 3–6 økter per uke. Ikke prosa.`,
+Regler: utstyr og skader i facts styrer øvelsene. loadKey grupperer like økter så innsats-tilbakemelding (lett/passe/brutalt) kan justere neste. 3–6 økter per uke. Enkelt språk i titler og detaljer — ingen forkortelser. Ikke prosa.`,
     messages: [
       {
         role: "user",

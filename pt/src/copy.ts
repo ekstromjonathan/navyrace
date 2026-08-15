@@ -32,8 +32,8 @@ export function noActivePlan(lang: Lang): string {
 
 export function noRpePlan(lang: Lang): string {
   return lang === "en"
-    ? "No active plan to log RPE on. Tell me what you did and I'll log it as a track."
-    : "Ingen aktiv plan å logge RPE på. Si hva du gjorde, så logger jeg det som et spor.";
+    ? "No active plan to log how a session felt. Tell me what you did and I'll log it as a track."
+    : "Ingen aktiv plan å logge hvordan en økt føltes på. Si hva du gjorde, så logger jeg det som et spor.";
 }
 
 export function rpeLogged(lang: Lang, quality: string): string {
@@ -131,8 +131,8 @@ export function savedField(lang: Lang, field: string): string {
 
 export function todayNoPlan(lang: Lang): string {
   return lang === "en"
-    ? "No active training plan yet. Tell me goal, days per week and gear — I'll draft something you have to confirm."
-    : "Ingen aktiv treningsplan ennå. Fortell mål, dager i uka og utstyr — så lager jeg et utkast du må bekrefte.";
+    ? "No active training plan yet. Tell me what you're aiming for, training experience, days per week and gear — I'll draft something you have to confirm."
+    : "Ingen aktiv treningsplan ennå. Fortell hva du styrer mot, erfaring med trening, dager i uka og utstyr — så lager jeg et utkast du må bekrefte.";
 }
 
 export function todayDraft(lang: Lang, name: string): string {

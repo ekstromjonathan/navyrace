@@ -27,6 +27,10 @@ export type Pending =
 export type UserFacts = {
   goal?: string;
   level?: string;
+  /** Who they want to become through training (identity-based motivation). */
+  identity?: string;
+  /** Why the change matters to them personally. */
+  why?: string;
   daysPerWeek?: number;
   equipment?: string[];
   weightKg?: number;

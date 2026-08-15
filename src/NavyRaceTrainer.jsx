@@ -85,9 +85,9 @@ const WK = [
   { runEasy: 35, long: 6,   int: "8 × 1 min / 2 min",            str: 3, brick: 0 },
   { runEasy: 35, long: 7,   int: "5 × 2 min / 2 min",            str: 3, brick: 0 },
   { runEasy: 40, long: 7,   int: "Bakkedrag 8 × 30 s / gå ned",  str: 4, brick: 4 },
-  { runEasy: 40, long: 8,   int: "6 × 3 min terskel / 90 s",     str: 4, brick: 5 },
+  { runEasy: 40, long: 8,   int: "6 × 3 min hardt men kontrollert / 90 s",     str: 4, brick: 5 },
   { runEasy: 45, long: 9,   int: "Bakkedrag 10 × 30 s",          str: 4, brick: 6 },
-  { runEasy: 40, long: 9.5, int: "5 × 4 min terskel / 2 min",    str: 4, brick: 7 },
+  { runEasy: 40, long: 9.5, int: "5 × 4 min hardt men kontrollert / 2 min",    str: 4, brick: 7 },
   { runEasy: 40, long: 8,   int: "8 × 45 s bakke",               str: 4, brick: 8 },
   { runEasy: 35, long: 6,   int: "6 × 2 min tempo",              str: 4, brick: 7 },
   { runEasy: 25, long: 4,   int: "4 × 1 min løst, så hvil",      str: 2, brick: 4 },
@@ -129,7 +129,7 @@ function buildDay(w, d, p = WK[w - 1], totalWeeks = 10, ongoing = false) {
     icon: "Footprints", est: `~${p.runEasy + 10} min`, loadKey: "easyrun",
     load: p.runEasy, unit: "min",
     items: [
-      ex("Rolig løp · sone 2", "Footprints", `${p.runEasy} min`, "Snakketempo. Skal føles for lett."),
+      ex("Rolig løp · snakketempo", "Footprints", `${p.runEasy} min`, "Snakketempo. Skal føles for lett."),
       ex("Dødheng", "Hand", "3 × maks tid", "Rett etter løpet. Bygger grep."),
     ] };
 
@@ -195,7 +195,7 @@ function buildDay(w, d, p = WK[w - 1], totalWeeks = 10, ongoing = false) {
     icon: "Footprints", est: `~${Math.round(p.long * 6)} min`, loadKey: "longrun",
     load: p.long, unit: "km",
     items: [
-      ex("Langt rolig løp · sone 2", "Footprints", `${p.long} km`, "Bygg motoren. Lavt tempo."),
+      ex("Langt rolig løp · snakketempo", "Footprints", `${p.long} km`, "Bygg motoren. Lavt tempo."),
       ex("Underlag", "Mountain", "Terreng / sand om mulig", "Løypa er ikke flat asfalt."),
     ] };
 }
@@ -288,7 +288,7 @@ function buildProgram(profile) {
 /* --------------------------- exercise library --------------------------- */
 /* how = slik gjør du · focus = tenk på · rest = pause mellom sett          */
 const LIB = {
-  "Rolig løp · sone 2": { how: "Løp i et tempo der du kan føre en samtale i hele setninger. Lav, jevn puls hele veien.", focus: "Roen er poenget — ikke jag tempoet.", rest: null },
+  "Rolig løp · snakketempo": { how: "Løp i et tempo der du kan føre en samtale i hele setninger. Lav, jevn puls hele veien.", focus: "Roen er poenget — ikke jag tempoet.", rest: null },
   "Dødheng": { how: "Heng i strak arm fra stang eller ringer, skuldrene lett aktivert. Heng til grepet svikter.", focus: "Pust rolig. Ikke sleng i skuldrene.", rest: "60–90 s" },
   "Pull-ups": { how: "Heng i strak arm, dra haka over stanga, senk kontrollert. Strikk under føttene hvis du ikke når reps.", focus: "Full strekk i bunn, ingen sleng.", rest: "90–120 s" },
   "Ring-rows": { how: "Heng under ringene med rett kropp, dra brystet mot hendene, senk rolig. Mer horisontal = tyngre.", focus: "Klem skulderbladene sammen.", rest: "60–75 s" },
@@ -317,7 +317,7 @@ const LIB = {
   "Traversering": { how: "Beveg deg sidelengs på stige eller ringer, hånd-over-hånd, 3–5 runder.", focus: "Rolige, kontrollerte tak.", rest: "60–90 s" },
   "Vegg-overgang": { how: "Øv på å dra deg opp til brysthøyde (pull) og presse over kanten (dip), som over en klatrevegg.", focus: "Eksplosivt opp, rull over hofta.", rest: "90–120 s" },
   "Burpees": { how: "Fra stående: ned i planke, evt. push-up, hopp inn og opp. Jevnt tempo.", focus: "Tempo, ikke maks — pust jevnt.", rest: "45–60 s" },
-  "Langt rolig løp · sone 2": { how: "Ukas lengste økt, holdt i rolig snakketempo hele veien.", focus: "Bygger motoren. Tål å løpe sakte.", rest: null },
+  "Langt rolig løp · snakketempo": { how: "Ukas lengste økt, holdt i rolig snakketempo hele veien.", focus: "Bygger motoren. Tål å løpe sakte.", rest: null },
   "Underlag": { how: "Legg gjerne deler av turen på terreng, grus eller sand.", focus: "Variert underlag bygger stødighet til løpsdagen.", rest: null },
 };
 
@@ -917,7 +917,7 @@ function SettingsSheet({ coachName, onRestartProgram, onReonboard, onClose }) {
         {!confirm && (
           <>
             <div className="sheet-sub">
-              Styr programmet ditt. Begge handlingene under sletter tracking — det går ikke an å angre.
+              Styr programmet ditt. Begge handlingene under sletter loggen din — det går ikke an å angre.
             </div>
             <button
               className="cta"
@@ -939,12 +939,12 @@ function SettingsSheet({ coachName, onRestartProgram, onReonboard, onClose }) {
         {confirm === "restart" && (
           <>
             <div className="sheet-warn">
-              <strong>Advarsel:</strong> All økt-tracking (fullført, RPE, fremdrift) slettes.
+              <strong>Advarsel:</strong> All økt-logg (fullført, hvordan økten føltes, fremdrift) slettes.
               Profilen og målet ditt beholdes, men {coachName || "MAI"} husker ikke hva du har gjort.
               Dette kan ikke angres.
             </div>
             <button className="cta danger" onClick={() => { onRestartProgram(); onClose(); }}>
-              Ja — slett tracking og start på nytt
+              Ja — slett loggen og start på nytt
             </button>
             <button className="skipbtn" style={{ marginTop: 10, width: "100%" }} onClick={() => setConfirm(null)}>
               Avbryt
@@ -955,7 +955,7 @@ function SettingsSheet({ coachName, onRestartProgram, onReonboard, onClose }) {
         {confirm === "reonboard" && (
           <>
             <div className="sheet-warn">
-              <strong>Advarsel:</strong> Profil, programvalg og all tracking slettes — også i skyen hvis du er innlogget.
+              <strong>Advarsel:</strong> Profil, programvalg og all logg slettes — også i skyen hvis du er innlogget.
               Du må snakke med {coachName || "MAI"} på nytt. Dette kan ikke angres.
             </div>
             <button className="cta danger" onClick={() => { onReonboard(); onClose(); }}>
@@ -1516,6 +1516,7 @@ export default function App() {
   const todayIsRest = calendarMode && !trainDays.includes(todayD);
   const calMismatch = calendarMode && !todayIsRest && session && session.day !== todayD;
   const goalLabel = profile?.goal?.label || "Trening";
+  const whoLabel = profile?.identity;
   const ongoing = !!(program?.ongoing || profile?.goal?.periodMode === "ongoing");
 
   return (
@@ -1530,9 +1531,10 @@ export default function App() {
             <div className="hd-title">{brand.appName}</div>
             <div className="hd-sub">
               {ongoing
-                ? <>Uke {w} &nbsp;·&nbsp; kontinuerlig &nbsp;·&nbsp; {daysPerWeek} d/uke &nbsp;·&nbsp; {goalLabel}</>
-                : <>Uke {w} / {totalWeeks} &nbsp;·&nbsp; {daysPerWeek} d/uke &nbsp;·&nbsp; {goalLabel}{profile?.goal?.date ? ` · til ${profile.goal.date}` : ""}</>}
+                ? <>Uke {w} &nbsp;·&nbsp; uten sluttdato &nbsp;·&nbsp; {daysPerWeek} dager i uka &nbsp;·&nbsp; {goalLabel}</>
+                : <>Uke {w} / {totalWeeks} &nbsp;·&nbsp; {daysPerWeek} dager i uka &nbsp;·&nbsp; {goalLabel}{profile?.goal?.date ? ` · til ${profile.goal.date}` : ""}</>}
             </div>
+            {whoLabel && <div className="hd-sub" style={{ marginTop: 4 }}>Du blir: {whoLabel}</div>}
             {pace && <div className={`pace ${pace.kind}`}>{pace.label}</div>}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -1579,7 +1581,7 @@ export default function App() {
               <>
                 <div className="htitle">Blokk fullført</div>
                 <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.5, marginTop: 8 }}>
-                  {totalWeeks} uker i boks. Kontinuerlig tracking fortsetter med en ny blokk — samme rytme, frisk dose.
+                  {totalWeeks} uker i boks. Uten sluttdato fortsetter du med en ny blokk — samme rytme, litt friskere tall.
                 </p>
                 <button className="cta" onClick={continueOngoing} style={{ marginTop: 20 }}>
                   Fortsett med neste blokk
