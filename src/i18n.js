@@ -1,7 +1,7 @@
 const dictionaries = {
   en: {
-    signupTitle: "Get your trainer in  iMessage",
-    signupLead: "You text. Your trainer texts back.",
+    signupTitle: "Your  iMessage coach",
+    signupLead: "You text. Your coach texts back.",
     name: "Name",
     phone: "Phone",
     send: "Send  iMessage",
@@ -26,8 +26,8 @@ const dictionaries = {
     smsPhone: "Phone",
   },
   no: {
-    signupTitle: "Få treneren din i  iMessage",
-    signupLead: "Du skriver. Treneren svarer.",
+    signupTitle: "Din  iMessage coach",
+    signupLead: "Du skriver. Coachen svarer.",
     name: "Navn",
     phone: "Telefon",
     send: "Send  iMessage",
