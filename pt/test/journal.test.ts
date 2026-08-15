@@ -1,3 +1,4 @@
+process.env.PT_JOURNAL_BACKEND = "sqlite";
 process.env.PT_DB_PATH = `${process.env.TMPDIR || "/tmp"}/mai-pt-test-${process.hrtime.bigint()}.sqlite`;
 process.env.LINQ_API_TOKEN = "test-token";
 
@@ -6,24 +7,23 @@ import { describe, it } from "node:test";
 import * as journal from "../src/journal.ts";
 
 describe("journal", () => {
-  const user = journal.upsertUser("chat-1", "+4740343295");
-
-  it("creates habit tracks and logs entries", () => {
-    const track = journal.ensureTrack({
+  it("creates habit tracks and logs entries", async () => {
+    const user = await journal.upsertUser("chat-1", "+4740343295");
+    const track = await journal.ensureTrack({
       userId: user.id,
       kind: "habit",
       slug: "vann",
       name: "Vann",
       tags: ["vann"],
     });
-    journal.logEntry({
+    await journal.logEntry({
       trackId: track.id,
       userId: user.id,
       quantity: { value: 1, unit: "glass" },
       source: "heuristic",
       linqMessageId: "m1",
     });
-    const again = journal.logEntry({
+    const again = await journal.logEntry({
       trackId: track.id,
       userId: user.id,
       quantity: { value: 1, unit: "glass" },
@@ -31,11 +31,12 @@ describe("journal", () => {
       linqMessageId: "m1",
     });
     assert.equal(again.duplicate, true);
-    assert.equal(journal.entryCount(track.id), 1);
+    assert.equal(await journal.entryCount(track.id), 1);
   });
 
-  it("keeps training as draft until activate, and archives instead of deleting", () => {
-    const draft = journal.createTrack({
+  it("keeps training as draft until activate, and archives instead of deleting", async () => {
+    const user = await journal.upsertUser("chat-1", "+4740343295");
+    const draft = await journal.createTrack({
       userId: user.id,
       kind: "training",
       slug: "program",
@@ -49,109 +50,111 @@ describe("journal", () => {
       },
     });
     assert.equal(draft.status, "draft");
-    const active = journal.activateTrack(draft.id);
+    const active = await journal.activateTrack(draft.id);
     assert.equal(active.status, "active");
-    const next = journal.nextSession(user.id, active);
+    const next = await journal.nextSession(user.id, active);
     assert.equal(next?.session.id, "w1d1");
-    journal.logEntry({
+    await journal.logEntry({
       trackId: active.id,
       userId: user.id,
       quality: "brutalt",
       sessionRef: "w1d1",
       source: "heuristic",
     });
-    const next2 = journal.nextSession(user.id, journal.getTrack(active.id)!);
+    const next2 = await journal.nextSession(user.id, (await journal.getTrack(active.id))!);
     assert.equal(next2?.session.id, "w1d2");
-    journal.archiveTrack(active.id, "user_requested_new");
-    assert.equal(journal.getTrack(active.id)?.status, "archived");
-    assert.equal(journal.activeTraining(user.id), undefined);
-    assert.equal(journal.entryCount(active.id), 1);
+    await journal.archiveTrack(active.id, "user_requested_new");
+    assert.equal((await journal.getTrack(active.id))?.status, "archived");
+    assert.equal(await journal.activeTraining(user.id), undefined);
+    assert.equal(await journal.entryCount(active.id), 1);
   });
 
-  it("dedups webhook events", () => {
-    assert.equal(journal.claimEvent("e1"), true);
-    assert.equal(journal.claimEvent("e1"), false);
-    journal.releaseEvent("e1");
-    assert.equal(journal.claimEvent("e1"), true);
+  it("dedups webhook events", async () => {
+    assert.equal(await journal.claimEvent("e1"), true);
+    assert.equal(await journal.claimEvent("e1"), false);
+    await journal.releaseEvent("e1");
+    assert.equal(await journal.claimEvent("e1"), true);
   });
 
-  it("keeps a rolling chat log and prunes old turns", () => {
-    const chatUser = journal.upsertUser("chat-log", "+4740343295");
-    journal.logMessage(chatUser.id, "user", "hvilken økt?", "m-q");
-    journal.logMessage(chatUser.id, "pt", "Styrke A i dag.");
-    journal.logMessage(chatUser.id, "user", "ja den", "m-ja");
-    const recent = journal.recentChat(chatUser.id, 8);
+  it("keeps a rolling chat log and prunes old turns", async () => {
+    const chatUser = await journal.upsertUser("chat-log", "+4740343295");
+    await journal.logMessage(chatUser.id, "user", "hvilken økt?", "m-q");
+    await journal.logMessage(chatUser.id, "pt", "Styrke A i dag.");
+    await journal.logMessage(chatUser.id, "user", "ja den", "m-ja");
+    const recent = await journal.recentChat(chatUser.id, 8);
     assert.equal(recent.length, 3);
     assert.equal(recent[0]?.role, "user");
     assert.equal(recent[2]?.body, "ja den");
-    const withoutCurrent = journal.recentChat(chatUser.id, 8, "m-ja");
+    const withoutCurrent = await journal.recentChat(chatUser.id, 8, "m-ja");
     assert.equal(withoutCurrent.at(-1)?.body, "Styrke A i dag.");
-    assert.equal(journal.snapshot(chatUser).recentChat.length, 3);
+    assert.equal((await journal.snapshot(chatUser)).recentChat.length, 3);
 
-    for (let i = 0; i < 60; i++) journal.logMessage(chatUser.id, "user", `n${i}`, `m-${i}`);
-    const kept = journal.recentChat(chatUser.id, 100);
+    for (let i = 0; i < 60; i++) await journal.logMessage(chatUser.id, "user", `n${i}`, `m-${i}`);
+    const kept = await journal.recentChat(chatUser.id, 100);
     assert.equal(kept.length, 50);
     assert.equal(kept[0]?.body, "n10");
     assert.equal(kept.at(-1)?.body, "n59");
   });
 
-  it("stores a daily train reminder and can disable it", () => {
-    const rec = journal.upsertReminder(user.id, "train", 8, 0);
+  it("stores a daily train reminder and can disable it", async () => {
+    const user = await journal.upsertUser("chat-1", "+4740343295");
+    const rec = await journal.upsertReminder(user.id, "train", 8, 0);
     assert.equal(rec.hour, 8);
     assert.equal(rec.enabled, 1);
-    const again = journal.upsertReminder(user.id, "train", 7, 30);
+    const again = await journal.upsertReminder(user.id, "train", 7, 30);
     assert.equal(again.id, rec.id);
     assert.equal(again.hour, 7);
     assert.equal(again.minute, 30);
-    assert.equal(journal.snapshot(user).reminders.length, 1);
-    journal.disableReminder(user.id, "train");
-    assert.equal(journal.listReminders(user.id)[0]?.enabled, 0);
-    assert.equal(journal.snapshot(user).reminders.length, 0);
+    assert.equal((await journal.snapshot(user)).reminders.length, 1);
+    await journal.disableReminder(user.id, "train");
+    assert.equal((await journal.listReminders(user.id))[0]?.enabled, 0);
+    assert.equal((await journal.snapshot(user)).reminders.length, 0);
   });
 
-  it("treats a new user with no entries as a fresh start", () => {
-    const fresh = journal.upsertUser("chat-fresh", "+4740343297");
-    assert.equal(journal.isFreshStart(fresh.id), true);
-    journal.setLocale(fresh.id, "en");
-    journal.setFacts(fresh.id, { uiLang: "en" });
-    assert.equal(journal.getUser(fresh.id)?.locale, "en");
-    assert.equal(journal.isFreshStart(fresh.id), true);
-    assert.equal(journal.isFreshStart(user.id), false);
+  it("treats a new user with no entries as a fresh start", async () => {
+    const user = await journal.upsertUser("chat-1", "+4740343295");
+    const fresh = await journal.upsertUser("chat-fresh", "+4740343297");
+    assert.equal(await journal.isFreshStart(fresh.id), true);
+    await journal.setLocale(fresh.id, "en");
+    await journal.setFacts(fresh.id, { uiLang: "en" });
+    assert.equal((await journal.getUser(fresh.id))?.locale, "en");
+    assert.equal(await journal.isFreshStart(fresh.id), true);
+    assert.equal(await journal.isFreshStart(user.id), false);
   });
 
-  it("archives individual logs instead of deleting them", () => {
-    const u = journal.upsertUser("chat-archive-entry", "+4740343298");
-    const water = journal.ensureTrack({
+  it("archives individual logs instead of deleting them", async () => {
+    const u = await journal.upsertUser("chat-archive-entry", "+4740343298");
+    const water = await journal.ensureTrack({
       userId: u.id,
       kind: "habit",
       slug: "vann",
       name: "Vann",
       tags: ["vann"],
     });
-    journal.logEntry({
+    await journal.logEntry({
       trackId: water.id,
       userId: u.id,
       quantity: { value: 1, unit: "glass" },
       source: "heuristic",
       linqMessageId: "ae-1",
     });
-    journal.logEntry({
+    await journal.logEntry({
       trackId: water.id,
       userId: u.id,
       quantity: { value: 2, unit: "glass" },
       source: "heuristic",
       linqMessageId: "ae-2",
     });
-    assert.equal(journal.entryCount(water.id), 2);
-    const archived = journal.archiveEntry({ userId: u.id, slug: "vann", reason: "user_requested" });
+    assert.equal(await journal.entryCount(water.id), 2);
+    const archived = await journal.archiveEntry({ userId: u.id, slug: "vann", reason: "user_requested" });
     assert.ok(archived);
     assert.equal(archived?.slug, "vann");
     assert.equal(archived?.alreadyArchived, undefined);
-    assert.equal(journal.entryCount(water.id), 1);
-    assert.equal(journal.recentEntries(u.id, 8).length, 1);
-    assert.equal(journal.isFreshStart(u.id), false);
+    assert.equal(await journal.entryCount(water.id), 1);
+    assert.equal((await journal.recentEntries(u.id, 8)).length, 1);
+    assert.equal(await journal.isFreshStart(u.id), false);
 
-    const again = journal.logEntry({
+    const again = await journal.logEntry({
       trackId: water.id,
       userId: u.id,
       quantity: { value: 1, unit: "glass" },
@@ -160,7 +163,7 @@ describe("journal", () => {
     });
     assert.equal(again.duplicate, true);
 
-    const training = journal.createTrack({
+    const training = await journal.createTrack({
       userId: u.id,
       kind: "training",
       slug: "program",
@@ -173,18 +176,18 @@ describe("journal", () => {
         ],
       },
     });
-    journal.activateTrack(training.id);
-    journal.logEntry({
+    await journal.activateTrack(training.id);
+    await journal.logEntry({
       trackId: training.id,
       userId: u.id,
       quality: "passe",
       sessionRef: "w1d1",
       source: "heuristic",
     });
-    assert.equal(journal.nextSession(u.id, journal.getTrack(training.id)!)?.session.id, "w1d2");
-    const sessionLog = journal.archiveEntry({ userId: u.id, trackKind: "training" });
+    assert.equal((await journal.nextSession(u.id, (await journal.getTrack(training.id))!))?.session.id, "w1d2");
+    const sessionLog = await journal.archiveEntry({ userId: u.id, trackKind: "training" });
     assert.equal(sessionLog?.session_ref, "w1d1");
-    assert.equal(journal.nextSession(u.id, journal.getTrack(training.id)!)?.session.id, "w1d1");
-    assert.equal(journal.archiveEntry({ userId: u.id, entryId: "missing" }), null);
+    assert.equal((await journal.nextSession(u.id, (await journal.getTrack(training.id))!))?.session.id, "w1d1");
+    assert.equal(await journal.archiveEntry({ userId: u.id, entryId: "missing" }), null);
   });
 });

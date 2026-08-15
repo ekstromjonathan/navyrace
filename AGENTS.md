@@ -6,7 +6,7 @@ This repo is a **Vite + React 19** app (Norwegian fitness training app, "MAI/Nav
 
 ### iMessage PT (`pt/`)
 
-Separate Node service (Hono + SQLite journal + Linq webhook). Locally: `cd pt && npm start`. Production: Railway deploys `main` with the root `Dockerfile` so lodd.ai serves both the Vite app and `POST /webhook`.
+Separate Node service (Hono + Supabase `pt` journal + Linq webhook). Locally: `cd pt && npm start`. Production: Railway deploys `main` with the root `Dockerfile` so lodd.ai serves both the Vite app and `POST /webhook`. Requires `SUPABASE_URL` + `SUPABASE_SECRET_KEY` (or legacy `SUPABASE_SERVICE_ROLE_KEY`) in production (SQLite only for offline tests).
 
 ```bash
 cd pt && npm install && npm test && npm start   # http://localhost:8787/webhook

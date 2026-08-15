@@ -1,4 +1,5 @@
--- Personal trainer journal. SQLite V1; Postgres cousin lives in supabase/migrations.
+-- Personal trainer journal. SQLite fallback for unit tests.
+-- Production uses Supabase Postgres (schema pt) — see supabase/migrations/0003+.
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,

@@ -214,7 +214,7 @@ Regler: utstyr og skader i facts styrer øvelsene. loadKey grupperer like økter
         role: "user",
         content: JSON.stringify({
           facts: journal.factsOf(user),
-          notes: journal.recentNotes(user.id, 8),
+          notes: await journal.recentNotes(user.id, 8),
           brief: input.brief ?? null,
           weeks: input.weeks ?? null,
           daysPerWeek: input.daysPerWeek ?? null,
@@ -242,11 +242,11 @@ async function runTool(
 ): Promise<string> {
   switch (name) {
     case "get_snapshot":
-      return JSON.stringify(journal.snapshot(user));
+      return JSON.stringify(await journal.snapshot(user));
     case "log_entry": {
       const slug = String(input.slug);
       const kind = input.kind as TrackKind;
-      const track = journal.ensureTrack({
+      const track = await journal.ensureTrack({
         userId: user.id,
         kind,
         slug,
@@ -255,7 +255,7 @@ async function runTool(
       });
       const quantity =
         input.value != null ? { value: Number(input.value), unit: String(input.unit || "") } : null;
-      const result = journal.logEntry({
+      const result = await journal.logEntry({
         trackId: track.id,
         userId: user.id,
         quantity,
@@ -269,7 +269,7 @@ async function runTool(
     }
     case "add_note":
       return JSON.stringify({
-        id: journal.addNote({
+        id: await journal.addNote({
           userId: user.id,
           trackId: input.trackId ? String(input.trackId) : null,
           kind: String(input.kind),
@@ -278,10 +278,10 @@ async function runTool(
       });
     case "set_fact": {
       const { ...facts } = input;
-      return JSON.stringify(journal.setFacts(user.id, facts));
+      return JSON.stringify(await journal.setFacts(user.id, facts));
     }
     case "create_track": {
-      const track = journal.createTrack({
+      const track = await journal.createTrack({
         userId: user.id,
         kind: input.kind as TrackKind,
         slug: String(input.slug),
@@ -305,9 +305,11 @@ async function runTool(
         return JSON.stringify({ error: err instanceof Error ? err.message : "programmer failed" });
       }
       if (!plan.sessions?.length) return JSON.stringify({ error: "sessions required" });
-      let track = input.trackId ? journal.getTrack(String(input.trackId)) : journal.draftTraining(user.id);
+      let track = input.trackId
+        ? await journal.getTrack(String(input.trackId))
+        : await journal.draftTraining(user.id);
       if (!track) {
-        track = journal.createTrack({
+        track = await journal.createTrack({
           userId: user.id,
           kind: "training",
           slug: "program",
@@ -318,9 +320,9 @@ async function runTool(
         });
       } else {
         if (track.status === "active") return JSON.stringify({ error: "active program is locked — request_archive first" });
-        track = journal.setPlan(track.id, plan);
+        track = await journal.setPlan(track.id, plan);
       }
-      journal.setPending(user.id, {
+      await journal.setPending(user.id, {
         type: "activate_confirm",
         trackId: track.id,
         summary: copy.activatePrompt(lang, track.name, plan.sessions.length),
@@ -338,10 +340,15 @@ async function runTool(
       });
     }
     case "request_archive": {
-      const track = journal.getTrack(String(input.trackId));
+      const track = await journal.getTrack(String(input.trackId));
       if (!track) return JSON.stringify({ error: "missing track" });
-      const summary = copy.archivePrompt(lang, track.name, journal.entryCount(track.id), journal.noteCount(track.id));
-      journal.setPending(user.id, {
+      const summary = copy.archivePrompt(
+        lang,
+        track.name,
+        await journal.entryCount(track.id),
+        await journal.noteCount(track.id),
+      );
+      await journal.setPending(user.id, {
         type: "archive_confirm",
         trackId: track.id,
         summary,
@@ -356,7 +363,7 @@ async function runTool(
       ).includes(kindRaw as TrackKind)
         ? (kindRaw as TrackKind)
         : undefined;
-      const rec = journal.archiveEntry({
+      const rec = await journal.archiveEntry({
         userId: user.id,
         entryId: input.entryId ? String(input.entryId) : undefined,
         slug: input.slug ? String(input.slug) : undefined,
@@ -374,11 +381,11 @@ async function runTool(
       });
     }
     case "request_activate": {
-      const track = journal.getTrack(String(input.trackId));
+      const track = await journal.getTrack(String(input.trackId));
       if (!track) return JSON.stringify({ error: "missing track" });
       const sessions = journal.planOf(track)?.sessions.length ?? 0;
       const summary = copy.activatePrompt(lang, track.name, sessions);
-      journal.setPending(user.id, {
+      await journal.setPending(user.id, {
         type: "activate_confirm",
         trackId: track.id,
         summary,
@@ -389,7 +396,7 @@ async function runTool(
     case "set_reminder": {
       const hour = input.hour == null ? 8 : Number(input.hour);
       const minute = input.minute == null ? 0 : Number(input.minute);
-      const rec = journal.upsertReminder(user.id, "train", hour, minute);
+      const rec = await journal.upsertReminder(user.id, "train", hour, minute);
       return JSON.stringify({
         ok: true,
         hour: rec.hour,
@@ -399,7 +406,7 @@ async function runTool(
       });
     }
     case "cancel_reminder": {
-      const had = journal.disableReminder(user.id, "train");
+      const had = await journal.disableReminder(user.id, "train");
       return JSON.stringify({ ok: true, disabled: Boolean(had) });
     }
     default:
@@ -418,9 +425,9 @@ export async function runAgent(
     return copy.noLlm(opts.lang);
   }
   try {
-    const snap = journal.snapshot(user);
+    const snap = await journal.snapshot(user);
     const { recentChat: _chatInSnap, ...journalSnap } = snap;
-    const chat = journal.recentChat(user.id, 8, messageId);
+    const chat = await journal.recentChat(user.id, 8, messageId);
     const chatLines =
       chat.length === 0
         ? "(none yet)"

@@ -4,13 +4,13 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { env } from "./env.ts";
-import { getDb } from "./db.ts";
+import { initJournal, journalBackend } from "./db.ts";
 import { verifySignature } from "./webhook.ts";
 import { handlePayload } from "./handle.ts";
 import { startScheduler } from "./scheduler.ts";
 import * as journal from "./journal.ts";
 
-getDb();
+const backend = initJournal();
 
 function findStaticRoot(): string | null {
   const candidates = [process.env.PT_STATIC_DIR, "../dist", "dist"].filter(
@@ -30,14 +30,15 @@ const staticRoot = findStaticRoot();
 
 const app = new Hono();
 
-app.get("/health", (c) =>
+app.get("/health", async (c) =>
   c.json({
     ok: true,
     coach: env.coachName,
     provider: env.provider,
     model: env.model,
     smartModel: env.smartModel || null,
-    reminders: journal.listEnabledReminders().length,
+    journal: backend || journalBackend(),
+    reminders: (await journal.listEnabledReminders()).length,
     linq: env.hasLinqToken,
     spa: Boolean(staticRoot),
   }),
@@ -77,7 +78,7 @@ if (staticRoot) {
 serve({ fetch: app.fetch, port: env.port, hostname: env.hostname }, (info) => {
   console.log(`${env.coachName} PT listening on http://${info.address}:${info.port}/webhook`);
   console.log(
-    `model=${env.model} smart=${env.smartModel || "—"} allowlist=${env.allowlist.join(",")} spa=${staticRoot || "off"} linq=${env.hasLinqToken}`,
+    `journal=${backend} model=${env.model} smart=${env.smartModel || "—"} allowlist=${env.allowlist.join(",")} spa=${staticRoot || "off"} linq=${env.hasLinqToken}`,
   );
   startScheduler();
 });
