@@ -1,4 +1,4 @@
-# MAI PT — iMessage personal trainer
+# lodd.ai PT — iMessage personal trainer
 
 Journal + Linq webhook. The Vite app is unchanged. V1 is one allowlisted phone, inbound-first, SQLite locally.
 

@@ -19,9 +19,3 @@ export function detectLang(text: string): Lang | null {
   if (en > nb) return "en";
   return null;
 }
-
-export function langOf(userLocale: string | null | undefined, message: string): Lang {
-  const stored = isLang(userLocale) ? userLocale : null;
-  const detected = detectLang(message);
-  return detected ?? stored ?? "nb";
-}

@@ -36,7 +36,7 @@ export const env = {
   port: Number(optional("PORT", optional("PT_PORT", "8787"))),
   hostname: optional("PT_HOST", "0.0.0.0"),
   tz: optional("PT_TZ", "Europe/Oslo"),
-  coachName: optional("PT_COACH_NAME", "MAI"),
+  coachName: optional("PT_COACH_NAME", "lodd.ai"),
   get dbPath() {
     const volume = optional("RAILWAY_VOLUME_MOUNT_PATH");
     if (volume) return `${volume.replace(/\/$/, "")}/journal.sqlite`;
