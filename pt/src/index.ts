@@ -1,4 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { env } from "./env.ts";
 import { getDb } from "./db.ts";
@@ -8,6 +11,22 @@ import { startScheduler } from "./scheduler.ts";
 import * as journal from "./journal.ts";
 
 getDb();
+
+function findStaticRoot(): string | null {
+  const candidates = [process.env.PT_STATIC_DIR, "../dist", "dist"].filter(
+    (v): v is string => Boolean(v && v.trim()),
+  );
+  for (const raw of candidates) {
+    const abs = resolve(process.cwd(), raw);
+    if (existsSync(join(abs, "index.html"))) {
+      const rel = relative(process.cwd(), abs);
+      return rel === "" ? "." : rel;
+    }
+  }
+  return null;
+}
+
+const staticRoot = findStaticRoot();
 
 const app = new Hono();
 
@@ -19,6 +38,8 @@ app.get("/health", (c) =>
     model: env.model,
     smartModel: env.smartModel || null,
     reminders: journal.listEnabledReminders().length,
+    linq: env.hasLinqToken,
+    spa: Boolean(staticRoot),
   }),
 );
 
@@ -47,8 +68,16 @@ app.post("/webhook", async (c) => {
   }
 });
 
+if (staticRoot) {
+  const abs = resolve(process.cwd(), staticRoot);
+  app.use("/*", serveStatic({ root: staticRoot }));
+  app.get("*", (c) => c.html(readFileSync(join(abs, "index.html"), "utf8")));
+}
+
 serve({ fetch: app.fetch, port: env.port, hostname: env.hostname }, (info) => {
   console.log(`${env.coachName} PT listening on http://${info.address}:${info.port}/webhook`);
-  console.log(`model=${env.model} smart=${env.smartModel || "—"} allowlist=${env.allowlist.join(",")}`);
+  console.log(
+    `model=${env.model} smart=${env.smartModel || "—"} allowlist=${env.allowlist.join(",")} spa=${staticRoot || "off"} linq=${env.hasLinqToken}`,
+  );
   startScheduler();
 });

@@ -1,0 +1,15 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ALWAYS"
+
+[variables]
+PT_COACH_NAME = "Carl Oakstream"
+PT_MODEL = "x-ai/grok-4.3"
+PT_MODEL_SMART = "x-ai/grok-4.6"
+PT_TZ = "Europe/Oslo"
+LINQ_ALLOWLIST = "+4740343295"

@@ -66,6 +66,9 @@ export const env = {
       .map((s) => s.trim())
       .filter(Boolean);
   },
+  get hasLinqToken() {
+    return Boolean(optional("LINQ_API_TOKEN"));
+  },
   get linqToken() {
     return required("LINQ_API_TOKEN");
   },

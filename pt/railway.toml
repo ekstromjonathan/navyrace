@@ -1,3 +1,6 @@
+# Used only if a Railway service has rootDirectory = pt.
+# The lodd.ai service builds from repo root via /railway.toml + Dockerfile.
+
 [build]
 builder = "RAILPACK"
 

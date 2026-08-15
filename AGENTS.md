@@ -6,13 +6,13 @@ This repo is a **Vite + React 19** training app ("MAI/Navy Race TRAINER") plus a
 
 ### iMessage PT (`pt/`)
 
-Separate Node service (Hono + SQLite journal + Linq webhook). Not started by default.
+Separate Node service (Hono + SQLite journal + Linq webhook). Locally: `cd pt && npm start`. Production: Railway deploys `main` with the root `Dockerfile` so lodd.ai serves both the Vite app and `POST /webhook`.
 
 ```bash
 cd pt && npm install && npm test && npm start   # http://localhost:8787/webhook
 ```
 
-Forward events with `linq webhooks listen --forward-to http://localhost:8787/webhook`. See `pt/README.md`.
+Local forward: `linq webhooks listen --forward-to http://localhost:8787/webhook`. Production webhook: `https://lodd.ai/webhook`. See `pt/README.md`.
 
 ### Services / commands
 
