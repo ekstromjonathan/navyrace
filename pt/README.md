@@ -4,7 +4,7 @@ Journal + Linq webhook. The Vite app is unchanged. V1 is one allowlisted phone, 
 
 ## Model
 
-OpenRouter. Floor: `PT_MODEL` (e.g. `x-ai/grok-4.1-fast`). Programmer hat: `PT_MODEL_SMART` (`x-ai/grok-4.6`) writes draft plans only.
+OpenRouter. Floor: `PT_MODEL` (e.g. `x-ai/grok-4.3`). Programmer hat: `PT_MODEL_SMART` (`x-ai/grok-4.6`) writes draft plans only.
 
 Obvious logs skip the model. Drafts go live only after `kjør programmet`.
 
