@@ -47,8 +47,8 @@ app.post("/webhook", async (c) => {
   }
 });
 
-serve({ fetch: app.fetch, port: env.port }, (info) => {
-  console.log(`${env.coachName} PT listening on http://localhost:${info.port}/webhook`);
+serve({ fetch: app.fetch, port: env.port, hostname: env.hostname }, (info) => {
+  console.log(`${env.coachName} PT listening on http://${info.address}:${info.port}/webhook`);
   console.log(`model=${env.model} smart=${env.smartModel || "—"} allowlist=${env.allowlist.join(",")}`);
   startScheduler();
 });

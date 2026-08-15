@@ -23,6 +23,10 @@ If you ask the PT to remind you (e.g. «minn meg på å trene kl 8»), it stores
 - «slutt å minne meg» turns it off.
 - Only fires while `npm start` is running.
 
+## Hosting
+
+This process must stay up for inbound iMessage and daily reminders. A Cursor Cloud Agent VM is not that host — it stops when the agent run ends. Deploy `pt/` to a always-on service (Railway is the V1 path): public HTTPS `/webhook`, volume for SQLite, then `linq webhooks create --url https://<host>/webhook --events message.received`.
+
 ## Run locally
 
 ```bash
