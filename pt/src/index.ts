@@ -9,7 +9,9 @@ getDb();
 
 const app = new Hono();
 
-app.get("/health", (c) => c.json({ ok: true, coach: env.coachName, model: env.model }));
+app.get("/health", (c) =>
+  c.json({ ok: true, coach: env.coachName, model: env.model, provider: env.provider }),
+);
 
 app.post("/webhook", async (c) => {
   const raw = await c.req.text();

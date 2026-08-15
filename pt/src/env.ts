@@ -39,8 +39,20 @@ export const env = {
   get dbPath() {
     return optional("PT_DB_PATH", "./data/journal.sqlite");
   },
+  get openrouterKey() {
+    return optional("OPENROUTER_API_KEY");
+  },
   get model() {
-    return optional("PT_MODEL", "claude-sonnet-4-6");
+    const raw = optional("PT_MODEL", "");
+    if (env.openrouterKey) {
+      if (raw.includes("/")) return raw;
+      if (raw === "claude-sonnet-4-6" || raw === "") return "anthropic/claude-sonnet-4.6";
+      return raw;
+    }
+    return raw || "claude-sonnet-4-6";
+  },
+  get provider() {
+    return env.openrouterKey ? "openrouter" : env.anthropicKey ? "anthropic" : "none";
   },
   get allowlist() {
     return optional("LINQ_ALLOWLIST", "+4740343295")

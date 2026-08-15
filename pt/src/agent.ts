@@ -255,17 +255,32 @@ function agentErrorReply(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   console.error("agent failed", msg);
   if (/credit balance|too low|purchase credits/i.test(msg)) {
-    return "Jeg hørte deg, men Anthropic-kontoen er tom for kreditt — derfor kom det ingen setning. Enkle logger funker uten modell: «mediterte i 30 sekunder», «kaldt bad i 30 sekunder», «drakk et glass», «lett»/«passe»/«brutalt».";
+    return "Jeg hørte deg, men LLM-kontoen er tom for kreditt. Sett OPENROUTER_API_KEY i pt/.env, eller bruk en enkel logg: «mediterte i 30 sekunder».";
   }
   return "Jeg hørte deg, men fikk ikke laget et skikkelig svar. Prøv en kort logg, eller prøv igjen om litt.";
 }
 
+function llmClient(): Anthropic | null {
+  if (env.openrouterKey) {
+    return new Anthropic({
+      apiKey: env.openrouterKey,
+      baseURL: "https://openrouter.ai/api",
+      defaultHeaders: {
+        "HTTP-Referer": "https://github.com/ekstromjonathan/navyrace",
+        "X-Title": `${env.coachName} PT`,
+      },
+    });
+  }
+  if (env.anthropicKey) return new Anthropic({ apiKey: env.anthropicKey });
+  return null;
+}
+
 export async function runAgent(user: UserRow, body: string, messageId: string): Promise<string> {
-  if (!env.anthropicKey) {
-    return "Jeg kan logge enkle ting (vann, kaldt bad, meditasjon, lett/passe/brutalt), men trenger en Anthropic-nøkkel for å bygge program og svare fritt.";
+  const client = llmClient();
+  if (!client) {
+    return "Jeg kan logge enkle ting (vann, kaldt bad, meditasjon, lett/passe/brutalt), men trenger OPENROUTER_API_KEY (eller Anthropic) for å svare fritt.";
   }
   try {
-    const client = new Anthropic({ apiKey: env.anthropicKey });
     const snap = journal.snapshot(user);
     const messages: Anthropic.Messages.MessageParam[] = [
       {

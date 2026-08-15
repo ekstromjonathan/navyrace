@@ -4,7 +4,7 @@ Journal + Linq webhook. The Vite app is unchanged. V1 is one allowlisted phone, 
 
 ## Model
 
-**Claude Sonnet 4.6** (`claude-sonnet-4-6`) for both hats:
+**Claude Sonnet 4.6 via OpenRouter** (`anthropic/claude-sonnet-4.6`) for both hats. Set `OPENROUTER_API_KEY`. Direct `ANTHROPIC_API_KEY` is a fallback.
 
 - Floor PT (every unclear message): tools against the journal
 - Programmer (rare): same model writes a **draft** plan; it does not go live until you text `kjør programmet`
