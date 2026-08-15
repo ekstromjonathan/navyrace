@@ -251,39 +251,52 @@ function runTool(user: UserRow, name: string, input: Record<string, unknown>, me
   }
 }
 
+function agentErrorReply(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error("agent failed", msg);
+  if (/credit balance|too low|purchase credits/i.test(msg)) {
+    return "Jeg hørte deg, men Anthropic-kontoen er tom for kreditt — derfor kom det ingen setning. Enkle logger funker uten modell: «mediterte i 30 sekunder», «kaldt bad i 30 sekunder», «drakk et glass», «lett»/«passe»/«brutalt».";
+  }
+  return "Jeg hørte deg, men fikk ikke laget et skikkelig svar. Prøv en kort logg, eller prøv igjen om litt.";
+}
+
 export async function runAgent(user: UserRow, body: string, messageId: string): Promise<string> {
   if (!env.anthropicKey) {
     return "Jeg kan logge enkle ting (vann, kaldt bad, meditasjon, lett/passe/brutalt), men trenger en Anthropic-nøkkel for å bygge program og svare fritt.";
   }
-  const client = new Anthropic({ apiKey: env.anthropicKey });
-  const snap = journal.snapshot(user);
-  const messages: Anthropic.Messages.MessageParam[] = [
-    {
-      role: "user",
-      content: `Journal (kort):\n${JSON.stringify(snap)}\n\nMelding fra bruker:\n${body}`,
-    },
-  ];
+  try {
+    const client = new Anthropic({ apiKey: env.anthropicKey });
+    const snap = journal.snapshot(user);
+    const messages: Anthropic.Messages.MessageParam[] = [
+      {
+        role: "user",
+        content: `Journal (kort):\n${JSON.stringify(snap)}\n\nMelding fra bruker:\n${body}`,
+      },
+    ];
 
-  for (let i = 0; i < 4; i++) {
-    const res = await client.messages.create({
-      model: env.model,
-      max_tokens: 800,
-      system: systemPrompt(),
-      tools: TOOLS,
-      messages,
-    });
-    const toolUses = res.content.filter((c): c is Anthropic.Messages.ToolUseBlock => c.type === "tool_use");
-    const texts = res.content.filter((c): c is Anthropic.Messages.TextBlock => c.type === "text").map((c) => c.text);
-    if (res.stop_reason === "end_turn" || toolUses.length === 0) {
-      return (texts.join("\n").trim() || "Ok.").slice(0, 1200);
+    for (let i = 0; i < 4; i++) {
+      const res = await client.messages.create({
+        model: env.model,
+        max_tokens: 800,
+        system: systemPrompt(),
+        tools: TOOLS,
+        messages,
+      });
+      const toolUses = res.content.filter((c): c is Anthropic.Messages.ToolUseBlock => c.type === "tool_use");
+      const texts = res.content.filter((c): c is Anthropic.Messages.TextBlock => c.type === "text").map((c) => c.text);
+      if (res.stop_reason === "end_turn" || toolUses.length === 0) {
+        return (texts.join("\n").trim() || "Ok.").slice(0, 1200);
+      }
+      messages.push({ role: "assistant", content: res.content });
+      const results: Anthropic.Messages.ToolResultBlockParam[] = toolUses.map((tu) => ({
+        type: "tool_result",
+        tool_use_id: tu.id,
+        content: runTool(user, tu.name, (tu.input ?? {}) as Record<string, unknown>, messageId),
+      }));
+      messages.push({ role: "user", content: results });
     }
-    messages.push({ role: "assistant", content: res.content });
-    const results: Anthropic.Messages.ToolResultBlockParam[] = toolUses.map((tu) => ({
-      type: "tool_result",
-      tool_use_id: tu.id,
-      content: runTool(user, tu.name, (tu.input ?? {}) as Record<string, unknown>, messageId),
-    }));
-    messages.push({ role: "user", content: results });
+    return "Jeg måtte stoppe — send gjerne én ting om gangen.";
+  } catch (err) {
+    return agentErrorReply(err);
   }
-  return "Jeg måtte stoppe — send gjerne én ting om gangen.";
 }

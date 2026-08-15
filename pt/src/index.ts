@@ -31,7 +31,8 @@ app.post("/webhook", async (c) => {
     return c.json(result);
   } catch (err) {
     console.error("webhook handler failed", err);
-    return c.json({ error: "handler failed" }, 500);
+    /* 200: Linq retries 5xx and would restart the typing bubble. */
+    return c.json({ ok: true, skipped: "handler-error" });
   }
 });
 

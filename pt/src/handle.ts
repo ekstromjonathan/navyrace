@@ -225,8 +225,16 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
   await reply(inbound.chatId, text, { replyTo: inbound.messageId });
   await maybeCard(user, inbound.chatId);
   } catch (err) {
-    journal.releaseMessage(inbound.messageId);
-    throw err;
+    console.error("handleInbound failed", err);
+    try {
+      await linq.stopTyping(inbound.chatId);
+      await reply(
+        inbound.chatId,
+        "Jeg hørte deg, men noe røk på min side. Prøv igjen, eller si f.eks. «mediterte i 30 sekunder».",
+      );
+    } catch {
+      /* still return 200 so Linq does not retry the typing loop */
+    }
   }
 }
 
