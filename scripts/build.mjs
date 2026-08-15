@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import react from "@vitejs/plugin-react";
 import { build } from "vite";
 
 const root = process.cwd();
@@ -14,21 +15,33 @@ for (const file of [landing, app, vilkar]) {
   }
 }
 
-const inline = {};
+let base;
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const arg = argv[i];
-  if (arg.startsWith("--base=")) inline.base = arg.slice("--base=".length);
-  else if (arg === "--base") inline.base = argv[++i];
+  if (arg.startsWith("--base=")) base = arg.slice("--base=".length);
+  else if (arg === "--base") base = argv[++i];
 }
 
-/* Pass 1: default Vite HTML entry (a string, not { landing: ... }).
- * This is what actually writes dist/index.html. */
+const viteConfig = {
+  configFile: false,
+  root,
+  appType: "mpa",
+  base,
+  plugins: [react()],
+};
+
+/* Pass 1 is intentionally isolated from vite.config.js. Railway previously
+ * merged the named MPA config into this call and omitted the root HTML page.
+ * A single string entry rooted at the repo always emits dist/index.html. */
 await build({
-  ...inline,
+  ...viteConfig,
   build: {
+    outDir: resolve(root, "dist"),
     emptyOutDir: true,
-    rollupOptions: { input: landing },
+    rollupOptions: {
+      input: landing,
+    },
   },
 });
 
@@ -42,10 +55,13 @@ if (!existsSync(resolve(root, "dist/index.html"))) {
 
 /* Pass 2: trainer + terms, keep the landing files. */
 await build({
-  ...inline,
+  ...viteConfig,
   build: {
+    outDir: resolve(root, "dist"),
     emptyOutDir: false,
-    rollupOptions: { input: [app, vilkar] },
+    rollupOptions: {
+      input: [app, vilkar],
+    },
   },
 });
 
