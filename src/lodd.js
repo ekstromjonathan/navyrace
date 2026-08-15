@@ -45,6 +45,18 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
+function syncFilled() {
+  for (const el of [nameInput, phoneInput]) {
+    if (!el) continue;
+    el.toggleAttribute("data-filled", Boolean(String(el.value).trim()));
+  }
+}
+
+syncFilled();
+nameInput?.addEventListener("input", syncFilled);
+phoneInput?.addEventListener("input", syncFilled);
+requestAnimationFrame(syncFilled);
+
 queueMicrotask(() => nameInput?.focus());
 
 form?.addEventListener("submit", (event) => {
