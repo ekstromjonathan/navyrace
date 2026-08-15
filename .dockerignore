@@ -1,0 +1,12 @@
+.git
+node_modules
+pt/node_modules
+pt/data
+pt/.env
+pt/*.sqlite
+pt/*.sqlite-wal
+pt/*.sqlite-shm
+dist
+*.local
+.vite
+.cursor

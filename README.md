@@ -29,6 +29,16 @@ npm run preview  # server dist/ lokalt
 Eneste eksterne avhengigheter er `react`, `react-dom` og `lucide-react` (ikoner).
 All styling ligger som en `CSS`-konstant i `NavyRaceTrainer.jsx` og injiseres via `<style>`.
 
+## iMessage PT
+
+Personlig trener over Linq/iMessage ligger i `pt/`. På Railway (lodd.ai) kjører den i samme prosess som webappen: `POST /webhook` og `GET /health`, resten er MAI TRAINER.
+
+```bash
+cd pt && npm install && npm start
+```
+
+Se `pt/README.md`.
+
 ## Lagring
 
 `store`-shimen øverst i `NavyRaceTrainer.jsx` prøver tre nivåer i rekkefølge:
