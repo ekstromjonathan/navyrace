@@ -8,7 +8,7 @@ This repo is a **Vite + React 19** app (Norwegian fitness training app, "MAI/Nav
 
 Only one service — the Vite frontend. All commands are the standard scripts in `package.json`:
 
-- Dev server: `npm run dev` → http://localhost:5173 (this is what to run for development).
+- Dev server: `npm run dev` → http://localhost:8080 (this is what to run for development; not 3000).
 - Build: `npm run build` (outputs to `dist/`).
 - Preview a build: `npm run preview`.
 

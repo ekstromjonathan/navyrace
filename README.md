@@ -7,7 +7,7 @@ React-app, opprinnelig bygget som en Claude-artifact og nå pakket som et Vite-p
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://localhost:8080
 ```
 
 ```bash

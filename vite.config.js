@@ -7,6 +7,16 @@ const root = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    host: true,
+    port: 8080,
+    strictPort: true,
+  },
+  preview: {
+    host: true,
+    port: 8080,
+    strictPort: true,
+  },
   build: {
     rollupOptions: {
       input: {
