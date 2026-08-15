@@ -24,7 +24,7 @@ export function journalBackend(): JournalBackend {
 export function getSupabase(): SupabaseClient<any, "pt", any> {
   if (supabase) return supabase;
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    throw new Error("Missing SUPABASE_URL or SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY)");
   }
   supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -72,7 +72,7 @@ export function initJournal(): JournalBackend {
   const hosted = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME);
   if ((hosted || process.env.NODE_ENV === "production") && process.env.PT_ALLOW_SQLITE !== "1") {
     throw new Error(
-      "Production journal requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (set PT_ALLOW_SQLITE=1 to force SQLite)",
+      "Production journal requires SUPABASE_URL + SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY); set PT_ALLOW_SQLITE=1 to force SQLite",
     );
   }
   getDb();

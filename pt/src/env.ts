@@ -41,8 +41,9 @@ export const env = {
   get supabaseUrl() {
     return optional("SUPABASE_URL", optional("VITE_SUPABASE_URL"));
   },
+  /** Server key for pt schema. Prefer new secret keys; legacy service_role still works. */
   get supabaseServiceRoleKey() {
-    return optional("SUPABASE_SERVICE_ROLE_KEY");
+    return optional("SUPABASE_SECRET_KEY", optional("SUPABASE_SERVICE_ROLE_KEY"));
   },
   get dbPath() {
     const volume = optional("RAILWAY_VOLUME_MOUNT_PATH");
