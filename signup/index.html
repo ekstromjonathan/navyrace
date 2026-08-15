@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="light" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="description" content="Sign up for your personal coach in iMessage." />
+    <meta name="description" content="Get your trainer in iMessage." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -21,8 +21,8 @@
     </a>
     <main class="stage stage-signup">
       <header class="signup-head">
-        <h1 data-i18n="signupTitle">Sign up for your personal coach in iMessage</h1>
-        <p data-i18n="signupLead">You text what you trained. Your trainer texts back — no app.</p>
+        <h1 data-i18n="signupTitle">Get your trainer in iMessage</h1>
+        <p data-i18n="signupLead">You text. Your trainer texts back.</p>
       </header>
       <form class="signup-form" id="signup-form">
         <div class="field-block">
@@ -52,15 +52,20 @@
             <span class="field-label" data-i18n="phone">Phone</span>
           </label>
         </div>
+        <button class="btn btn-solid" type="submit" data-i18n="send">Send iMessage</button>
         <p class="legal">
-          <span data-i18n="consent">By submitting, you agree to be contacted for more information.</span>
+          <span data-i18n="consent">By sending, you agree to be contacted.</span>
           <a href="../vilkar/" data-i18n="terms">Terms</a>
         </p>
-        <button class="btn btn-solid" type="submit" data-i18n="send">Send iMessage</button>
         <p class="form-note" data-pt-status hidden></p>
       </form>
       <a class="btn btn-ghost" href="../" data-i18n="back">← Back</a>
     </main>
+    <p class="lang" role="group" data-i18n-aria="language" aria-label="Language">
+      <button type="button" data-lang="no">no</button>
+      <span aria-hidden="true">/</span>
+      <button type="button" data-lang="en">en</button>
+    </p>
     <script type="module" src="/src/lodd.js"></script>
   </body>
 </html>

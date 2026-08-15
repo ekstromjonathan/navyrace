@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="light" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="description" content="lodd.ai — text your new excellent personal trainer." />
+    <meta name="description" content="lodd.ai — a personal trainer in iMessage." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,13 +19,18 @@
     <main class="stage">
       <header class="brand">
         <h1 class="mark">lodd.ai</h1>
-        <p class="tagline" data-i18n="slogan">Text your new excellent personal trainer.</p>
+        <p class="tagline" data-i18n="slogan">A personal trainer in iMessage.</p>
       </header>
       <nav class="actions" data-i18n-aria="choose" aria-label="Choose">
         <a class="btn btn-ghost" href="./app/" data-i18n="tryBrowser">Try in browser</a>
         <a class="btn btn-solid" href="./signup/" data-i18n="signupCta">Sign up for iMessage</a>
       </nav>
     </main>
+    <p class="lang" role="group" data-i18n-aria="language" aria-label="Language">
+      <button type="button" data-lang="no">no</button>
+      <span aria-hidden="true">/</span>
+      <button type="button" data-lang="en">en</button>
+    </p>
     <script type="module" src="/src/i18n.js"></script>
   </body>
 </html>

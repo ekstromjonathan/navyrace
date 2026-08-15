@@ -38,7 +38,7 @@ body {
 
 .stage {
   width: min(100%, 28rem);
-  padding: 32px var(--pad) calc(40px + env(safe-area-inset-bottom));
+  padding: 32px var(--pad) calc(56px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -136,6 +136,37 @@ body {
   }
 }
 
+.lang {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.lang button {
+  appearance: none;
+  margin: 0;
+  padding: 10px 2px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lang button[aria-current="true"] {
+  color: var(--ink);
+  font-weight: 700;
+}
+
 .close {
   position: fixed;
   top: max(12px, env(safe-area-inset-top));
@@ -164,6 +195,10 @@ body {
   .close:hover {
     background: rgba(17, 17, 17, 0.1);
   }
+
+  .lang button:hover {
+    color: var(--ink);
+  }
 }
 
 .stage-signup {
@@ -171,7 +206,7 @@ body {
   min-height: 100dvh;
   justify-content: center;
   gap: 44px;
-  padding: 88px var(--pad) calc(48px + env(safe-area-inset-bottom));
+  padding: 88px var(--pad) calc(64px + env(safe-area-inset-bottom));
 }
 
 .signup-head {
@@ -201,7 +236,7 @@ body {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 20px;
 }
 
 .field-block {
