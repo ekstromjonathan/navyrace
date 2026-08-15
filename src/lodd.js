@@ -1,9 +1,10 @@
-const PT_NUMBER = "+14044465379";
+const NOTIFY_NUMBER = "+4740343295";
 const WAITLIST_KEY = "lodd:pt-waitlist";
 
 const sheet = document.getElementById("pt-sheet");
 const openBtn = document.querySelector("[data-open-pt]");
 const form = sheet?.querySelector("form");
+const nameInput = document.getElementById("pt-name");
 const phoneInput = document.getElementById("pt-phone");
 const statusEl = document.querySelector("[data-pt-status]");
 
@@ -15,8 +16,8 @@ function iOSFamily() {
 function smsHref(body) {
   const text = encodeURIComponent(body);
   return iOSFamily()
-    ? `sms:${PT_NUMBER}&body=${text}`
-    : `sms:${PT_NUMBER}?body=${text}`;
+    ? `sms:${NOTIFY_NUMBER}&body=${text}`
+    : `sms:${NOTIFY_NUMBER}?body=${text}`;
 }
 
 function normalizePhone(raw) {
@@ -30,10 +31,10 @@ function normalizePhone(raw) {
   return digits;
 }
 
-function remember(phone) {
+function remember(name, phone) {
   try {
     const prev = JSON.parse(localStorage.getItem(WAITLIST_KEY) || "[]");
-    prev.push({ phone, at: new Date().toISOString() });
+    prev.push({ name, phone, at: new Date().toISOString() });
     localStorage.setItem(WAITLIST_KEY, JSON.stringify(prev.slice(-20)));
   } catch {
     /* private mode — signup still opens Messages */
@@ -49,7 +50,7 @@ function setStatus(text) {
 openBtn?.addEventListener("click", () => {
   setStatus("");
   sheet.showModal();
-  queueMicrotask(() => phoneInput?.focus());
+  queueMicrotask(() => nameInput?.focus());
 });
 
 sheet?.addEventListener("click", (event) => {
@@ -61,13 +62,18 @@ form?.addEventListener("submit", (event) => {
   if (submitter?.value === "cancel") return;
 
   event.preventDefault();
+  const name = String(nameInput?.value || "").trim();
   const phone = normalizePhone(phoneInput?.value);
-  if (phone) remember(phone);
 
-  const greeting = phone
-    ? `Hei, jeg vil starte med PT. Nummeret mitt er ${phone}.`
-    : "Hei, jeg vil starte med PT.";
+  if (!name || !phone) {
+    setStatus("Add your name and number.");
+    (!name ? nameInput : phoneInput)?.focus();
+    return;
+  }
 
-  setStatus("Åpner Meldinger…");
-  window.location.href = smsHref(greeting);
+  remember(name, phone);
+
+  const body = `lodd.ai signup\nName: ${name}\nPhone: ${phone}`;
+  setStatus("Opening Messages…");
+  window.location.href = smsHref(body);
 });

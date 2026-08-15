@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="no">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="light" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="description" content="lodd.ai — Navy Race og personlig trener i iMessage." />
+    <meta name="description" content="lodd.ai — a personal trainer you can text." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,7 +17,10 @@
   </head>
   <body>
     <main class="stage">
-      <h1 class="mark">lodd.ai</h1>
+      <header class="brand">
+        <h1 class="mark">lodd.ai</h1>
+        <p class="tagline">A personal trainer you can text.</p>
+      </header>
       <nav class="actions" aria-label="Choose">
         <a class="btn btn-ghost" href="./app/">Try in browser</a>
         <button class="btn btn-solid" type="button" data-open-pt>Sign up for iMessage</button>
@@ -26,13 +29,30 @@
 
     <dialog class="sheet" id="pt-sheet" aria-labelledby="pt-title">
       <form class="sheet-inner" method="dialog">
-        <button class="sheet-close" type="submit" value="cancel" aria-label="Lukk">
+        <button class="sheet-close" type="submit" value="cancel" aria-label="Close">
           <span aria-hidden="true">×</span>
         </button>
-        <h2 id="pt-title">Personlig trener</h2>
-        <p class="sheet-lead">Trening over iMessage. Ingen app å laste ned.</p>
+        <h2 id="pt-title">Sign up for iMessage</h2>
+        <p class="sheet-lead">
+          lodd.ai is a coach that lives in Messages. You text what you trained.
+          Your trainer texts back — plans, check-ins, no app to download.
+        </p>
+        <p class="sheet-lead">
+          Leave your name and number. We’ll iMessage you and walk you through it.
+        </p>
         <label class="field">
-          <span class="field-label">Mobilnummer</span>
+          <span class="field-label">Name</span>
+          <input
+            id="pt-name"
+            name="name"
+            type="text"
+            autocomplete="name"
+            placeholder="Your name"
+            maxlength="80"
+          />
+        </label>
+        <label class="field">
+          <span class="field-label">Phone</span>
           <input
             id="pt-phone"
             name="phone"
@@ -43,7 +63,7 @@
             maxlength="20"
           />
         </label>
-        <button class="btn btn-solid" type="submit" value="start" data-pt-submit>Start i iMessage</button>
+        <button class="btn btn-solid" type="submit" value="start" data-pt-submit>Send iMessage</button>
         <p class="sheet-note" data-pt-status hidden></p>
       </form>
     </dialog>
