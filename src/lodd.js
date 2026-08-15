@@ -1,9 +1,7 @@
 const NOTIFY_NUMBER = "+4740343295";
 const WAITLIST_KEY = "lodd:pt-waitlist";
 
-const sheet = document.getElementById("pt-sheet");
-const openBtn = document.querySelector("[data-open-pt]");
-const form = sheet?.querySelector("form");
+const form = document.getElementById("signup-form");
 const nameInput = document.getElementById("pt-name");
 const phoneInput = document.getElementById("pt-phone");
 const statusEl = document.querySelector("[data-pt-status]");
@@ -47,20 +45,9 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
-openBtn?.addEventListener("click", () => {
-  setStatus("");
-  sheet.showModal();
-  queueMicrotask(() => nameInput?.focus());
-});
-
-sheet?.addEventListener("click", (event) => {
-  if (event.target === sheet) sheet.close();
-});
+queueMicrotask(() => nameInput?.focus());
 
 form?.addEventListener("submit", (event) => {
-  const submitter = event.submitter;
-  if (submitter?.value === "cancel") return;
-
   event.preventDefault();
   const name = String(nameInput?.value || "").trim();
   const phone = normalizePhone(phoneInput?.value);
@@ -72,8 +59,6 @@ form?.addEventListener("submit", (event) => {
   }
 
   remember(name, phone);
-
-  const body = `lodd.ai signup\nName: ${name}\nPhone: ${phone}`;
   setStatus("Opening Messages…");
-  window.location.href = smsHref(body);
+  window.location.href = smsHref(`lodd.ai signup\nName: ${name}\nPhone: ${phone}`);
 });

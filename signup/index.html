@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#F6F5F2" />
+    <meta name="color-scheme" content="light" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="description" content="Sign up for lodd.ai — a personal trainer in iMessage." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/lodd.css" />
+    <title>Sign up · lodd.ai</title>
+  </head>
+  <body>
+    <a class="close" href="../" aria-label="Close">
+      <span aria-hidden="true">×</span>
+    </a>
+    <main class="stage stage-signup">
+      <header class="signup-head">
+        <h1>Sign up for iMessage</h1>
+        <p>
+          A coach in Messages. You text what you trained. Your trainer texts back — no app.
+          Leave your name and number and we’ll iMessage you.
+        </p>
+      </header>
+      <form class="signup-form" id="signup-form">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input
+            id="pt-name"
+            name="name"
+            type="text"
+            autocomplete="name"
+            placeholder="Your name"
+            maxlength="80"
+            required
+          />
+        </label>
+        <label class="field">
+          <span class="field-label">Phone</span>
+          <input
+            id="pt-phone"
+            name="phone"
+            type="tel"
+            inputmode="tel"
+            autocomplete="tel"
+            placeholder="+47"
+            maxlength="20"
+            required
+          />
+        </label>
+        <button class="btn btn-solid" type="submit">Send iMessage</button>
+        <p class="form-note" data-pt-status hidden></p>
+      </form>
+    </main>
+    <script type="module" src="/src/lodd.js"></script>
+  </body>
+</html>

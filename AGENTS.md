@@ -22,4 +22,4 @@ The dev server is started for you as the `vite` terminal on startup; it does not
 
 ### Testing note
 
-The landing (`/`) is logo + two actions: Navy Race (`/app/`) and iMessage PT signup (opens Messages to the Linq number). The trainer flow to exercise is chat-style onboarding, which generates a weekly training program and lands on the workout dashboard.
+The landing (`/`) is logo + two actions: Try in browser (`/app/`) and Sign up for iMessage (`/signup/`). Signup is a full page so browser Back returns to the landing. The trainer flow to exercise is chat-style onboarding, which generates a weekly training program and lands on the workout dashboard.

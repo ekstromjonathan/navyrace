@@ -23,51 +23,8 @@
       </header>
       <nav class="actions" aria-label="Choose">
         <a class="btn btn-ghost" href="./app/">Try in browser</a>
-        <button class="btn btn-solid" type="button" data-open-pt>Sign up for iMessage</button>
+        <a class="btn btn-solid" href="./signup/">Sign up for iMessage</a>
       </nav>
     </main>
-
-    <dialog class="sheet" id="pt-sheet" aria-labelledby="pt-title">
-      <form class="sheet-inner" method="dialog">
-        <button class="sheet-close" type="submit" value="cancel" aria-label="Close">
-          <span aria-hidden="true">×</span>
-        </button>
-        <h2 id="pt-title">Sign up for iMessage</h2>
-        <p class="sheet-lead">
-          lodd.ai is a coach that lives in Messages. You text what you trained.
-          Your trainer texts back — plans, check-ins, no app to download.
-        </p>
-        <p class="sheet-lead">
-          Leave your name and number. We’ll iMessage you and walk you through it.
-        </p>
-        <label class="field">
-          <span class="field-label">Name</span>
-          <input
-            id="pt-name"
-            name="name"
-            type="text"
-            autocomplete="name"
-            placeholder="Your name"
-            maxlength="80"
-          />
-        </label>
-        <label class="field">
-          <span class="field-label">Phone</span>
-          <input
-            id="pt-phone"
-            name="phone"
-            type="tel"
-            inputmode="tel"
-            autocomplete="tel"
-            placeholder="+47"
-            maxlength="20"
-          />
-        </label>
-        <button class="btn btn-solid" type="submit" value="start" data-pt-submit>Send iMessage</button>
-        <p class="sheet-note" data-pt-status hidden></p>
-      </form>
-    </dialog>
-
-    <script type="module" src="/src/lodd.js"></script>
   </body>
 </html>

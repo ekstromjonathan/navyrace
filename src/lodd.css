@@ -4,7 +4,6 @@
   --muted: rgba(17, 17, 17, 0.48);
   --line: rgba(17, 17, 17, 0.12);
   --fill: rgba(17, 17, 17, 0.05);
-  --sheet: #fffcf8;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --pad: max(24px, env(safe-area-inset-left));
 }
@@ -137,74 +136,72 @@ body {
   }
 }
 
-.sheet {
-  width: calc(100% - 24px);
-  max-width: 22rem;
-  margin: auto 12px 12px;
-  padding: 0;
-  border: 0;
-  border-radius: 28px;
-  background: var(--sheet);
-  color: var(--ink);
-  box-shadow: 0 24px 80px rgba(17, 17, 17, 0.14);
-}
-
-.sheet::backdrop {
-  background: rgba(17, 17, 17, 0.28);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-}
-
-.sheet[open] {
-  animation: sheet-in 420ms var(--ease-out) both;
-}
-
-.sheet[open]::backdrop {
-  animation: dim-in 320ms var(--ease-out) both;
-}
-
-.sheet-inner {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 28px 24px calc(22px + env(safe-area-inset-bottom));
-}
-
-.sheet-close {
-  appearance: none;
-  position: absolute;
-  top: 10px;
-  right: 10px;
+.close {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 2;
   width: 44px;
   height: 44px;
-  border: 0;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
-  background: transparent;
+  background: var(--fill);
   color: var(--ink);
   font-size: 28px;
   line-height: 1;
-  cursor: pointer;
+  text-decoration: none;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform 120ms var(--ease-out), background-color 160ms var(--ease-out);
 }
 
-.sheet-close:active {
+.close:active {
   transform: scale(0.94);
 }
 
-.sheet-inner h2 {
-  margin: 8px 0 0;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+@media (hover: hover) {
+  .close:hover {
+    background: rgba(17, 17, 17, 0.1);
+  }
 }
 
-.sheet-lead {
+.stage-signup {
+  width: min(100%, 22rem);
+  min-height: 100dvh;
+  justify-content: center;
+  gap: 36px;
+  padding-top: 72px;
+}
+
+.signup-head {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+
+.signup-head h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.signup-head p {
   margin: 0;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.45;
+}
+
+.signup-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .field {
@@ -238,7 +235,7 @@ body {
   box-shadow: inset 0 0 0 1.5px var(--ink);
 }
 
-.sheet-note {
+.form-note {
   margin: 0;
   min-height: 1.2em;
   font-size: 13px;
@@ -258,54 +255,24 @@ body {
   }
 }
 
-@keyframes sheet-in {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes dim-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 @media (min-width: 640px) {
   .mark {
     font-size: 14px;
   }
-
-  .sheet {
-    margin: auto;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stage,
-  .sheet[open],
-  .sheet[open]::backdrop {
+  .stage {
     animation: none;
   }
 
   .btn,
-  .sheet-close {
+  .close {
     transition: none;
   }
 
   .btn:active,
-  .sheet-close:active {
+  .close:active {
     transform: none;
-  }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .sheet::backdrop {
-    background: rgba(17, 17, 17, 0.55);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
 }
