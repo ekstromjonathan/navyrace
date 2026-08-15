@@ -14,7 +14,15 @@ ARG VITE_SUPABASE_ANON_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 
+# Fail early if the landing MPA sources did not make it into the image.
+RUN test -f index.html \
+  && test -f app/index.html \
+  && test -f vilkar/index.html \
+  && test -f src/lodd.js \
+  && test -f vite.config.js
+
 RUN npm run build \
+  && ls -la dist \
   && test -f dist/index.html \
   && rm -rf pt/dist \
   && cp -a dist pt/dist \
