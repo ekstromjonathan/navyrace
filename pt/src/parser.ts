@@ -13,6 +13,8 @@ export type HeuristicIntent =
   | { kind: "today"; confident: true }
   | { kind: "activate"; confident: true }
   | { kind: "archive"; confident: true }
+  | { kind: "reminder_set"; confident: true; hour: number; minute: number }
+  | { kind: "reminder_cancel"; confident: true }
   | { kind: "unknown"; confident: false };
 
 const NUM = "(\\d+(?:[.,]\\d+)?)";
@@ -38,6 +40,14 @@ export function parseMessage(body: string): HeuristicIntent {
   }
   if (/^arkiver og lag nytt$/i.test(text)) {
     return { kind: "archive", confident: true };
+  }
+
+  if (/\b(slutt å minne|ikke minn meg|avbryt påminnelse|skru av påminnelse)\b/i.test(lower)) {
+    return { kind: "reminder_cancel", confident: true };
+  }
+
+  if (/\b(minn meg|minne meg|påminn meg)\b/i.test(lower) || (/\bpåminnelse\b/i.test(lower) && /\b(kl|hver dag|trene|trening)\b/i.test(lower))) {
+    return { kind: "reminder_set", confident: true, ...parseClock(lower) };
   }
 
   if (/^(hva (trener|gjør) jeg( i dag)?|i dag\??|neste økt)$/i.test(lower)) {
@@ -123,4 +133,17 @@ export function parseMessage(body: string): HeuristicIntent {
   }
 
   return { kind: "unknown", confident: false };
+}
+
+export function parseClock(text: string): { hour: number; minute: number } {
+  const m =
+    text.match(/\bkl\.?\s*(\d{1,2})(?:[:.](\d{2}))?\b/i) ||
+    text.match(/\bklokken\s*(\d{1,2})(?:[:.](\d{2}))?\b/i) ||
+    text.match(/\b(\d{1,2})[:.](\d{2})\b/);
+  if (m) {
+    const hour = Number(m[1]);
+    const minute = m[2] != null ? Number(m[2]) : 0;
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) return { hour, minute };
+  }
+  return { hour: 8, minute: 0 };
 }

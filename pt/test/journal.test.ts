@@ -94,4 +94,18 @@ describe("journal", () => {
     assert.equal(kept[0]?.body, "n10");
     assert.equal(kept.at(-1)?.body, "n59");
   });
+
+  it("stores a daily train reminder and can disable it", () => {
+    const rec = journal.upsertReminder(user.id, "train", 8, 0);
+    assert.equal(rec.hour, 8);
+    assert.equal(rec.enabled, 1);
+    const again = journal.upsertReminder(user.id, "train", 7, 30);
+    assert.equal(again.id, rec.id);
+    assert.equal(again.hour, 7);
+    assert.equal(again.minute, 30);
+    assert.equal(journal.snapshot(user).reminders.length, 1);
+    journal.disableReminder(user.id, "train");
+    assert.equal(journal.listReminders(user.id)[0]?.enabled, 0);
+    assert.equal(journal.snapshot(user).reminders.length, 0);
+  });
 });

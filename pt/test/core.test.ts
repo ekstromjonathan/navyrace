@@ -43,6 +43,29 @@ describe("parser", () => {
   it("does not treat a full sentence as rpe", () => {
     assert.equal(parseMessage("det var brutalt i går og kneet hovnet").kind, "unknown");
   });
+
+  it("parses daily training reminders", () => {
+    const set = parseMessage("Kan du minne meg på å trene hver dag kl 8");
+    assert.equal(set.kind, "reminder_set");
+    if (set.kind === "reminder_set") {
+      assert.equal(set.hour, 8);
+      assert.equal(set.minute, 0);
+    }
+    const half = parseMessage("minn meg kl 7.30");
+    assert.equal(half.kind, "reminder_set");
+    if (half.kind === "reminder_set") {
+      assert.equal(half.hour, 7);
+      assert.equal(half.minute, 30);
+    }
+    const def = parseMessage("minn meg på å trene");
+    assert.equal(def.kind, "reminder_set");
+    if (def.kind === "reminder_set") {
+      assert.equal(def.hour, 8);
+      assert.equal(def.minute, 0);
+    }
+    assert.equal(parseMessage("slutt å minne meg").kind, "reminder_cancel");
+    assert.equal(parseMessage("Hva har du logget til nå?").kind, "unknown");
+  });
 });
 
 describe("opt-out", () => {

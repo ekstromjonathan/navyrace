@@ -7,7 +7,7 @@ import type { Plan, TrackKind, UserRow } from "./types.ts";
 const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "get_snapshot",
-    description: "Les journalen: spor, dagens økt, siste logger, notater og korte siste meldinger. Kall først.",
+    description: "Les journalen: spor, dagens økt, siste logger, notater, påminnelser og korte siste meldinger. Kall først.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -121,6 +121,23 @@ const TOOLS: Anthropic.Messages.Tool[] = [
       required: ["trackId"],
     },
   },
+  {
+    name: "set_reminder",
+    description:
+      "Sett daglig treningspåminnelse (brukerens tidssone). Default kl 08:00. Kall bare når brukeren ber om å bli minnet.",
+    input_schema: {
+      type: "object",
+      properties: {
+        hour: { type: "number", description: "0–23, default 8" },
+        minute: { type: "number", description: "0–59, default 0" },
+      },
+    },
+  },
+  {
+    name: "cancel_reminder",
+    description: "Skru av daglig treningspåminnelse.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
 ];
 
 function systemPrompt(): string {
@@ -132,6 +149,7 @@ Svar maks 4–6 linjer. Én neste handling. Still maks ett spørsmål, og bare h
 Ikke dump hele programmet. Send i dag / denne uken.
 Når brukeren vil ha et nytt opplegg: samle det som mangler, så kall propose_plan (programmer-hatten skriver øktene). Ikke finn opp en 10-ukersplan i chatten.
 Ikke slett eller overskriv et aktivt program. Bruk request_archive. Aktivering krever request_activate.
+Når brukeren ber om å bli minnet (f.eks. hver dag kl 8): kall set_reminder. Ikke lov påminnelser uten verktøyet. Avslå/mas er forbudt — én kort ping, hopp over hvis økt allerede er logget.
 Du er ikke lege. Ved smerte: logg, lett belastning, henvis til fagperson hvis det vedvarer.
 Ingen lenker i svaret med mindre brukeren ber om det.
 Effekter og mas er forbudt. Høres ut som en venn som kan trening.`;
@@ -308,6 +326,22 @@ async function runTool(user: UserRow, name: string, input: Record<string, unknow
         askedAt: new Date().toISOString(),
       });
       return JSON.stringify({ confirm: summary });
+    }
+    case "set_reminder": {
+      const hour = input.hour == null ? 8 : Number(input.hour);
+      const minute = input.minute == null ? 0 : Number(input.minute);
+      const rec = journal.upsertReminder(user.id, "train", hour, minute);
+      return JSON.stringify({
+        ok: true,
+        hour: rec.hour,
+        minute: rec.minute,
+        tz: user.tz,
+        confirm: `daglig kl ${journal.hhmm(rec.hour, rec.minute)} (${user.tz})`,
+      });
+    }
+    case "cancel_reminder": {
+      const had = journal.disableReminder(user.id, "train");
+      return JSON.stringify({ ok: true, disabled: Boolean(had) });
     }
     default:
       return JSON.stringify({ error: `unknown tool ${name}` });

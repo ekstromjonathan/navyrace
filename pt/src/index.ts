@@ -4,6 +4,8 @@ import { env } from "./env.ts";
 import { getDb } from "./db.ts";
 import { verifySignature } from "./webhook.ts";
 import { handlePayload } from "./handle.ts";
+import { startScheduler } from "./scheduler.ts";
+import * as journal from "./journal.ts";
 
 getDb();
 
@@ -16,6 +18,7 @@ app.get("/health", (c) =>
     provider: env.provider,
     model: env.model,
     smartModel: env.smartModel || null,
+    reminders: journal.listEnabledReminders().length,
   }),
 );
 
@@ -47,4 +50,5 @@ app.post("/webhook", async (c) => {
 serve({ fetch: app.fetch, port: env.port }, (info) => {
   console.log(`${env.coachName} PT listening on http://localhost:${info.port}/webhook`);
   console.log(`model=${env.model} smart=${env.smartModel || "—"} allowlist=${env.allowlist.join(",")}`);
+  startScheduler();
 });

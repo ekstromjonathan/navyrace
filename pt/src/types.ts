@@ -84,6 +84,20 @@ export type Plan = {
   sessions: PlanSession[];
 };
 
+export type ReminderKind = "train";
+
+export type ReminderRow = {
+  id: string;
+  user_id: string;
+  kind: ReminderKind;
+  hour: number;
+  minute: number;
+  enabled: number;
+  last_fired_on: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ChatTurn = {
   role: "user" | "pt";
   body: string;

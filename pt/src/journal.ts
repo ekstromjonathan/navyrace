@@ -6,6 +6,8 @@ import type {
   Plan,
   PlanSession,
   Quantity,
+  ReminderKind,
+  ReminderRow,
   TrackKind,
   TrackRow,
   TrackStatus,
@@ -51,6 +53,10 @@ export function releaseEvent(eventId: string): void {
 
 export function releaseMessage(messageId: string): void {
   run("DELETE FROM processed_messages WHERE linq_message_id = ?", messageId);
+}
+
+export function getUser(id: string): UserRow | undefined {
+  return row<UserRow>("SELECT * FROM users WHERE id = ?", id);
 }
 
 export function upsertUser(chatId: string, phone: string | null): UserRow {
@@ -431,5 +437,73 @@ export function snapshot(user: UserRow) {
     recentEntries: recentEntries(user.id, 6),
     recentNotes: recentNotes(user.id, 5),
     recentChat: recentChat(user.id, 8),
+    reminders: listReminders(user.id).filter((r) => r.enabled === 1).map((r) => ({
+      kind: r.kind,
+      hour: r.hour,
+      minute: r.minute,
+      lastFiredOn: r.last_fired_on,
+    })),
   };
+}
+
+export function hhmm(hour: number, minute: number): string {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+export function upsertReminder(userId: string, kind: ReminderKind, hour: number, minute: number): ReminderRow {
+  const h = Math.min(23, Math.max(0, Math.round(hour)));
+  const m = Math.min(59, Math.max(0, Math.round(minute)));
+  const existing = row<ReminderRow>("SELECT * FROM reminders WHERE user_id = ? AND kind = ?", userId, kind);
+  const ts = nowIso();
+  if (existing) {
+    run(
+      "UPDATE reminders SET hour = ?, minute = ?, enabled = 1, updated_at = ? WHERE id = ?",
+      h,
+      m,
+      ts,
+      existing.id,
+    );
+    return getReminder(existing.id)!;
+  }
+  const id = randomUUID();
+  run(
+    `INSERT INTO reminders (id, user_id, kind, hour, minute, enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    id,
+    userId,
+    kind,
+    h,
+    m,
+    ts,
+    ts,
+  );
+  return getReminder(id)!;
+}
+
+export function getReminder(id: string): ReminderRow | undefined {
+  return row<ReminderRow>("SELECT * FROM reminders WHERE id = ?", id);
+}
+
+export function listReminders(userId: string): ReminderRow[] {
+  return rows<ReminderRow>("SELECT * FROM reminders WHERE user_id = ? ORDER BY hour, minute", userId);
+}
+
+export function disableReminder(userId: string, kind: ReminderKind = "train"): ReminderRow | undefined {
+  const existing = row<ReminderRow>("SELECT * FROM reminders WHERE user_id = ? AND kind = ?", userId, kind);
+  if (!existing) return undefined;
+  run("UPDATE reminders SET enabled = 0, updated_at = ? WHERE id = ?", nowIso(), existing.id);
+  return getReminder(existing.id);
+}
+
+export function markReminderFired(id: string, day: string): void {
+  run("UPDATE reminders SET last_fired_on = ?, updated_at = ? WHERE id = ?", day, nowIso(), id);
+}
+
+export function listEnabledReminders(): ReminderRow[] {
+  return rows<ReminderRow>("SELECT * FROM reminders WHERE enabled = 1");
+}
+
+export function trainedOnDay(userId: string, day: string, tz: string): boolean {
+  const recs = recentEntries(userId, 40);
+  return recs.some((e) => e.kind === "training" && todayInTz(tz, String(e.occurred_at)) === day);
 }

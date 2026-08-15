@@ -8,6 +8,10 @@ import * as linq from "./linq.ts";
 import { normalizeEvent } from "./webhook.ts";
 import type { Inbound, UserRow } from "./types.ts";
 
+function reminderConfirm(user: UserRow, hour: number, minute: number): string {
+  return `Ok — daglig treningspåminnelse kl ${journal.hhmm(hour, minute)} (${user.tz}). Jeg hopper over dagen hvis du allerede har logget økt. Si «slutt å minne meg» for å skru av.`;
+}
+
 async function reply(
   chatId: string,
   text: string,
@@ -115,6 +119,16 @@ function applyHeuristic(user: UserRow, inbound: Inbound): string | null {
   if (!parsed.confident) return null;
 
   if (parsed.kind === "today") return formatToday(user);
+
+  if (parsed.kind === "reminder_set") {
+    journal.upsertReminder(user.id, "train", parsed.hour, parsed.minute);
+    return reminderConfirm(user, parsed.hour, parsed.minute);
+  }
+
+  if (parsed.kind === "reminder_cancel") {
+    const had = journal.disableReminder(user.id, "train");
+    return had ? "Ok, ingen flere treningspåminnelser." : "Du har ingen påminnelse å skru av.";
+  }
 
   if (parsed.kind === "activate") {
     const draft = journal.draftTraining(user.id);

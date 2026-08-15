@@ -82,6 +82,22 @@ CREATE TABLE IF NOT EXISTS message_log (
 
 CREATE INDEX IF NOT EXISTS message_log_user_time ON message_log(user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS reminders (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('train')),
+  hour INTEGER NOT NULL,
+  minute INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_fired_on TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  UNIQUE (user_id, kind)
+);
+
+CREATE INDEX IF NOT EXISTS reminders_enabled ON reminders(enabled, hour, minute);
+
 CREATE TABLE IF NOT EXISTS webhook_events (
   event_id TEXT PRIMARY KEY,
   received_at TEXT NOT NULL
