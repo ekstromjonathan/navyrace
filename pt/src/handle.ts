@@ -1,7 +1,7 @@
 import { env, isAllowlisted } from "./env.ts";
 import { parseMessage } from "./parser.ts";
 import { isOptOut } from "./optout.ts";
-import { isActivatePhrase, isArchivePhrase } from "./gates.ts";
+import { isActivatePhrase, isActivateCancel, isArchivePhrase } from "./gates.ts";
 import { runAgent } from "./agent.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
@@ -75,8 +75,9 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
         return copy.activateFailed(lang, e instanceof Error ? e.message : "");
       }
     }
-    await journal.setPending(user.id, null);
-    if (parseMessage(body).kind === "unknown") {
+    // Soft cancel only — questions like “more details?” must not kill the draft.
+    if (isActivateCancel(body)) {
+      await journal.setPending(user.id, null);
       return copy.activateCancelled(lang);
     }
     return null;
@@ -148,15 +149,14 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
   if (parsed.kind === "activate") {
     const draft = await journal.draftTraining(user.id);
     if (!draft) return copy.noDraft(lang);
-    const sessions = journal.planOf(draft)?.sessions.length ?? 0;
-    const summary = copy.activatePrompt(lang, draft.name, sessions);
-    await journal.setPending(user.id, {
-      type: "activate_confirm",
-      trackId: draft.id,
-      summary,
-      askedAt: new Date().toISOString(),
-    });
-    return summary;
+    try {
+      await journal.activateTrack(draft.id);
+      await journal.setPending(user.id, null);
+      const today = await formatToday(user, lang);
+      return `${copy.activated(lang)}\n\n${today}`;
+    } catch (e) {
+      return copy.activateFailed(lang, e instanceof Error ? e.message : "");
+    }
   }
 
   if (parsed.kind === "archive") {

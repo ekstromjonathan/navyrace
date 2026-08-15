@@ -39,6 +39,13 @@ export function parseMessage(body: string): HeuristicIntent {
   if (/^(kjør programmet|kjør opplegget|kjør|run the program|lock the program)$/i.test(text)) {
     return { kind: "activate", confident: true };
   }
+  // Soft lock phrases when they clearly mean start/lock the draft.
+  if (
+    /^(ja|ok|okay|yes)\s*,?\s*(kjør|låse?|start|begynn|run|lock)\b/i.test(text) ||
+    /^(sett i gang|la oss (kjøre|starte|begynne)|let'?s (go|start))$/i.test(text)
+  ) {
+    return { kind: "activate", confident: true };
+  }
   if (/^(arkiver og lag nytt|archive and start new)$/i.test(text)) {
     return { kind: "archive", confident: true };
   }

@@ -85,7 +85,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "propose_plan",
     description:
-      "Lag treningsutkast (draft) via programmer-hatten. Kall så snart missingForPlan er tom — ikke spør «skal jeg lage?» hvis de allerede har bedt om program eller sagt ja. Presenter deretter uke 1 kort (titler), si at det justeres etter hvordan øktene føles, og be dem skrive «kjør programmet» for å låse.",
+      "Lag treningsutkast (draft) via programmer-hatten. Kall så snart missingForPlan er tom — ikke spør «skal jeg lage?» hvis de allerede har bedt om program eller sagt ja. Presenter uke 1 med korte detaljer per økt (ikke bare titler), si at det justeres etter hvordan øktene føles, og at de låser med ja/ok/kjør.",
     input_schema: {
       type: "object",
       properties: {
@@ -148,7 +148,8 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   },
   {
     name: "request_activate",
-    description: "Be om bekreftelse for å låse et draft-program. Brukeren må skrive «kjør programmet».",
+    description:
+      "Be om myk bekreftelse for å låse et draft-program. Brukeren kan svare ja / ok / kjør — ikke krev eksakt frase. Arkivering er den eneste handlingen som krever eksakt bekreftelse.",
     input_schema: {
       type: "object",
       properties: { trackId: { type: "string" } },
@@ -178,8 +179,8 @@ function systemPrompt(lang: Lang, opts: { onboarding: boolean; firstContact: boo
   const language = lang === "en" ? "English" : "Norwegian (bokmål)";
   const confirm =
     lang === "en"
-      ? 'Activate with exactly “run the program”. Archive with exactly “archive and start new”.'
-      : 'Aktiver med nøyaktig «kjør programmet». Arkiver med nøyaktig «arkiver og lag nytt».';
+      ? 'Lock a draft with a normal yes/ok/run it. Archive still needs exactly “archive and start new”.'
+      : 'Lås et utkast med vanlig ja/ok/kjør. Arkivering krever fortsatt nøyaktig «arkiver og lag nytt».';
 
   let onboard = "";
   if (opts.firstContact) {
@@ -207,7 +208,9 @@ Language: Reply only in ${language}. The user started in this language. Never sw
 ## Speed to program
 - Prefer 1 missing field per turn. Don't stack identity + why + experience if goal was already rich.
 - Don't ask “should I make a program?” when they already said yes / “make a week plan” / readyForPlan is true — draft it.
-- After propose_plan: present week 1 titles briefly, say the plan adapts based on how training goes, and that they lock it with «kjør programmet» / “run the program”.
+- After propose_plan: present week 1 with short details per session (exercises/distance), say it adapts from how training feels, and that they lock with ja/ok/kjør (normal assent — not a magic phrase).
+- If they ask for more detail on the draft, answer — do NOT treat that as cancelling. If pending activate and they say ja/ok/kjør, it's locked.
+- Don't keep re-asking them to lock after they've already asked to start / said kjør.
 
 ## Training stance
 - Assume they want to train and will train. Never ask “are you training today?” / “do you have time to train?”. Present today's session (or the next step toward a plan).
@@ -385,19 +388,29 @@ async function runTool(
         summary: copy.activatePrompt(lang, track.name, plan.sessions.length),
         askedAt: new Date().toISOString(),
       });
+      const week1 = plan.sessions.filter((s) => (s.week ?? 1) === 1);
       return JSON.stringify({
         trackId: track.id,
         status: "draft",
         weeks: plan.weeks,
         daysPerWeek: plan.daysPerWeek,
         sessionCount: plan.sessions.length,
-        week1: plan.sessions.filter((s) => (s.week ?? 1) === 1).map((s) => s.title),
+        week1: week1.map((s) => ({
+          title: s.title,
+          est: s.est ?? null,
+          load: s.load ?? null,
+          unit: s.unit ?? null,
+          items: (s.items ?? []).slice(0, 5).map((it) => ({
+            name: it.name,
+            detail: it.detail ?? null,
+          })),
+        })),
         titles: plan.sessions.slice(0, 8).map((s) => s.title),
         confirm: copy.activatePrompt(lang, track.name, plan.sessions.length),
         adaptHint:
           lang === "en"
-            ? "Tell them the plan adapts from how each session felt (easy / about right / brutal)."
-            : "Si at programmet tilpasses etter hvordan hver økt føles (lett / passe / brutalt).",
+            ? "Present week 1 with short details, say it adapts from how sessions feel, and that yes/ok/run it locks it."
+            : "Presentér uke 1 med korte detaljer, si at det tilpasses etter følelse, og at ja/ok/kjør låser.",
         writer: env.smartModel || env.model,
       });
     }
