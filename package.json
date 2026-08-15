@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/sync-pt-dist.mjs",
+    "build": "node scripts/build.mjs",
     "preview": "vite preview",
     "start": "npm start --prefix pt"
   },
