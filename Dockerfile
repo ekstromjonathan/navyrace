@@ -1,5 +1,7 @@
 FROM node:22-bookworm-slim
-WORKDIR /app
+# Not /app: Vite treats the filesystem path /app/index.html as the URL
+# /app/index.html → app/index.html (the trainer), so dist/index.html never emits.
+WORKDIR /srv
 
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -28,10 +30,10 @@ RUN npm run build \
   && cp -a dist pt/dist \
   && test -f pt/dist/index.html
 
-# Serve from cwd (/app/pt); avoid "../dist" which some static helpers reject.
+# Serve from cwd (/srv/pt); avoid "../dist" which some static helpers reject.
 ENV PT_STATIC_DIR=dist
 ENV PT_REQUIRE_SPA=1
 ENV NODE_ENV=production
-WORKDIR /app/pt
+WORKDIR /srv/pt
 EXPOSE 8080
 CMD ["npx", "tsx", "src/index.ts"]

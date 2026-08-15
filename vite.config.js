@@ -2,9 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 /* Dev: HTML files at /, /app/, /vilkar/ are served as an MPA.
- * Production entries are chosen in scripts/build.mjs — do not set a named
- * rollup input object here. Docker dropped dist/index.html when the landing
- * was keyed as "main" / "landing" instead of Vite's default index.html entry. */
+ * Production entries are chosen in scripts/build.mjs as relative paths.
+ * Do not pass absolute /app/index.html into Vite — Docker WORKDIR /app
+ * made that resolve to the trainer page, so dist/index.html was never written. */
 export default defineConfig({
   appType: "mpa",
   plugins: [react()],
