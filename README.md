@@ -19,9 +19,10 @@ npm run preview  # server dist/ lokalt
 
 | Fil | Innhold |
 |-----|---------|
+| `index.html` | lodd.ai-landing — logo + to knapper |
+| `app/index.html` | Navy Race-appen |
 | `src/NavyRaceTrainer.jsx` | Hele appen — programdata, økter, timer og CSS i én komponent |
 | `src/main.jsx` | React-rot, monterer appen |
-| `index.html` | Vite-entrypoint |
 
 Eneste eksterne avhengigheter er `react`, `react-dom` og `lucide-react` (ikoner).
 All styling ligger som en `CSS`-konstant i `NavyRaceTrainer.jsx` og injiseres via `<style>`.

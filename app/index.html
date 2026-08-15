@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0B0E11" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Critical: dark shell before JS so body-margin/white bg never flash as a light frame -->
+    <style>
+      html, body, #root {
+        margin: 0;
+        padding: 0;
+        background: #0B0E11;
+        color-scheme: dark;
+      }
+      html { height: 100%; }
+      body { min-height: 100%; min-height: 100dvh; }
+    </style>
+    <title>Navy Race · MAI TRAINER</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

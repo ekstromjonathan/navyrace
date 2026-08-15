@@ -2,7 +2,7 @@
 
 ## Cursor Cloud specific instructions
 
-This repo is a single-page **Vite + React 19** app (Norwegian fitness training app, "MAI/Navy Race TRAINER"). Package manager is **npm** (`package-lock.json`); Node 22 is used in CI. There is no separate backend to run and there are **no lint or automated test scripts** — CI (`.github/workflows/deploy.yml`) only runs `npm ci` + `npm run build`.
+This repo is a **Vite + React 19** app (Norwegian fitness training app, "MAI/Navy Race TRAINER") with a static landing page at `/` (lodd.ai). The trainer lives at `/app/`. Package manager is **npm** (`package-lock.json`); Node 22 is used in CI. There is no separate backend to run and there are **no lint or automated test scripts** — CI (`.github/workflows/deploy.yml`) only runs `npm ci` + `npm run build`.
 
 ### Services / commands
 
@@ -22,4 +22,4 @@ The dev server is started for you as the `vite` terminal on startup; it does not
 
 ### Testing note
 
-The main flow to exercise is the chat-style onboarding, which generates a weekly training program and lands on the workout dashboard.
+The landing (`/`) is logo + two actions: Navy Race (`/app/`) and iMessage PT signup (opens Messages to the Linq number). The trainer flow to exercise is chat-style onboarding, which generates a weekly training program and lands on the workout dashboard.

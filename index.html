@@ -3,27 +3,51 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0B0E11" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#F6F5F2" />
+    <meta name="color-scheme" content="light" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="description" content="lodd.ai — Navy Race og personlig trener i iMessage." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Critical: dark shell before JS so body-margin/white bg never flash as a light frame -->
-    <style>
-      html, body, #root {
-        margin: 0;
-        padding: 0;
-        background: #0B0E11;
-        color-scheme: dark;
-      }
-      html { height: 100%; }
-      body { min-height: 100%; min-height: 100dvh; }
-    </style>
-    <title>MAI TRAINER</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/lodd.css" />
+    <title>lodd.ai</title>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <main class="stage">
+      <h1 class="mark">lodd.ai</h1>
+      <nav class="actions" aria-label="Velg">
+        <a class="btn btn-ghost" href="./app/">Navy Race</a>
+        <button class="btn btn-solid" type="button" data-open-pt>Personlig trener</button>
+      </nav>
+    </main>
+
+    <dialog class="sheet" id="pt-sheet" aria-labelledby="pt-title">
+      <form class="sheet-inner" method="dialog">
+        <button class="sheet-close" type="submit" value="cancel" aria-label="Lukk">
+          <span aria-hidden="true">×</span>
+        </button>
+        <h2 id="pt-title">Personlig trener</h2>
+        <p class="sheet-lead">Trening over iMessage. Ingen app å laste ned.</p>
+        <label class="field">
+          <span class="field-label">Mobilnummer</span>
+          <input
+            id="pt-phone"
+            name="phone"
+            type="tel"
+            inputmode="tel"
+            autocomplete="tel"
+            placeholder="+47"
+            maxlength="20"
+          />
+        </label>
+        <button class="btn btn-solid" type="submit" value="start" data-pt-submit>Start i iMessage</button>
+        <p class="sheet-note" data-pt-status hidden></p>
+      </form>
+    </dialog>
+
+    <script type="module" src="/src/lodd.js"></script>
   </body>
 </html>
