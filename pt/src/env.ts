@@ -1,0 +1,66 @@
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+
+function loadDotEnv() {
+  for (const candidate of [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../.env.local")]) {
+    if (!existsSync(candidate)) continue;
+    const text = readFileSync(candidate, "utf8");
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq < 1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] == null) process.env[key] = value;
+    }
+  }
+}
+
+loadDotEnv();
+
+function required(name: string): string {
+  const v = process.env[name]?.trim();
+  if (!v) throw new Error(`Missing ${name}`);
+  return v;
+}
+
+function optional(name: string, fallback = ""): string {
+  return process.env[name]?.trim() || fallback;
+}
+
+export const env = {
+  port: Number(optional("PT_PORT", "8787")),
+  tz: optional("PT_TZ", "Europe/Oslo"),
+  coachName: optional("PT_COACH_NAME", "MAI"),
+  get dbPath() {
+    return optional("PT_DB_PATH", "./data/journal.sqlite");
+  },
+  get model() {
+    return optional("PT_MODEL", "claude-sonnet-4-6");
+  },
+  get allowlist() {
+    return optional("LINQ_ALLOWLIST", "+4740343295")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  },
+  get linqToken() {
+    return required("LINQ_API_TOKEN");
+  },
+  get webhookSecret() {
+    return optional("LINQ_WEBHOOK_SECRET");
+  },
+  get anthropicKey() {
+    return optional("ANTHROPIC_API_KEY");
+  },
+};
+
+export function isAllowlisted(phone: string | null | undefined): boolean {
+  if (!phone) return false;
+  const digits = phone.replace(/\s+/g, "");
+  return env.allowlist.some((n) => n === digits);
+}

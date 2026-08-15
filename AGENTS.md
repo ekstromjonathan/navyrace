@@ -2,11 +2,21 @@
 
 ## Cursor Cloud specific instructions
 
-This repo is a single-page **Vite + React 19** app (Norwegian fitness training app, "MAI/Navy Race TRAINER"). Package manager is **npm** (`package-lock.json`); Node 22 is used in CI. There is no separate backend to run and there are **no lint or automated test scripts** — CI (`.github/workflows/deploy.yml`) only runs `npm ci` + `npm run build`.
+This repo is a **Vite + React 19** training app ("MAI/Navy Race TRAINER") plus an optional iMessage PT in `pt/`. Package manager is **npm**; Node 22 is used in CI. Frontend CI (`.github/workflows/deploy.yml`) runs `npm ci` + `npm run build`. PT tests live in `.github/workflows/pt.yml`.
+
+### iMessage PT (`pt/`)
+
+Separate Node service (Hono + SQLite journal + Linq webhook). Not started by default.
+
+```bash
+cd pt && npm install && npm test && npm start   # http://localhost:8787/webhook
+```
+
+Forward events with `linq webhooks listen --forward-to http://localhost:8787/webhook`. See `pt/README.md`.
 
 ### Services / commands
 
-Only one service — the Vite frontend. All commands are the standard scripts in `package.json`:
+The Vite frontend is the original app. All commands are the standard scripts in `package.json`:
 
 - Dev server: `npm run dev` → http://localhost:5173 (this is what to run for development).
 - Build: `npm run build` (outputs to `dist/`).

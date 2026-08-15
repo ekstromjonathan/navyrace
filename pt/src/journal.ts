@@ -1,0 +1,386 @@
+import { randomUUID } from "node:crypto";
+import { getDb, nowIso, parseJson, todayInTz } from "./db.ts";
+import type {
+  Pending,
+  Plan,
+  PlanSession,
+  Quantity,
+  TrackKind,
+  TrackRow,
+  TrackStatus,
+  UserFacts,
+  UserRow,
+} from "./types.ts";
+
+type SqlValue = string | number | bigint | null | Uint8Array;
+
+function row<T>(sql: string, ...params: SqlValue[]): T | undefined {
+  return getDb().prepare(sql).get(...params) as T | undefined;
+}
+
+function rows<T>(sql: string, ...params: SqlValue[]): T[] {
+  return getDb().prepare(sql).all(...params) as T[];
+}
+
+function run(sql: string, ...params: SqlValue[]) {
+  return getDb().prepare(sql).run(...params);
+}
+
+export function claimEvent(eventId: string): boolean {
+  const info = run(
+    "INSERT OR IGNORE INTO webhook_events (event_id, received_at) VALUES (?, ?)",
+    eventId,
+    nowIso(),
+  );
+  return Number(info.changes) === 1;
+}
+
+export function claimMessage(messageId: string): boolean {
+  const info = run(
+    "INSERT OR IGNORE INTO processed_messages (linq_message_id, processed_at) VALUES (?, ?)",
+    messageId,
+    nowIso(),
+  );
+  return Number(info.changes) === 1;
+}
+
+export function releaseEvent(eventId: string): void {
+  run("DELETE FROM webhook_events WHERE event_id = ?", eventId);
+}
+
+export function releaseMessage(messageId: string): void {
+  run("DELETE FROM processed_messages WHERE linq_message_id = ?", messageId);
+}
+
+export function upsertUser(chatId: string, phone: string | null): UserRow {
+  const existing = row<UserRow>("SELECT * FROM users WHERE chat_id = ?", chatId);
+  const ts = nowIso();
+  if (existing) {
+    if (phone && existing.phone_e164 !== phone) {
+      run("UPDATE users SET phone_e164 = ?, updated_at = ? WHERE id = ?", phone, ts, existing.id);
+      return { ...existing, phone_e164: phone, updated_at: ts };
+    }
+    return existing;
+  }
+  const id = randomUUID();
+  run(
+    `INSERT INTO users (id, chat_id, phone_e164, tz, locale, facts, created_at, updated_at)
+     VALUES (?, ?, ?, 'Europe/Oslo', 'nb', '{}', ?, ?)`,
+    id,
+    chatId,
+    phone,
+    ts,
+    ts,
+  );
+  return row<UserRow>("SELECT * FROM users WHERE id = ?", id)!;
+}
+
+export function factsOf(user: UserRow): UserFacts {
+  return parseJson<UserFacts>(user.facts, {});
+}
+
+export function pendingOf(user: UserRow): Pending | null {
+  return parseJson<Pending | null>(user.pending, null);
+}
+
+export function setPending(userId: string, pending: Pending | null): void {
+  run("UPDATE users SET pending = ?, updated_at = ? WHERE id = ?", pending ? JSON.stringify(pending) : null, nowIso(), userId);
+}
+
+export function setHealth(userId: string, status: string): void {
+  run("UPDATE users SET health_status = ?, updated_at = ? WHERE id = ?", status, nowIso(), userId);
+}
+
+export function setFacts(userId: string, patch: UserFacts): UserFacts {
+  const user = row<UserRow>("SELECT * FROM users WHERE id = ?", userId);
+  if (!user) throw new Error("user missing");
+  const next = { ...factsOf(user), ...patch };
+  run("UPDATE users SET facts = ?, updated_at = ? WHERE id = ?", JSON.stringify(next), nowIso(), userId);
+  return next;
+}
+
+export function touchContactCard(userId: string): void {
+  run("UPDATE users SET last_contact_card_at = ?, updated_at = ? WHERE id = ?", nowIso(), nowIso(), userId);
+}
+
+export function shouldShareContactCard(user: UserRow): boolean {
+  if (!user.last_contact_card_at) return true;
+  const last = user.last_contact_card_at.slice(0, 10);
+  return last !== todayInTz(user.tz);
+}
+
+export function getTrack(id: string): TrackRow | undefined {
+  return row<TrackRow>("SELECT * FROM tracks WHERE id = ?", id);
+}
+
+export function listTracks(userId: string, status?: TrackStatus): TrackRow[] {
+  if (status) return rows<TrackRow>("SELECT * FROM tracks WHERE user_id = ? AND status = ? ORDER BY updated_at DESC", userId, status);
+  return rows<TrackRow>("SELECT * FROM tracks WHERE user_id = ? ORDER BY updated_at DESC", userId);
+}
+
+export function findTrackBySlug(userId: string, slug: string, status?: TrackStatus): TrackRow | undefined {
+  if (status) {
+    return row<TrackRow>(
+      "SELECT * FROM tracks WHERE user_id = ? AND slug = ? AND status = ? ORDER BY version DESC",
+      userId,
+      slug,
+      status,
+    );
+  }
+  return row<TrackRow>(
+    "SELECT * FROM tracks WHERE user_id = ? AND slug = ? AND status != 'archived' ORDER BY version DESC",
+    userId,
+    slug,
+  );
+}
+
+export function activeTraining(userId: string): TrackRow | undefined {
+  return row<TrackRow>(
+    "SELECT * FROM tracks WHERE user_id = ? AND kind = 'training' AND status = 'active'",
+    userId,
+  );
+}
+
+export function draftTraining(userId: string): TrackRow | undefined {
+  return row<TrackRow>(
+    "SELECT * FROM tracks WHERE user_id = ? AND kind = 'training' AND status = 'draft' ORDER BY updated_at DESC",
+    userId,
+  );
+}
+
+export function createTrack(input: {
+  userId: string;
+  kind: TrackKind;
+  slug: string;
+  name: string;
+  tags?: string[];
+  status?: TrackStatus;
+  plan?: Plan | null;
+}): TrackRow {
+  const existingMax = row<{ v: number }>(
+    "SELECT COALESCE(MAX(version), 0) AS v FROM tracks WHERE user_id = ? AND slug = ?",
+    input.userId,
+    input.slug,
+  );
+  const version = (existingMax?.v ?? 0) + 1;
+  const id = randomUUID();
+  const ts = nowIso();
+  run(
+    `INSERT INTO tracks (id, user_id, kind, slug, name, tags, status, plan, version, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id,
+    input.userId,
+    input.kind,
+    input.slug,
+    input.name,
+    JSON.stringify(input.tags ?? []),
+    input.status ?? "active",
+    input.plan ? JSON.stringify(input.plan) : null,
+    version,
+    ts,
+    ts,
+  );
+  return getTrack(id)!;
+}
+
+export function ensureTrack(input: {
+  userId: string;
+  kind: TrackKind;
+  slug: string;
+  name: string;
+  tags?: string[];
+}): TrackRow {
+  return (
+    findTrackBySlug(input.userId, input.slug, "active") ||
+    findTrackBySlug(input.userId, input.slug, "draft") ||
+    createTrack({ ...input, status: input.kind === "training" ? "draft" : "active" })
+  );
+}
+
+export function setPlan(trackId: string, plan: Plan): TrackRow {
+  run("UPDATE tracks SET plan = ?, status = 'draft', updated_at = ? WHERE id = ?", JSON.stringify(plan), nowIso(), trackId);
+  return getTrack(trackId)!;
+}
+
+export function planOf(track: TrackRow): Plan | null {
+  return parseJson<Plan | null>(track.plan, null);
+}
+
+export function activateTrack(trackId: string): TrackRow {
+  const track = getTrack(trackId);
+  if (!track) throw new Error("track missing");
+  if (track.status === "archived") throw new Error("cannot activate archived track");
+  if (track.kind === "training") {
+    const current = activeTraining(track.user_id);
+    if (current && current.id !== trackId) {
+      throw new Error("active training exists — archive it first");
+    }
+  }
+  run("UPDATE tracks SET status = 'active', updated_at = ? WHERE id = ?", nowIso(), trackId);
+  return getTrack(trackId)!;
+}
+
+export function archiveTrack(trackId: string, reason: string): TrackRow {
+  const ts = nowIso();
+  run(
+    "UPDATE tracks SET status = 'archived', archive_reason = ?, archived_at = ?, updated_at = ? WHERE id = ?",
+    reason,
+    ts,
+    ts,
+    trackId,
+  );
+  return getTrack(trackId)!;
+}
+
+export function entryCount(trackId: string): number {
+  return (row<{ n: number }>("SELECT COUNT(*) AS n FROM entries WHERE track_id = ?", trackId)?.n ?? 0);
+}
+
+export function noteCount(trackId: string): number {
+  return (row<{ n: number }>("SELECT COUNT(*) AS n FROM notes WHERE track_id = ?", trackId)?.n ?? 0);
+}
+
+export function logEntry(input: {
+  trackId: string;
+  userId: string;
+  quantity?: Quantity | null;
+  quality?: string | null;
+  note?: string | null;
+  sessionRef?: string | null;
+  source: "heuristic" | "llm" | "user";
+  linqMessageId?: string | null;
+  occurredAt?: string;
+}): { id: string; duplicate: boolean } {
+  const id = randomUUID();
+  try {
+    run(
+      `INSERT INTO entries (id, track_id, user_id, occurred_at, quantity, quality, note, session_ref, source, linq_message_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      input.trackId,
+      input.userId,
+      input.occurredAt ?? nowIso(),
+      input.quantity ? JSON.stringify(input.quantity) : null,
+      input.quality ?? null,
+      input.note ?? null,
+      input.sessionRef ?? null,
+      input.source,
+      input.linqMessageId ?? null,
+      nowIso(),
+    );
+    return { id, duplicate: false };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (input.linqMessageId && /UNIQUE/i.test(msg)) return { id: "", duplicate: true };
+    throw err;
+  }
+}
+
+export function addNote(input: { userId: string; trackId?: string | null; kind: string; body: string }): string {
+  const id = randomUUID();
+  run(
+    "INSERT INTO notes (id, user_id, track_id, kind, body, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    id,
+    input.userId,
+    input.trackId ?? null,
+    input.kind,
+    input.body,
+    nowIso(),
+  );
+  return id;
+}
+
+export function recentEntries(userId: string, limit = 8): Record<string, unknown>[] {
+  return rows(
+    `SELECT e.id, e.occurred_at, e.quantity, e.quality, e.note, e.session_ref, t.slug, t.name, t.kind
+     FROM entries e JOIN tracks t ON t.id = e.track_id
+     WHERE e.user_id = ? ORDER BY e.occurred_at DESC LIMIT ?`,
+    userId,
+    limit,
+  );
+}
+
+export function recentNotes(userId: string, limit = 5): { kind: string; body: string; created_at: string }[] {
+  return rows("SELECT kind, body, created_at FROM notes WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", userId, limit);
+}
+
+export function lastRpeForLoadKey(userId: string, loadKey: string): string | null {
+  const rec = row<{ quality: string }>(
+    `SELECT e.quality FROM entries e
+     JOIN tracks t ON t.id = e.track_id
+     WHERE e.user_id = ? AND e.session_ref LIKE ? AND e.quality IS NOT NULL AND e.quality != 'hoppet'
+     ORDER BY e.occurred_at DESC LIMIT 1`,
+    userId,
+    `%${loadKey}%`,
+  );
+  return rec?.quality ?? null;
+}
+
+const RPE_MULT: Record<string, number> = { lett: 1.08, passe: 1, brutalt: 0.9 };
+
+export function nextSession(userId: string, track: TrackRow): { session: PlanSession; load: number | null; note: string | null } | null {
+  const plan = planOf(track);
+  if (!plan?.sessions?.length) return null;
+  const done = new Set(
+    rows<{ session_ref: string }>(
+      "SELECT session_ref FROM entries WHERE track_id = ? AND session_ref IS NOT NULL AND quality != 'hoppet'",
+      track.id,
+    )
+      .map((r) => r.session_ref)
+      .filter(Boolean),
+  );
+  const session = plan.sessions.find((s) => !done.has(s.id)) ?? null;
+  if (!session) return null;
+  let load = session.load ?? null;
+  let note: string | null = null;
+  if (load != null && session.loadKey) {
+    const prev = lastRpeForLoadKey(userId, session.loadKey);
+    const m = prev ? RPE_MULT[prev] : null;
+    if (m && m !== 1) {
+      const unit = session.unit === "km" ? Math.round(load * m * 2) / 2 : Math.round(load * m);
+      if (unit !== load) {
+        load = unit;
+        note = prev === "lett" ? "Forrige føltes lett — skrur opp litt." : "Forrige var hard — letter litt.";
+      }
+    }
+  }
+  return { session, load, note };
+}
+
+export function snapshot(user: UserRow) {
+  const tracks = listTracks(user.id).filter((t) => t.status !== "archived");
+  const training = activeTraining(user.id);
+  const draft = draftTraining(user.id);
+  const today = training ? nextSession(user.id, training) : null;
+  return {
+    facts: factsOf(user),
+    pending: pendingOf(user),
+    tracks: tracks.map((t) => ({
+      id: t.id,
+      kind: t.kind,
+      slug: t.slug,
+      name: t.name,
+      status: t.status,
+      version: t.version,
+      hasPlan: Boolean(t.plan),
+      entries: entryCount(t.id),
+    })),
+    activeTraining: training
+      ? { id: training.id, name: training.name, version: training.version }
+      : null,
+    draftTraining: draft ? { id: draft.id, name: draft.name, version: draft.version } : null,
+    today: today
+      ? {
+          id: today.session.id,
+          title: today.session.title,
+          load: today.load,
+          unit: today.session.unit,
+          items: (today.session.items ?? []).slice(0, 6),
+          est: today.session.est,
+          adaptNote: today.note,
+        }
+      : null,
+    recentEntries: recentEntries(user.id, 6),
+    recentNotes: recentNotes(user.id, 5),
+  };
+}

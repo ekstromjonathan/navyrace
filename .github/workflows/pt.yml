@@ -1,0 +1,25 @@
+name: PT tests
+
+on:
+  pull_request:
+  push:
+    paths:
+      - "pt/**"
+      - ".github/workflows/pt.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pt/package-lock.json
+      - run: npm ci
+        working-directory: pt
+      - run: npm test
+        working-directory: pt
+        env:
+          LINQ_API_TOKEN: test
