@@ -21,6 +21,7 @@ npm run preview  # server dist/ lokalt
 |-----|---------|
 | `index.html` | lodd.ai-landing — logo + to knapper |
 | `signup/index.html` | iMessage-signup (fullside) |
+| `vilkar/index.html` | Vilkår |
 | `app/index.html` | Navy Race-appen |
 | `src/NavyRaceTrainer.jsx` | Hele appen — programdata, økter, timer og CSS i én komponent |
 | `src/main.jsx` | React-rot, monterer appen |

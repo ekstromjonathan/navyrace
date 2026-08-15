@@ -23,6 +23,7 @@ export default defineConfig({
         main: resolve(root, "index.html"),
         app: resolve(root, "app/index.html"),
         signup: resolve(root, "signup/index.html"),
+        vilkar: resolve(root, "vilkar/index.html"),
       },
     },
   },
