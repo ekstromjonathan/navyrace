@@ -3,3 +3,8 @@ dist/
 .DS_Store
 *.local
 .vite/
+pt/data/
+pt/.env
+pt/*.sqlite
+pt/*.sqlite-wal
+pt/*.sqlite-shm
