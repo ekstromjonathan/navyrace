@@ -8,12 +8,26 @@ import type { Plan, TrackKind, UserRow } from "./types.ts";
 const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "get_snapshot",
-    description: "Les journalen: spor, dagens økt, siste logger, notater, påminnelser og korte siste meldinger. Kall først.",
+    description:
+      "Les journalen: facts, missingForPlan, spor, dagens økt, logger, notater, påminnelser. Kall tidlig. Dette er sannheten du bygger på.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "recall_chat",
+    description:
+      "Hent eldre meldinger fra dialogen (tilbake i tid). Bruk når brukeren sier de allerede har svart, «se i loggen», eller når facts mangler men de kan ha fortalt det før.",
+    input_schema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "1–40, default 20" },
+        contains: { type: "string", description: "Valgfri tekstfilter (f.eks. «dager», «kettlebell»)" },
+      },
+    },
+  },
+  {
     name: "log_entry",
-    description: "Logg noe brukeren gjorde (vane, restitusjon, eller hvordan en økt føltes: lett/passe/brutalt).",
+    description:
+      "Logg noe brukeren gjorde (vane, restitusjon, eller hvordan en økt føltes: lett/passe/brutalt). Etter en økt: logg innsats og juster neste.",
     input_schema: {
       type: "object",
       properties: {
@@ -32,7 +46,8 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   },
   {
     name: "add_note",
-    description: "Kort PT-notat (smerte, liv, mønster). Maks én-to setninger.",
+    description:
+      "Kort PT-notat du vil huske (smerte, liv, mønster, avklaring). Oppdater når noe endrer seg. Maks 1–2 setninger.",
     input_schema: {
       type: "object",
       properties: {
@@ -45,7 +60,8 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   },
   {
     name: "set_fact",
-    description: "Lagre et brukerfelt (mål, erfaring, hvem de vil bli, hvorfor, dager, utstyr, vekt, skade).",
+    description:
+      "Lagre/oppdater viktig brukerinfo med en gang de forteller det: goal, level (erfaring), identity, why, daysPerWeek (tall), equipment (liste), weightKg, injuries. Kall før du spør neste spørsmål. Oppdater hvis de endrer mening.",
     input_schema: {
       type: "object",
       additionalProperties: true,
@@ -69,14 +85,17 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "propose_plan",
     description:
-      "Be programmer-hatten skrive et treningsutkast (draft). Aktiveres ikke før brukeren skriver «kjør programmet». Fyll brief + uker/dager; sessions kan være tomme.",
+      "Lag treningsutkast (draft) via programmer-hatten. Kall så snart missingForPlan er tom — ikke spør «skal jeg lage?» hvis de allerede har bedt om program eller sagt ja. Presenter deretter uke 1 kort (titler), si at det justeres etter hvordan øktene føles, og be dem skrive «kjør programmet» for å låse.",
     input_schema: {
       type: "object",
       properties: {
         trackId: { type: "string" },
         weeks: { type: "number" },
         daysPerWeek: { type: "number" },
-        brief: { type: "string", description: "Mål, hvem de vil bli, hvorfor, utstyr, skader, erfaring — det programmeren trenger." },
+        brief: {
+          type: "string",
+          description: "Mål, hvem de vil bli, hvorfor, utstyr, skader, erfaring — det programmeren trenger.",
+        },
         sessions: {
           type: "array",
           items: {
@@ -155,32 +174,53 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   },
 ];
 
-function systemPrompt(lang: Lang, onboarding: boolean): string {
+function systemPrompt(lang: Lang, opts: { onboarding: boolean; firstContact: boolean }): string {
   const language = lang === "en" ? "English" : "Norwegian (bokmål)";
   const confirm =
     lang === "en"
       ? 'Activate with exactly “run the program”. Archive with exactly “archive and start new”.'
       : 'Aktiver med nøyaktig «kjør programmet». Arkiver med nøyaktig «arkiver og lag nytt».';
-  const onboard = onboarding
-    ? lang === "en"
-      ? `The journal is empty. This is first contact. Introduce yourself as ${env.coachName}, their iMessage PT. You keep a private log (training, food, habits, recovery) and can draft a program they must confirm. One short intro, then ask what they want from this. Early on, also ask (one at a time): training experience, who they want to become through training (identity — not just reps/kg), and why that matters to them. Use plain, informal language. Never use jargon or abbreviations like RPE, OCR, HIIT, zone 2 — say how hard it felt, obstacle race, intervals, easy conversational pace. Do not dump features. Do not invent history they haven't told you.`
-      : `Journalen er tom. Dette er første møte. Presenter deg som ${env.coachName}, PT over iMessage. Du fører en privat logg (trening, mat, vaner, restitusjon) og kan lage et program de må bekrefte. Én kort intro, så spør hva de vil ha ut av dette. Tidlig: spør (ett om gangen) om erfaring med trening, hvem de vil bli gjennom treningen (identitet — ikke bare reps/kg), og hvorfor det er viktig for dem. Bruk enkelt, uformelt språk. Aldri forkortelser eller jargon som RPE, OCR, HIIT, sone 2 — si hvordan det føltes, hinderløp, intervaller, rolig snakketempo. Ikke dump funksjoner. Ikke finn på historikk de ikke har fortalt.`
-    : "";
+
+  let onboard = "";
+  if (opts.firstContact) {
+    onboard =
+      lang === "en"
+        ? `First message ever. One short intro as ${env.coachName}, their iMessage PT — then ask what they want from training. Do not dump features.`
+        : `Første melding noensinne. Én kort intro som ${env.coachName}, PT over iMessage — så spør hva de vil ha ut av treningen. Ikke dump funksjoner.`;
+  } else if (opts.onboarding) {
+    onboard =
+      lang === "en"
+        ? `No locked program yet. Do NOT re-introduce yourself. Move fast to a draft: persist answers with set_fact immediately. Need goal (or identity), experience (level), daysPerWeek, equipment. identity/why are bonuses — if the goal already covers who they want to be / why, extract and save, don't ask again. When readyForPlan / missingForPlan is empty (or they ask for a program and you have enough), call propose_plan and present week 1.`
+        : `Ingen låst program ennå. IKKE presenter deg på nytt. Gå raskt mot utkast: lagre svar med set_fact med en gang. Trenger goal (eller identity), erfaring (level), daysPerWeek, equipment. identity/why er bonus — hvis målet allerede dekker hvem de vil bli / hvorfor, trekk ut og lagre, ikke spør om igjen. Når readyForPlan / missingForPlan er tom (eller de ber om program og du har nok), kall propose_plan og presentér uke 1.`;
+  }
+
   return `You are ${env.coachName}, a personal trainer over iMessage.
 
 Language: Reply only in ${language}. The user started in this language. Never switch. ${confirm}
 
-You do not own the truth — the journal does. Call get_snapshot before you advise.
-Recent messages are working memory for “yes/that/ok”, not truth.
-Max 4–6 lines. One next action. At most one question, and only if that field is missing for *this* decision.
-Don't dump the whole program. Send today / this week.
-When they want a new plan: collect what's missing, then call propose_plan (the programmer hat writes sessions). Don't invent a 10-week plan in chat.
-Don't delete or overwrite an active program. Use request_archive. Activation requires request_activate.
-Never hard-delete logs. When they ask to remove/delete a single log, call archive_entry. No double-confirm for one log.
-When they ask to be reminded (e.g. every day at 8): call set_reminder. Don't promise reminders without the tool. No nagging — one short ping, skip if a session is already logged.
-You are not a doctor. On pain: log it, ease load, refer to a professional if it lasts.
-No links unless they ask.
-No effects, no spam. Sound like a friend who knows training — plain words, no gym abbreviations the average person wouldn't get.
+## Memory (critical)
+- Journal facts/notes/entries are durable truth. Recent chat is evidence of what they already said.
+- Call get_snapshot early. If they say they already answered or “check the log”, call recall_chat — then set_fact from what you find. Never claim the log is empty if chat shows otherwise.
+- Whenever they tell you something important (goal, experience, days, gear, identity, why, injury), call set_fact / add_note before your next question. Update if they change their mind.
+- If something doesn't add up (contradiction, vague number, conflicting gear), ask one short clarifying question — then continue.
+
+## Speed to program
+- Prefer 1 missing field per turn. Don't stack identity + why + experience if goal was already rich.
+- Don't ask “should I make a program?” when they already said yes / “make a week plan” / readyForPlan is true — draft it.
+- After propose_plan: present week 1 titles briefly, say the plan adapts based on how training goes, and that they lock it with «kjør programmet» / “run the program”.
+
+## Training stance
+- Assume they want to train and will train. Never ask “are you training today?” / “do you have time to train?”. Present today's session (or the next step toward a plan).
+- After a session (they say done / finished / logged): ask how hard it felt — lett / passe / brutalt — and how it felt in the body. Log with log_entry (quality). Next similar session auto-adjusts.
+- When a plan is active: lead with today's session, not a check-in about motivation to show up.
+
+## Style
+- Max 4–6 lines. One next action. At most one question.
+- Plain, informal words. No jargon (RPE, OCR, HIIT, zone 2) — say how hard it felt, obstacle race, intervals, easy conversational pace.
+- Sound like a friend who knows training. Short ack, then move forward. No effects, no spam, no links unless asked.
+- You are not a doctor. On pain: log it, ease load, refer out if it lasts.
+- Don't invent history. Don't delete active programs — request_archive. Don't hard-delete logs — archive_entry.
+- Reminders only via set_reminder when they ask. One short ping; skip if a session is already logged.
 ${onboard}`.trim();
 }
 
@@ -243,6 +283,13 @@ async function runTool(
   switch (name) {
     case "get_snapshot":
       return JSON.stringify(await journal.snapshot(user));
+    case "recall_chat":
+      return JSON.stringify(
+        await journal.recallChat(user.id, {
+          limit: input.limit != null ? Number(input.limit) : 20,
+          contains: input.contains ? String(input.contains) : undefined,
+        }),
+      );
     case "log_entry": {
       const slug = String(input.slug);
       const kind = input.kind as TrackKind;
@@ -277,8 +324,18 @@ async function runTool(
         }),
       });
     case "set_fact": {
-      const { ...facts } = input;
-      return JSON.stringify(await journal.setFacts(user.id, facts));
+      const patch: Record<string, unknown> = { ...input };
+      if (patch.daysPerWeek != null) {
+        const n = Number(patch.daysPerWeek);
+        if (Number.isFinite(n)) patch.daysPerWeek = n;
+      }
+      if (typeof patch.equipment === "string") {
+        patch.equipment = patch.equipment
+          .split(/[,;/]| og /i)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      return JSON.stringify(await journal.setFacts(user.id, patch));
     }
     case "create_track": {
       const track = await journal.createTrack({
@@ -334,8 +391,13 @@ async function runTool(
         weeks: plan.weeks,
         daysPerWeek: plan.daysPerWeek,
         sessionCount: plan.sessions.length,
+        week1: plan.sessions.filter((s) => (s.week ?? 1) === 1).map((s) => s.title),
         titles: plan.sessions.slice(0, 8).map((s) => s.title),
         confirm: copy.activatePrompt(lang, track.name, plan.sessions.length),
+        adaptHint:
+          lang === "en"
+            ? "Tell them the plan adapts from how each session felt (easy / about right / brutal)."
+            : "Si at programmet tilpasses etter hvordan hver økt føles (lett / passe / brutalt).",
         writer: env.smartModel || env.model,
       });
     }
@@ -427,7 +489,8 @@ export async function runAgent(
   try {
     const snap = await journal.snapshot(user);
     const { recentChat: _chatInSnap, ...journalSnap } = snap;
-    const chat = await journal.recentChat(user.id, 8, messageId);
+    const chat = await journal.recentChat(user.id, 24, messageId);
+    const firstContact = chat.length === 0;
     const chatLines =
       chat.length === 0
         ? "(none yet)"
@@ -435,15 +498,15 @@ export async function runAgent(
     const messages: Anthropic.Messages.MessageParam[] = [
       {
         role: "user",
-        content: `Recent messages (working memory, not truth):\n${chatLines}\n\nJournal (short):\n${JSON.stringify({ ...journalSnap, fresh: opts.onboarding, locale: opts.lang })}\n\nUser message:\n${body}`,
+        content: `Recent messages (what they already said — use recall_chat if you need older turns):\n${chatLines}\n\nJournal:\n${JSON.stringify({ ...journalSnap, fresh: opts.onboarding, firstContact, locale: opts.lang })}\n\nUser message:\n${body}`,
       },
     ];
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       const res = await client.messages.create({
         model: env.model,
-        max_tokens: 800,
-        system: systemPrompt(opts.lang, opts.onboarding),
+        max_tokens: 900,
+        system: systemPrompt(opts.lang, { onboarding: opts.onboarding, firstContact }),
         tools: TOOLS,
         messages,
       });

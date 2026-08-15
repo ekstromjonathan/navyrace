@@ -586,8 +586,8 @@ export async function recentNotes(
   return (data ?? []) as { kind: string; body: string; created_at: string }[];
 }
 
-const MAX_LOG_CHARS = 500;
-const MAX_LOG_ROWS = 50;
+const MAX_LOG_CHARS = 800;
+const MAX_LOG_ROWS = 100;
 
 export async function logMessage(
   userId: string,
@@ -638,6 +638,27 @@ export async function recentChat(
   if (!excludeLinqMessageId) return chronological.slice(-limit);
   return chronological
     .filter((m) => !(m.role === "user" && m.linq_message_id === excludeLinqMessageId))
+    .slice(-limit);
+}
+
+/** Look further back in the rolling chat log. Optional substring filter (case-insensitive). */
+export async function recallChat(
+  userId: string,
+  opts: { limit?: number; contains?: string } = {},
+): Promise<ChatTurn[]> {
+  const limit = Math.min(40, Math.max(1, opts.limit ?? 20));
+  const needle = opts.contains?.trim().toLowerCase();
+  if (!needle) return recentChat(userId, limit);
+  const { data, error } = await getSupabase()
+    .from("message_log")
+    .select("role, body, linq_message_id, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  throwIf(error);
+  return ([...(data ?? [])] as ChatTurn[])
+    .filter((m) => m.body.toLowerCase().includes(needle))
+    .reverse()
     .slice(-limit);
 }
 
@@ -732,9 +753,9 @@ export async function snapshot(user: UserRow) {
           adapt: today.adapt,
         }
       : null,
-    recentEntries: await recentEntries(user.id, 6),
-    recentNotes: await recentNotes(user.id, 5),
-    recentChat: await recentChat(user.id, 8),
+    recentEntries: await recentEntries(user.id, 8),
+    recentNotes: await recentNotes(user.id, 8),
+    recentChat: await recentChat(user.id, 24),
     reminders: (await listReminders(user.id))
       .filter((r) => r.enabled === 1)
       .map((r) => ({

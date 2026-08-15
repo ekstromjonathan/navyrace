@@ -1,6 +1,7 @@
 import { journalBackend } from "./db.ts";
 import * as sqlite from "./journal-sqlite.ts";
 import * as supabase from "./journal-supabase.ts";
+import { missingForPlan, readyForPlan } from "./plan-facts.ts";
 import type {
   Pending,
   Plan,
@@ -222,6 +223,13 @@ export async function recentChat(
   return asAsync(api().recentChat(userId, limit, excludeLinqMessageId));
 }
 
+export async function recallChat(
+  userId: string,
+  opts: { limit?: number; contains?: string } = {},
+): Promise<import("./types.ts").ChatTurn[]> {
+  return asAsync(api().recallChat(userId, opts));
+}
+
 export async function lastRpeForLoadKey(userId: string, loadKey: string): Promise<string | null> {
   return asAsync(api().lastRpeForLoadKey(userId, loadKey));
 }
@@ -234,7 +242,13 @@ export async function nextSession(
 }
 
 export async function snapshot(user: UserRow) {
-  return asAsync(api().snapshot(user));
+  const snap = await asAsync(api().snapshot(user));
+  const facts = factsOf(user);
+  return {
+    ...snap,
+    missingForPlan: missingForPlan(facts),
+    readyForPlan: readyForPlan(facts),
+  };
 }
 
 export async function upsertReminder(

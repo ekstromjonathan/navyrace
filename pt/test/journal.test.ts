@@ -88,12 +88,18 @@ describe("journal", () => {
     const withoutCurrent = await journal.recentChat(chatUser.id, 8, "m-ja");
     assert.equal(withoutCurrent.at(-1)?.body, "Styrke A i dag.");
     assert.equal((await journal.snapshot(chatUser)).recentChat.length, 3);
+    assert.equal((await journal.snapshot(chatUser)).readyForPlan, false);
+    assert.ok((await journal.snapshot(chatUser)).missingForPlan.includes("goal"));
 
     for (let i = 0; i < 60; i++) await journal.logMessage(chatUser.id, "user", `n${i}`, `m-${i}`);
     const kept = await journal.recentChat(chatUser.id, 100);
-    assert.equal(kept.length, 50);
-    assert.equal(kept[0]?.body, "n10");
+    assert.equal(kept.length, 63);
+    assert.equal(kept[0]?.body, "hvilken økt?");
     assert.equal(kept.at(-1)?.body, "n59");
+
+    const recalled = await journal.recallChat(chatUser.id, { contains: "n5", limit: 5 });
+    assert.ok(recalled.every((m) => m.body.includes("n5")));
+    assert.ok(recalled.length >= 1);
   });
 
   it("stores a daily train reminder and can disable it", async () => {
