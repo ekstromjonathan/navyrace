@@ -59,8 +59,6 @@ nameInput?.addEventListener("input", syncFilled);
 phoneInput?.addEventListener("input", syncFilled);
 requestAnimationFrame(syncFilled);
 
-queueMicrotask(() => nameInput?.focus());
-
 form?.addEventListener("submit", (event) => {
   event.preventDefault();
   const name = String(nameInput?.value || "").trim();

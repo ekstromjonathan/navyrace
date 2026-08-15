@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="light" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="description" content="lodd.ai — a personal trainer in iMessage." />
+    <meta name="description" content="lodd.ai — a personal trainer in  iMessage." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,21 +16,54 @@
     <title>lodd.ai</title>
   </head>
   <body>
-    <main class="stage">
-      <header class="brand">
-        <h1 class="mark">lodd.ai</h1>
-        <p class="tagline" data-i18n="slogan">A personal trainer in iMessage.</p>
+    <main class="stage stage-signup">
+      <header class="signup-head">
+        <p class="mark">lodd.ai</p>
+        <h1 data-i18n="signupTitle">Get your trainer in  iMessage</h1>
+        <p data-i18n="signupLead">You text. Your trainer texts back.</p>
       </header>
-      <nav class="actions" data-i18n-aria="choose" aria-label="Choose">
-        <a class="btn btn-ghost" href="./app/" data-i18n="tryBrowser">Try in browser</a>
-        <a class="btn btn-solid" href="./signup/" data-i18n="signupCta">Sign up for iMessage</a>
-      </nav>
+      <form class="signup-form" id="signup-form">
+        <div class="field-block">
+          <label class="field">
+            <input
+              id="pt-name"
+              name="name"
+              type="text"
+              autocomplete="name"
+              placeholder=" "
+              maxlength="80"
+              required
+            />
+            <span class="field-label" data-i18n="name">Name</span>
+          </label>
+          <label class="field">
+            <input
+              id="pt-phone"
+              name="phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="+47"
+              maxlength="20"
+              required
+            />
+            <span class="field-label" data-i18n="phone">Phone</span>
+          </label>
+        </div>
+        <button class="btn btn-solid" type="submit" data-i18n="send">Send  iMessage</button>
+        <p class="legal">
+          <span data-i18n="consent">By sending, you agree to be contacted.</span>
+          <a href="./vilkar/" data-i18n="terms">Terms</a>
+        </p>
+        <p class="form-note" data-pt-status hidden></p>
+      </form>
+      <a class="btn btn-ghost" href="./app/" data-i18n="tryApp">Try the app instead</a>
     </main>
     <p class="lang" role="group" data-i18n-aria="language" aria-label="Language">
       <button type="button" data-lang="no">no</button>
       <span aria-hidden="true">/</span>
       <button type="button" data-lang="en">en</button>
     </p>
-    <script type="module" src="/src/i18n.js"></script>
+    <script type="module" src="/src/lodd.js"></script>
   </body>
 </html>
