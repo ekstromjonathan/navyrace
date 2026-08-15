@@ -340,6 +340,7 @@ body {
   align-items: stretch;
   gap: 32px;
   padding-top: 72px;
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
 }
 
 .legal-doc {
