@@ -72,15 +72,15 @@ export function noEntryToArchive(lang: Lang): string {
 export function activatePrompt(lang: Lang, name: string, sessionCount: number): string {
   if (lang === "en") {
     return [
-      `The draft “${name}” has ${sessionCount} sessions.`,
-      "Once you lock it, that's the plan I follow.",
-      'Write exactly “run the program” to activate. Anything else cancels.',
+      `Draft “${name}” — ${sessionCount} sessions.`,
+      "It adapts from how each session felt (easy / about right / brutal).",
+      'Write exactly “run the program” to lock it in. Anything else cancels.',
     ].join("\n");
   }
   return [
-    `Utkastet «${name}» har ${sessionCount} økter.`,
-    "Når du låser det, er det den planen jeg forholder meg til.",
-    'Skriv nøyaktig «kjør programmet» for å aktivere. Alt annet avbryter.',
+    `Utkast «${name}» — ${sessionCount} økter.`,
+    "Det tilpasses etter hvordan hver økt føles (lett / passe / brutalt).",
+    'Skriv nøyaktig «kjør programmet» for å låse. Alt annet avbryter.',
   ].join("\n");
 }
 
@@ -101,8 +101,8 @@ export function archivePrompt(lang: Lang, name: string, entryCount: number, note
 
 export function activated(lang: Lang): string {
   return lang === "en"
-    ? "Program is locked. Say “what am I training today” when you're ready."
-    : "Programmet er låst. Si «hva trener jeg i dag» når du er klar.";
+    ? "Program is locked. Here's today's session — say easy / about right / brutal when you're done so I can tune the next one."
+    : "Programmet er låst. Her er dagens økt — si lett / passe / brutalt når du er ferdig, så justerer jeg neste.";
 }
 
 export function activateFailed(lang: Lang, detail: string): string {
@@ -131,8 +131,8 @@ export function savedField(lang: Lang, field: string): string {
 
 export function todayNoPlan(lang: Lang): string {
   return lang === "en"
-    ? "No active training plan yet. Tell me what you're aiming for, training experience, days per week and gear — I'll draft something you have to confirm."
-    : "Ingen aktiv treningsplan ennå. Fortell hva du styrer mot, erfaring med trening, dager i uka og utstyr — så lager jeg et utkast du må bekrefte.";
+    ? "No active plan yet. Tell me goal, training experience, days per week and gear — I'll draft a week you confirm, and we'll tune it from how sessions feel."
+    : "Ingen aktiv plan ennå. Fortell mål, erfaring, dager i uka og utstyr — så lager jeg et utkast du bekrefter, og vi justerer etter hvordan øktene føles.";
 }
 
 export function todayDraft(lang: Lang, name: string): string {
@@ -148,7 +148,9 @@ export function todayDone(lang: Lang, name: string): string {
 }
 
 export function todayFooter(lang: Lang): string {
-  return lang === "en" ? "Say easy / ok / brutal when you're done." : "Si lett / passe / brutalt når du er ferdig.";
+  return lang === "en"
+    ? "When you're done: how hard was it, and how did it feel? (easy / about right / brutal)"
+    : "Når du er ferdig: hvor hardt var det, og hvordan føltes det? (lett / passe / brutalt)";
 }
 
 export function adaptNote(lang: Lang, prev: string): string {
@@ -160,8 +162,8 @@ export function adaptNote(lang: Lang, prev: string): string {
 
 export function reminderPingNoPlan(lang: Lang): string {
   return lang === "en"
-    ? "Reminder — you wanted to train today. What do you have time for?"
-    : "Påminnelse — du ville trene i dag. Hva har du tid til?";
+    ? "Training day. Tell me goal, experience, days and gear — I'll put a week together."
+    : "Treningsdag. Fortell mål, erfaring, dager og utstyr — så setter jeg sammen ei uke.";
 }
 
 export function reminderPingDone(lang: Lang, name: string): string {
@@ -172,9 +174,9 @@ export function reminderPingDone(lang: Lang, name: string): string {
 
 export function reminderPingToday(lang: Lang, line: string): string {
   if (lang === "en") {
-    return [`Reminder — training today.`, line, 'Say “what am I training today” when you start.'].join("\n");
+    return [`Training today.`, line, "Say easy / about right / brutal when you're done."].join("\n");
   }
-  return [`Påminnelse — trening i dag.`, line, "Si «hva trener jeg i dag» når du starter."].join("\n");
+  return [`Trening i dag.`, line, "Si lett / passe / brutalt når du er ferdig."].join("\n");
 }
 
 export function handlerError(lang: Lang): string {

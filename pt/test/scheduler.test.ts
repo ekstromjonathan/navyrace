@@ -32,7 +32,7 @@ describe("scheduler", () => {
       sent.push(body);
     });
     assert.equal(n, 1);
-    assert.match(sent[0] ?? "", /Påminnelse/);
+    assert.match(sent[0] ?? "", /Trening/);
     const again = await fireDueReminders(at805, async () => {
       sent.push("nope");
     });

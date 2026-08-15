@@ -68,7 +68,8 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
       try {
         await journal.activateTrack(pending.trackId);
         await journal.setPending(user.id, null);
-        return copy.activated(lang);
+        const today = await formatToday(user, lang);
+        return `${copy.activated(lang)}\n\n${today}`;
       } catch (e) {
         await journal.setPending(user.id, null);
         return copy.activateFailed(lang, e instanceof Error ? e.message : "");

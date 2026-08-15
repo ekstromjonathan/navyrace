@@ -88,12 +88,31 @@ describe("journal", () => {
     const withoutCurrent = await journal.recentChat(chatUser.id, 8, "m-ja");
     assert.equal(withoutCurrent.at(-1)?.body, "Styrke A i dag.");
     assert.equal((await journal.snapshot(chatUser)).recentChat.length, 3);
+    assert.equal((await journal.snapshot(chatUser)).readyForPlan, false);
+    assert.ok((await journal.snapshot(chatUser)).missingForPlan.includes("goal"));
 
     for (let i = 0; i < 60; i++) await journal.logMessage(chatUser.id, "user", `n${i}`, `m-${i}`);
     const kept = await journal.recentChat(chatUser.id, 100);
-    assert.equal(kept.length, 50);
-    assert.equal(kept[0]?.body, "n10");
+    assert.equal(kept.length, 63);
+    assert.equal(kept[0]?.body, "hvilken økt?");
     assert.equal(kept.at(-1)?.body, "n59");
+
+    const recalled = await journal.recallChat(chatUser.id, { contains: "n5", limit: 5 });
+    assert.ok(recalled.some((m) => m.body.includes("n5")));
+    // Keyword hits stay, and recent context is kept alongside them.
+    assert.ok(recalled.length >= 1);
+    assert.ok(recalled.at(-1)?.body === "n59" || recalled.some((m) => /^n5/.test(m.body)));
+  });
+
+  it("recall_chat keeps nearby user answers when searching a PT keyword", async () => {
+    const u = await journal.upsertUser("chat-recall-ctx", "+4740343299");
+    await journal.logMessage(u.id, "pt", "Hvor mange dager i uka kan du trene?");
+    await journal.logMessage(u.id, "user", "Tenker 3-4 ganger kanskje?", "m-days");
+    await journal.logMessage(u.id, "pt", "Har du noe utstyr?");
+    await journal.logMessage(u.id, "user", "Ja, har kettlebell og ringer", "m-gear");
+    const hit = await journal.recallChat(u.id, { contains: "dager", limit: 10 });
+    assert.ok(hit.some((m) => /dager/i.test(m.body)));
+    assert.ok(hit.some((m) => /3-4 ganger/i.test(m.body)), "user answer must stay visible next to dager");
   });
 
   it("stores a daily train reminder and can disable it", async () => {

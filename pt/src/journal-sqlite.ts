@@ -424,8 +424,8 @@ export function recentNotes(userId: string, limit = 5): { kind: string; body: st
   return rows("SELECT kind, body, created_at FROM notes WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", userId, limit);
 }
 
-const MAX_LOG_CHARS = 500;
-const MAX_LOG_ROWS = 50;
+const MAX_LOG_CHARS = 800;
+const MAX_LOG_ROWS = 100;
 
 export function logMessage(
   userId: string,
@@ -469,6 +469,43 @@ export function recentChat(userId: string, limit = 8, excludeLinqMessageId?: str
   return chronological
     .filter((m) => !(m.role === "user" && m.linq_message_id === excludeLinqMessageId))
     .slice(-limit);
+}
+
+/** Look further back in the rolling chat log. Optional substring filter (case-insensitive). */
+export function recallChat(
+  userId: string,
+  opts: { limit?: number; contains?: string } = {},
+): ChatTurn[] {
+  const limit = Math.min(40, Math.max(1, opts.limit ?? 20));
+  const terms = (opts.contains ?? "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+
+  const recent = recentChat(userId, limit);
+  if (terms.length === 0) return recent;
+
+  const list = rows<ChatTurn>(
+    `SELECT role, body, linq_message_id, created_at FROM message_log
+     WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 100`,
+    userId,
+  );
+  const matched = list.filter((m) => {
+    const body = m.body.toLowerCase();
+    return terms.some((t) => body.includes(t));
+  });
+
+  // Keep recent context even when the keyword only appears in PT questions,
+  // so user answers like «3-4 ganger» still show up next to «dager».
+  const byKey = new Map<string, ChatTurn>();
+  for (const m of [...matched.reverse(), ...recent]) {
+    const key = `${m.created_at}|${m.role}|${m.body}`;
+    byKey.set(key, m);
+  }
+  return [...byKey.values()]
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .slice(-Math.max(limit, Math.min(40, matched.length + recent.length)));
 }
 
 export function lastRpeForLoadKey(userId: string, loadKey: string): string | null {
@@ -548,9 +585,9 @@ export function snapshot(user: UserRow) {
           adapt: today.adapt,
         }
       : null,
-    recentEntries: recentEntries(user.id, 6),
-    recentNotes: recentNotes(user.id, 5),
-    recentChat: recentChat(user.id, 8),
+    recentEntries: recentEntries(user.id, 8),
+    recentNotes: recentNotes(user.id, 8),
+    recentChat: recentChat(user.id, 24),
     reminders: listReminders(user.id).filter((r) => r.enabled === 1).map((r) => ({
       kind: r.kind,
       hour: r.hour,
