@@ -6,18 +6,40 @@ import * as cloud from "./cloud.js";
 const COACH_PRESETS = ["MAI", "Kai", "Nora"];
 
 const GOALS = [
-  { kind: "navy_race", label: "Hinderløp / OCR" },
+  { kind: "navy_race", label: "Hinderløp" },
   { kind: "run_5_10", label: "5–10 km løp" },
-  { kind: "strength_obstacle", label: "Styrke & funksjonelt" },
-  { kind: "general", label: "Generell form" },
+  { kind: "strength_obstacle", label: "Styrke og funksjonelt" },
+  { kind: "general", label: "Bare komme i form" },
   { kind: "general", label: "Annet", other: true },
 ];
 
+/* Experience — plain language, not gym jargon. */
 const LEVELS = [
-  { id: "new", label: "Ny" },
-  { id: "some", label: "Har trent litt" },
-  { id: "solid", label: "Solid base" },
-  { id: "other_sport", label: "Annen idrett" },
+  { id: "new", label: "Helt fersk" },
+  { id: "some", label: "Har trent litt før" },
+  { id: "solid", label: "Trener jevnlig" },
+  { id: "other_sport", label: "Annen idrett i bakgrunn" },
+];
+
+/*
+ * Identity-based habits (Clear) + self-determination theory:
+ * lasting change sticks better when people name who they want to become
+ * and why it matters to them — not only outcome numbers (reps, kg, pace).
+ */
+const IDENTITIES = [
+  { id: "show_up", label: "En som møter opp" },
+  { id: "stronger", label: "Sterkere og mer utholdende" },
+  { id: "race_ready", label: "Klar for hinderløpet" },
+  { id: "everyday", label: "I bedre form i hverdagen" },
+  { id: "other", label: "Noe annet", other: true },
+];
+
+const WHYS = [
+  { id: "feel_strong", label: "Føle meg sterkere" },
+  { id: "proud", label: "Mestre noe jeg er stolt av" },
+  { id: "energy", label: "Ha mer energi" },
+  { id: "prove", label: "Bevise for meg selv at jeg klarer det" },
+  { id: "other", label: "Noe annet", other: true },
 ];
 
 const EQUIP = [
@@ -32,7 +54,8 @@ const EQUIP = [
 ];
 
 const WEEKS = [4, 6, 8, 10, 12];
-const CORE_TURNS = 4; /* goal, schedule, level, equip — brand is soft intro */
+/* goal, identity, schedule, experience, equip — brand is soft intro */
+const CORE_TURNS = 5;
 
 let msgSeq = 0;
 function mid() {
@@ -54,9 +77,19 @@ function resolvePeriod(d) {
 
 function periodLabel(d) {
   const p = resolvePeriod(d);
-  if (p.periodMode === "ongoing") return "kontinuerlig";
-  if (p.periodMode === "date") return `til ${p.date} (~${p.weeks} uker)`;
+  if (p.periodMode === "ongoing") return "uten sluttdato";
+  if (p.periodMode === "date") return `til ${p.date} (ca. ${p.weeks} uker)`;
   return `${p.weeks} uker`;
+}
+
+function identityLabel(d) {
+  if (d.identityOther?.trim()) return d.identityOther.trim();
+  return IDENTITIES.find((i) => i.id === d.identityId && !i.other)?.label || d.identityLabel || "";
+}
+
+function whyLabel(d) {
+  if (d.whyOther?.trim()) return d.whyOther.trim();
+  return WHYS.find((w) => w.id === d.whyId && !w.other)?.label || d.whyLabel || "";
 }
 
 /** @returns profile object ready to persist */
@@ -68,6 +101,8 @@ export function buildProfileFromDraft(d) {
     coachName,
   };
   const period = resolvePeriod(d);
+  const who = identityLabel(d);
+  const why = whyLabel(d);
   return {
     brand,
     goal: {
@@ -79,6 +114,8 @@ export function buildProfileFromDraft(d) {
     },
     startedAt: Date.now(),
     level: d.level || "some",
+    identity: who || null,
+    why: why || null,
     schedule: {
       daysPerWeek: d.daysPerWeek || 4,
       mode: d.mode || "flexible",
@@ -91,10 +128,12 @@ export function buildProfileFromDraft(d) {
     coachSummary: [
       brand.coachName,
       d.goalLabel || d.goalKind,
+      who,
+      why,
       periodLabel(d),
-      `${d.daysPerWeek || 4} d/uke`,
+      `${d.daysPerWeek || 4} dager i uka`,
       d.mode === "calendar" ? "faste ukedager" : "når det passer",
-      d.level,
+      LEVELS.find((l) => l.id === d.level)?.label || d.level,
     ].filter(Boolean).join(" · "),
   };
 }
@@ -137,6 +176,14 @@ const EMPTY_DRAFT = {
   daysPerWeek: 4,
   mode: "flexible",
   level: null,
+  identityId: null,
+  identityLabel: "",
+  identityOther: "",
+  pickingIdentityOther: false,
+  whyId: null,
+  whyLabel: "",
+  whyOther: "",
+  pickingWhyOther: false,
   equipment: ["bodyweight"],
   bodyWeight: "",
   bodyHeight: "",
@@ -206,7 +253,7 @@ export function Coach({
   }, []);
 
   const OPENING =
-    "Hei! La oss sette opp et treningsprogram til deg. Først — hva vil du kalle meg?";
+    "Hei! La oss lage et treningsopplegg som passer deg. Først — hva vil du kalle meg?";
 
   /* Boot: opening lines (guard against StrictMode double-mount). */
   useEffect(() => {
@@ -238,7 +285,7 @@ export function Coach({
         }
         setBusy(false);
         await pushCoach(
-          "Fant ingen lagret plan på den kontoen. La oss sette opp et nytt — hva vil du kalle meg?",
+          "Fant ingen lagret plan på den kontoen. Da lager vi en ny — hva vil du kalle meg?",
           420,
         );
         setTurn("name");
@@ -260,13 +307,13 @@ export function Coach({
     let cancelled = false;
     (async () => {
       setBusy(true);
-      await pushCoach("Du er inne — planen er trygg. Klar for første økt.", 360);
+      await pushCoach("Du er inne — planen er trygg. Klar for første økt?", 360);
       if (!cancelled) enterApp();
     })();
     return () => { cancelled = true; };
   }, [user, turn, pushCoach]);
 
-  const coreDone = d.goalKind && d.level && d.equipment.length > 0;
+  const coreDone = d.goalKind && d.identityId && d.level && d.equipment.length > 0;
 
   async function chooseCoachName(name) {
     const c = (name || "").trim() || "MAI";
@@ -275,7 +322,7 @@ export function Coach({
     pushUser(c);
     setTurn("wait");
     await pushCoach(
-      `Hyggelig — jeg er ${c}. Hva trener du mot? Periode er valgfritt — standard er kontinuerlig tracking uten deadline.`,
+      `Hyggelig — jeg er ${c}. Hva trener du mot? Du trenger ikke en sluttdato — vi kan bare holde det gående.`,
       480,
     );
     setTurn("goal");
@@ -286,7 +333,7 @@ export function Coach({
     setTurn("wait");
     if (!cloudEnabled) {
       await pushCoach(
-        "Sky-synk er ikke satt opp på denne enheten, så jeg kan ikke hente et program via e-post. Sett opp et nytt — hva vil du kalle meg?",
+        "Sky-lagring er ikke satt opp her, så jeg får ikke hentet et program via e-post. Da lager vi et nytt — hva vil du kalle meg?",
         500,
       );
       setTurn("name");
@@ -333,7 +380,22 @@ export function Coach({
     pushUser(`${label} · ${when}`);
     setTurn("wait");
     await pushCoach(
-      `${label} ${when} — notert. Hvor mange dager i uka er realistisk? Og vil du ha faste ukedager (mandagsøkt på mandag), eller ta neste økt når det passer deg?`,
+      `${label} ${when} — notert. Før vi snakker reps og dager: hvem er det du vil bli gjennom treningen? Og hvorfor er det viktig for deg?`,
+      560,
+    );
+    setTurn("identity");
+  }
+
+  async function afterIdentity() {
+    const cur = draft.current;
+    const who = identityLabel(cur) || "den du vil bli";
+    const why = whyLabel(cur);
+    pushUser(why ? `${who} · ${why}` : who);
+    setTurn("wait");
+    await pushCoach(
+      why
+        ? `Da styrer vi mot «${who}» fordi du vil ${why.toLowerCase()}. Hvor mange dager i uka er realistisk? Og vil du ha faste ukedager, eller ta neste økt når det passer?`
+        : `Da styrer vi mot «${who}». Hvor mange dager i uka er realistisk? Og vil du ha faste ukedager, eller ta neste økt når det passer?`,
       560,
     );
     setTurn("schedule");
@@ -345,7 +407,7 @@ export function Coach({
     pushUser(`${cur.daysPerWeek} dager · ${modeLabel}`);
     setTurn("wait");
     await pushCoach(
-      `${cur.daysPerWeek} dager, ${modeLabel}. Nivå akkurat nå — helt ærlig?`,
+      `${cur.daysPerWeek} dager, ${modeLabel}. Hvor vant er du til å trene — ærlig talt?`,
       480,
     );
     setTurn("level");
@@ -359,7 +421,7 @@ export function Coach({
       ? "Da starter vi rolig og bygger opp."
       : levelId === "solid"
         ? "Da kan vi presse litt mer."
-        : "Bra — da tilpasser vi dosen etter hvert.";
+        : "Bra — da tilpasser vi etter hvert.";
     await pushCoach(
       `${lvl?.label}. ${nudge} Hva har du tilgang til? Velg alt som gjelder — trykk «Ferdig» når du er klar.`,
       560,
@@ -375,7 +437,7 @@ export function Coach({
     pushUser(labels.join(" · ") || "Kroppsvekt");
     setTurn("wait");
     await pushCoach(
-      "To ting til hvis du vil ha skarpere dose — vekt og høyde. Ellers hopper vi til oppsummering.",
+      "To ting til hvis du vil at planen skal treffe bedre — vekt og høyde. Ellers hopper vi til oppsummering.",
       500,
     );
     setTurn("extras");
@@ -394,6 +456,8 @@ export function Coach({
     setTurn("wait");
     const cur = draft.current;
     const goal = cur.pickingOther && cur.otherLabel ? cur.otherLabel : cur.goalLabel;
+    const who = identityLabel(cur);
+    const why = whyLabel(cur);
     const lvl = LEVELS.find((l) => l.id === cur.level)?.label;
     const mode = cur.mode === "calendar" ? "faste ukedager" : "når det passer";
     const eq = cur.equipment
@@ -401,8 +465,10 @@ export function Coach({
       .filter(Boolean)
       .slice(0, 4)
       .join(", ");
+    const whoBit = who ? `, som «${who}»` : "";
+    const whyBit = why ? ` fordi du vil ${why.toLowerCase()}` : "";
     await pushCoach(
-      `Sånn hørte jeg deg: ${goal} ${periodLabel(cur)}, ${cur.daysPerWeek} dager ${mode}, nivå «${lvl}», med ${eq || "det du har"}. Stemmer det?`,
+      `Sånn hørte jeg deg: ${goal} ${periodLabel(cur)}${whoBit}${whyBit}, ${cur.daysPerWeek} dager ${mode}, erfaring «${lvl}», med ${eq || "det du har"}. Stemmer det?`,
       640,
     );
     setTurn("summary");
@@ -427,7 +493,7 @@ export function Coach({
     pushUser("Ja — bygg programmet mitt");
     setTurn("wait");
     await pushCoach(
-      "Programmet er klart. Vil du bare tracke på denne enheten, eller lagre med e-post så informasjonen ikke forsvinner hvis du bytter telefon?",
+      "Programmet er klart. Vil du bare følge det på denne telefonen, eller lagre med e-post så det ikke forsvinner hvis du bytter telefon?",
       520,
     );
     setTurn("sync_choice");
@@ -437,7 +503,7 @@ export function Coach({
     pushUser("Bare denne enheten");
     setTurn("wait");
     await pushCoach(
-      "Greit — planen ligger her lokalt. Du kan slå på lagring senere via sky-ikonet. Klar for første økt.",
+      "Greit — planen ligger her på telefonen. Du kan slå på lagring senere via sky-ikonet. Klar for første økt?",
       420,
     );
     enterApp();
@@ -448,14 +514,14 @@ export function Coach({
     setTurn("wait");
     if (!cloudEnabled) {
       await pushCoach(
-        "Lagring via e-post er ikke satt opp på denne enheten ennå. Vi kjører lokalt — du kan prøve sky-ikonet senere. Klar for første økt.",
+        "Lagring via e-post er ikke satt opp her ennå. Vi kjører lokalt — du kan prøve sky-ikonet senere. Klar for første økt?",
         480,
       );
       enterApp();
       return;
     }
     if (user) {
-      await pushCoach("Du er allerede innlogget — jeg synker planen nå. Klar for første økt.", 400);
+      await pushCoach("Du er allerede innlogget — jeg synker planen nå. Klar for første økt?", 400);
       enterApp();
       return;
     }
@@ -508,8 +574,13 @@ export function Coach({
     }, 40);
   }
 
-  const answered = [d.goalKind, d.daysPerWeek && d.mode, d.level, d.equipment.length]
-    .filter(Boolean).length;
+  const answered = [
+    d.goalKind,
+    d.identityId,
+    d.daysPerWeek && d.mode,
+    d.level,
+    d.equipment.length,
+  ].filter(Boolean).length;
   const dots = Math.min(answered, CORE_TURNS);
 
   return (
@@ -666,7 +737,7 @@ export function Coach({
                   on={d.periodMode === "ongoing"}
                   onClick={() => set({ periodMode: "ongoing", goalDate: "" })}
                 >
-                  Kontinuerlig
+                  Uten sluttdato
                 </Chip>
                 <Chip
                   on={d.periodMode === "weeks"}
@@ -683,7 +754,7 @@ export function Coach({
               </div>
               {d.periodMode === "ongoing" && (
                 <p style={{ marginTop: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.45 }}>
-                  Ingen deadline — du tracker videre i rullerende blokker. Bra når målet bare er å holde seg i form.
+                  Ingen deadline — du bare fortsetter. Bra når målet er å holde seg i form.
                 </p>
               )}
               {d.periodMode === "weeks" && (
@@ -706,7 +777,7 @@ export function Coach({
                     onChange={(e) => set({ goalDate: e.target.value, periodMode: "date" })}
                   />
                   {d.goalDate && weeksFromDate(d.goalDate) && (
-                    <div className="ob-hint mono">≈ {weeksFromDate(d.goalDate)} uker fra i dag</div>
+                    <div className="ob-hint mono">ca. {weeksFromDate(d.goalDate)} uker fra i dag</div>
                   )}
                 </>
               )}
@@ -719,6 +790,111 @@ export function Coach({
                   || (d.periodMode === "weeks" && !d.weeks)
                 }
                 onClick={afterGoal}
+              >
+                Send til {coach}
+              </button>
+            </>
+          )}
+
+          {turn === "identity" && !busy && (
+            <>
+              <div className="ob-label">Hvem vil du bli?</div>
+              <div className="ob-chips">
+                {IDENTITIES.map((item) => {
+                  const selected = item.other
+                    ? d.pickingIdentityOther
+                    : d.identityId === item.id && !d.pickingIdentityOther;
+                  return (
+                    <Chip
+                      key={item.id}
+                      on={selected}
+                      onClick={() => {
+                        if (item.other) {
+                          set({
+                            identityId: "other",
+                            identityLabel: d.identityOther || "Noe annet",
+                            pickingIdentityOther: true,
+                          });
+                        } else {
+                          set({
+                            identityId: item.id,
+                            identityLabel: item.label,
+                            identityOther: "",
+                            pickingIdentityOther: false,
+                          });
+                        }
+                      }}
+                    >
+                      {item.label}
+                    </Chip>
+                  );
+                })}
+              </div>
+              {d.pickingIdentityOther && (
+                <input
+                  className="tinput"
+                  style={{ marginTop: 10 }}
+                  placeholder="Skriv med egne ord — f.eks. «en som ikke gir opp»"
+                  value={d.identityOther}
+                  onChange={(e) => set({
+                    identityOther: e.target.value,
+                    identityLabel: e.target.value || "Noe annet",
+                  })}
+                />
+              )}
+              <div className="ob-label" style={{ marginTop: 14 }}>Hvorfor er det viktig?</div>
+              <div className="ob-chips">
+                {WHYS.map((item) => {
+                  const selected = item.other
+                    ? d.pickingWhyOther
+                    : d.whyId === item.id && !d.pickingWhyOther;
+                  return (
+                    <Chip
+                      key={item.id}
+                      on={selected}
+                      onClick={() => {
+                        if (item.other) {
+                          set({
+                            whyId: "other",
+                            whyLabel: d.whyOther || "Noe annet",
+                            pickingWhyOther: true,
+                          });
+                        } else {
+                          set({
+                            whyId: item.id,
+                            whyLabel: item.label,
+                            whyOther: "",
+                            pickingWhyOther: false,
+                          });
+                        }
+                      }}
+                    >
+                      {item.label}
+                    </Chip>
+                  );
+                })}
+              </div>
+              {d.pickingWhyOther && (
+                <input
+                  className="tinput"
+                  style={{ marginTop: 10 }}
+                  placeholder="Skriv med egne ord"
+                  value={d.whyOther}
+                  onChange={(e) => set({
+                    whyOther: e.target.value,
+                    whyLabel: e.target.value || "Noe annet",
+                  })}
+                />
+              )}
+              <button
+                className="cta ob-composer-cta"
+                disabled={
+                  !d.identityId
+                  || (d.pickingIdentityOther && !d.identityOther.trim())
+                  || !d.whyId
+                  || (d.pickingWhyOther && !d.whyOther.trim())
+                }
+                onClick={afterIdentity}
               >
                 Send til {coach}
               </button>
@@ -745,7 +921,7 @@ export function Coach({
               <p style={{ marginTop: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.45 }}>
                 {d.mode === "calendar"
                   ? "Planen følger ukedagen — mandagsøkt på mandag. På hviledager sier appen ifra."
-                  : "Du tar neste økt når du er klar. Ingen binding til mandag/tirsdag — bare rekkefølgen i planen."}
+                  : "Du tar neste økt når du er klar. Ingen binding til mandag eller tirsdag — bare rekkefølgen i planen."}
               </p>
               <button className="cta ob-composer-cta" onClick={afterSchedule}>
                 Send til {coach}
@@ -754,13 +930,16 @@ export function Coach({
           )}
 
           {turn === "level" && !busy && (
-            <div className="ob-chips">
-              {LEVELS.map((l) => (
-                <Chip key={l.id} on={d.level === l.id} onClick={() => { set({ level: l.id }); afterLevel(l.id); }}>
-                  {l.label}
-                </Chip>
-              ))}
-            </div>
+            <>
+              <div className="ob-label">Erfaring med trening</div>
+              <div className="ob-chips">
+                {LEVELS.map((l) => (
+                  <Chip key={l.id} on={d.level === l.id} onClick={() => { set({ level: l.id }); afterLevel(l.id); }}>
+                    {l.label}
+                  </Chip>
+                ))}
+              </div>
+            </>
           )}
 
           {turn === "equip" && !busy && (

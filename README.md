@@ -51,9 +51,9 @@ Se `pt/README.md`.
 Nivå 2 sjekkes med en faktisk skrivetest, ikke bare `typeof`, fordi `localStorage`
 kan finnes og likevel kaste ved skriving. Resultatet caches.
 
-State lagres under nøkkelen `navyrace:v1` som `{ index, logs, updatedAt }` — hvilken økt
-du står på, loggen per økt (RPE `lett` / `passe` / `brutalt`, eller `hoppet`), og
-tidspunkt for last-write-wins. Hoppede økter teller ikke inn i dose-tilpasningen.
+State lagres under nøkkelen `mai:v1` som profil + program + fremdrift — hvilken økt
+du står på, loggen per økt (hvordan den føltes: `lett` / `passe` / `brutalt`, eller `hoppet`), og
+tidspunkt for last-write-wins. Hoppede økter teller ikke inn i tilpasningen av neste økt.
 
 ## Valgfri sky-synk (Supabase)
 
