@@ -16,7 +16,22 @@ export function getDb(): DatabaseSync {
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec(readFileSync(resolve(here, "schema.sql"), "utf8"));
+  ensureEntryArchiveColumns(db);
   return db;
+}
+
+function ensureEntryArchiveColumns(database: DatabaseSync) {
+  const cols = database.prepare("PRAGMA table_info(entries)").all() as { name: string }[];
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has("archived_at")) {
+    database.exec("ALTER TABLE entries ADD COLUMN archived_at TEXT");
+  }
+  if (!names.has("archive_reason")) {
+    database.exec("ALTER TABLE entries ADD COLUMN archive_reason TEXT");
+  }
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS entries_user_live ON entries(user_id, occurred_at DESC) WHERE archived_at IS NULL",
+  );
 }
 
 export function nowIso(): string {

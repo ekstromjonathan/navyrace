@@ -1,5 +1,5 @@
-export const ACTIVATE_PHRASE = /^(kjør programmet|kjør opplegget|kjør)$/i;
-export const ARCHIVE_PHRASE = /^arkiver og lag nytt$/i;
+export const ACTIVATE_PHRASE = /^(kjør programmet|kjør opplegget|kjør|run the program|lock the program)$/i;
+export const ARCHIVE_PHRASE = /^(arkiver og lag nytt|archive and start new)$/i;
 
 export function isActivatePhrase(body: string): boolean {
   return ACTIVATE_PHRASE.test(body.trim());

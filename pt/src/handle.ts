@@ -1,15 +1,27 @@
 import { env, isAllowlisted } from "./env.ts";
 import { parseMessage } from "./parser.ts";
 import { isOptOut } from "./optout.ts";
-import { activatePrompt, archivePrompt, isActivatePhrase, isArchivePhrase } from "./gates.ts";
+import { isActivatePhrase, isArchivePhrase } from "./gates.ts";
 import { runAgent } from "./agent.ts";
 import * as journal from "./journal.ts";
+import * as copy from "./copy.ts";
 import * as linq from "./linq.ts";
 import { normalizeEvent } from "./webhook.ts";
+import { detectLang, isLang, type Lang } from "./locale.ts";
 import type { Inbound, UserRow } from "./types.ts";
 
-function reminderConfirm(user: UserRow, hour: number, minute: number): string {
-  return `Ok — daglig treningspåminnelse kl ${journal.hhmm(hour, minute)} (${user.tz}). Jeg hopper over dagen hvis du allerede har logget økt. Si «slutt å minne meg» for å skru av.`;
+function lockLang(user: UserRow, body: string): { user: UserRow; lang: Lang; onboarding: boolean } {
+  const facts = journal.factsOf(user);
+  const onboarding = journal.isFreshStart(user.id);
+  const locked = isLang(facts.uiLang) ? facts.uiLang : null;
+  const detected = detectLang(body);
+  const lang = locked ?? detected ?? "nb";
+  if (!locked && detected) {
+    journal.setFacts(user.id, { uiLang: detected });
+    journal.setLocale(user.id, detected);
+    user = { ...user, locale: detected };
+  }
+  return { user, lang, onboarding };
 }
 
 async function reply(
@@ -47,7 +59,7 @@ async function maybeCard(user: UserRow, chatId: string) {
   }
 }
 
-function handlePending(user: UserRow, body: string): string | null {
+function handlePending(user: UserRow, lang: Lang, body: string): string | null {
   const pending = journal.pendingOf(user);
   if (!pending) return null;
 
@@ -56,15 +68,15 @@ function handlePending(user: UserRow, body: string): string | null {
       try {
         journal.activateTrack(pending.trackId);
         journal.setPending(user.id, null);
-        return "Programmet er låst. Si «hva trener jeg i dag» når du er klar.";
+        return copy.activated(lang);
       } catch (e) {
         journal.setPending(user.id, null);
-        return e instanceof Error ? e.message : "Klarte ikke å aktivere.";
+        return copy.activateFailed(lang, e instanceof Error ? e.message : "");
       }
     }
     journal.setPending(user.id, null);
     if (parseMessage(body).kind === "unknown") {
-      return "Avbrutt — programmet ligger fortsatt som utkast.";
+      return copy.activateCancelled(lang);
     }
     return null;
   }
@@ -73,11 +85,11 @@ function handlePending(user: UserRow, body: string): string | null {
     if (isArchivePhrase(body)) {
       journal.archiveTrack(pending.trackId, "user_requested_new");
       journal.setPending(user.id, null);
-      return "Arkivert. Det ligger som snapshot. Fortell hva det nye opplegget skal styre mot.";
+      return copy.archived(lang);
     }
     journal.setPending(user.id, null);
     if (parseMessage(body).kind === "unknown") {
-      return "Avbrutt — ingenting ble arkivert.";
+      return copy.archiveCancelled(lang);
     }
     return null;
   }
@@ -85,56 +97,58 @@ function handlePending(user: UserRow, body: string): string | null {
   if (pending.type === "question") {
     journal.setFacts(user.id, { [pending.field]: body.trim() });
     journal.setPending(user.id, null);
-    return `Lagret ${pending.field}.`;
+    return copy.savedField(lang, pending.field);
   }
 
   return null;
 }
 
-function formatToday(user: UserRow): string {
+function formatToday(user: UserRow, lang: Lang): string {
   const training = journal.activeTraining(user.id);
   if (!training) {
     const draft = journal.draftTraining(user.id);
-    if (draft) {
-      return `Du har et utkast («${draft.name}»), men det er ikke låst. Skriv «kjør programmet» for å aktivere, eller fortell hva som skal endres.`;
-    }
-    return "Ingen aktiv treningsplan ennå. Fortell mål, dager i uka og utstyr — så lager jeg et utkast du må bekrefte.";
+    if (draft) return copy.todayDraft(lang, draft.name);
+    return copy.todayNoPlan(lang);
   }
   const next = journal.nextSession(user.id, training);
-  if (!next) return `«${training.name}» er ferdig ut logg-messig. Vil du ha en ny blokk, eller hente et arkiv?`;
+  if (!next) return copy.todayDone(lang, training.name);
   const items = (next.session.items ?? []).slice(0, 5).map((it) => `• ${it.name}${it.detail ? ` — ${it.detail}` : ""}`);
   const load = next.load != null ? `${next.load}${next.session.unit ? ` ${next.session.unit}` : ""}` : "";
+  const heading =
+    lang === "en"
+      ? `Today: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
+      : `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`;
   return [
-    `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`,
+    heading,
     ...items,
-    next.note,
-    "Si lett / passe / brutalt når du er ferdig.",
+    next.adapt ? copy.adaptNote(lang, next.adapt) : null,
+    copy.todayFooter(lang),
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-function applyHeuristic(user: UserRow, inbound: Inbound): string | null {
+function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): string | null {
   const parsed = parseMessage(inbound.body);
   if (!parsed.confident) return null;
 
-  if (parsed.kind === "today") return formatToday(user);
+  if (parsed.kind === "today") return formatToday(user, lang);
 
   if (parsed.kind === "reminder_set") {
     journal.upsertReminder(user.id, "train", parsed.hour, parsed.minute);
-    return reminderConfirm(user, parsed.hour, parsed.minute);
+    return copy.reminderConfirm(lang, parsed.hour, parsed.minute, user.tz);
   }
 
   if (parsed.kind === "reminder_cancel") {
     const had = journal.disableReminder(user.id, "train");
-    return had ? "Ok, ingen flere treningspåminnelser." : "Du har ingen påminnelse å skru av.";
+    return copy.reminderCancel(lang, Boolean(had));
   }
 
   if (parsed.kind === "activate") {
     const draft = journal.draftTraining(user.id);
-    if (!draft) return "Det finnes ikke noe utkast å låse.";
+    if (!draft) return copy.noDraft(lang);
     const sessions = journal.planOf(draft)?.sessions.length ?? 0;
-    const summary = activatePrompt(draft.name, sessions);
+    const summary = copy.activatePrompt(lang, draft.name, sessions);
     journal.setPending(user.id, {
       type: "activate_confirm",
       trackId: draft.id,
@@ -146,8 +160,8 @@ function applyHeuristic(user: UserRow, inbound: Inbound): string | null {
 
   if (parsed.kind === "archive") {
     const training = journal.activeTraining(user.id);
-    if (!training) return "Ingen aktiv plan å arkivere.";
-    const summary = archivePrompt(training.name, journal.entryCount(training.id), journal.noteCount(training.id));
+    if (!training) return copy.noActivePlan(lang);
+    const summary = copy.archivePrompt(lang, training.name, journal.entryCount(training.id), journal.noteCount(training.id));
     journal.setPending(user.id, {
       type: "archive_confirm",
       trackId: training.id,
@@ -157,9 +171,20 @@ function applyHeuristic(user: UserRow, inbound: Inbound): string | null {
     return summary;
   }
 
+  if (parsed.kind === "archive_entry") {
+    const rec = journal.archiveEntry({
+      userId: user.id,
+      slug: parsed.slug,
+      trackKind: parsed.trackKind,
+      reason: "user_requested",
+    });
+    if (!rec) return copy.noEntryToArchive(lang);
+    return copy.entryArchived(lang, rec.name);
+  }
+
   if (parsed.kind === "rpe") {
     const training = journal.activeTraining(user.id);
-    if (!training) return "Ingen aktiv plan å logge RPE på. Si hva du gjorde, så logger jeg det som et spor.";
+    if (!training) return copy.noRpePlan(lang);
     const next = journal.nextSession(user.id, training);
     journal.logEntry({
       trackId: training.id,
@@ -169,10 +194,7 @@ function applyHeuristic(user: UserRow, inbound: Inbound): string | null {
       source: "heuristic",
       linqMessageId: inbound.messageId,
     });
-    if (parsed.quality === "hoppet") return "Notert — hoppet. Den teller ikke i dosen. Neste når du er klar.";
-    if (parsed.quality === "brutalt") return "Notert som brutalt. Jeg letter neste like økt.";
-    if (parsed.quality === "lett") return "Notert som lett. Jeg skrur opp neste like økt litt.";
-    return "Notert som passe. Holder planen.";
+    return copy.rpeLogged(lang, parsed.quality);
   }
 
   if (parsed.kind === "log") {
@@ -191,10 +213,10 @@ function applyHeuristic(user: UserRow, inbound: Inbound): string | null {
       source: "heuristic",
       linqMessageId: inbound.messageId,
     });
-    if (result.duplicate) return "Den hadde jeg allerede.";
+    if (result.duplicate) return copy.duplicateLog(lang);
     const qty = parsed.quantity ? ` ${parsed.quantity.value} ${parsed.quantity.unit}` : "";
     const n = journal.entryCount(track.id);
-    return `Logget ${parsed.name.toLowerCase()}${qty}. ${n} på det sporet.`;
+    return copy.loggedItem(lang, parsed.name, qty, n);
   }
 
   return null;
@@ -209,7 +231,10 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
 
   let user: UserRow | undefined;
   try {
-    const current = journal.upsertUser(inbound.chatId, inbound.phone);
+    const current0 = journal.upsertUser(inbound.chatId, inbound.phone);
+    const locked = lockLang(current0, inbound.body);
+    const current = locked.user;
+    const { lang, onboarding } = locked;
     user = current;
     journal.logMessage(current.id, "user", inbound.body, inbound.messageId);
     if (inbound.healthStatus) journal.setHealth(current.id, inbound.healthStatus);
@@ -220,7 +245,7 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
 
     if (isOptOut(inbound.body)) {
       journal.setHealth(current.id, "OPTED_OUT");
-      await reply(inbound.chatId, "Ok, jeg er stille. Skriv når du vil igjen.", {
+      await reply(inbound.chatId, copy.optOutReply(lang), {
         overrideOptout: true,
         userId: current.id,
       });
@@ -229,35 +254,38 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
 
     if (current.health_status === "CRITICAL") return;
 
-    const pendingReply = handlePending(current, inbound.body);
+    const pendingReply = handlePending(current, lang, inbound.body);
     if (pendingReply) {
       await reply(inbound.chatId, pendingReply, { replyTo: inbound.messageId, userId: current.id });
       await maybeCard(current, inbound.chatId);
       return;
     }
 
-    const heuristic = applyHeuristic(current, inbound);
-    if (heuristic) {
-      await reply(inbound.chatId, heuristic, { replyTo: inbound.messageId, userId: current.id });
-      if (parseMessage(inbound.body).kind === "rpe" && inbound.body.toLowerCase() !== "hoppet") {
-        await linq.reactLove(inbound.messageId);
+    if (!onboarding) {
+      const heuristic = applyHeuristic(current, lang, inbound);
+      if (heuristic) {
+        await reply(inbound.chatId, heuristic, { replyTo: inbound.messageId, userId: current.id });
+        const parsed = parseMessage(inbound.body);
+        if (parsed.kind === "rpe" && parsed.quality !== "hoppet") {
+          await linq.reactLove(inbound.messageId);
+        }
+        await maybeCard(current, inbound.chatId);
+        return;
       }
-      await maybeCard(current, inbound.chatId);
-      return;
     }
 
-    const text = await withTyping(inbound.chatId, () => runAgent(current, inbound.body, inbound.messageId));
+    const text = await withTyping(inbound.chatId, () =>
+      runAgent(current, inbound.body, inbound.messageId, { lang, onboarding }),
+    );
     await reply(inbound.chatId, text, { replyTo: inbound.messageId, userId: current.id });
     await maybeCard(current, inbound.chatId);
   } catch (err) {
     console.error("handleInbound failed", err);
     try {
       await linq.stopTyping(inbound.chatId);
-      await reply(
-        inbound.chatId,
-        "Jeg hørte deg, men noe røk på min side. Prøv igjen, eller si f.eks. «mediterte i 30 sekunder».",
-        user ? { userId: user.id } : undefined,
-      );
+      const raw = user ? journal.factsOf(user).uiLang : null;
+      const lang = isLang(raw) ? raw : "nb";
+      await reply(inbound.chatId, copy.handlerError(lang), user ? { userId: user.id } : undefined);
     } catch {
       /* still return 200 so Linq does not retry the typing loop */
     }

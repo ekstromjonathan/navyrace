@@ -32,6 +32,7 @@ export type UserFacts = {
   weightKg?: number;
   injuries?: string[];
   nutrition?: Record<string, unknown>;
+  uiLang?: "nb" | "en";
   [k: string]: unknown;
 };
 

@@ -15,6 +15,7 @@ export type HeuristicIntent =
   | { kind: "archive"; confident: true }
   | { kind: "reminder_set"; confident: true; hour: number; minute: number }
   | { kind: "reminder_cancel"; confident: true }
+  | { kind: "archive_entry"; confident: true; slug?: string; trackKind?: "training" }
   | { kind: "unknown"; confident: false };
 
 const NUM = "(\\d+(?:[.,]\\d+)?)";
@@ -25,7 +26,7 @@ function num(s: string): number {
 
 function glasses(raw: string): number {
   const t = raw.toLowerCase();
-  if (t === "et" || t === "ett" || t === "et glass") return 1;
+  if (t === "et" || t === "ett" || t === "et glass" || t === "a") return 1;
   return num(raw);
 }
 
@@ -35,32 +36,48 @@ export function parseMessage(body: string): HeuristicIntent {
 
   const lower = text.toLowerCase();
 
-  if (/^(kjør programmet|kjør opplegget|kjør)$/i.test(text)) {
+  if (/^(kjør programmet|kjør opplegget|kjør|run the program|lock the program)$/i.test(text)) {
     return { kind: "activate", confident: true };
   }
-  if (/^arkiver og lag nytt$/i.test(text)) {
+  if (/^(arkiver og lag nytt|archive and start new)$/i.test(text)) {
     return { kind: "archive", confident: true };
   }
 
-  if (/\b(slutt å minne|ikke minn meg|avbryt påminnelse|skru av påminnelse)\b/i.test(lower)) {
+  const archiveEntry = parseArchiveEntry(text);
+  if (archiveEntry) return archiveEntry;
+
+  if (/\b(slutt å minne|ikke minn meg|avbryt påminnelse|skru av påminnelse|stop reminding|don't remind)\b/i.test(lower)) {
     return { kind: "reminder_cancel", confident: true };
   }
 
-  if (/\b(minn meg|minne meg|påminn meg)\b/i.test(lower) || (/\bpåminnelse\b/i.test(lower) && /\b(kl|hver dag|trene|trening)\b/i.test(lower))) {
+  if (
+    /\b(minn meg|minne meg|påminn meg)\b/i.test(lower) ||
+    (/\bpåminnelse\b/i.test(lower) && /\b(kl|hver dag|trene|trening)\b/i.test(lower)) ||
+    /\bremind me\b/i.test(lower) ||
+    (/\breminder\b/i.test(lower) && /\b(train|training|daily|every day)\b/i.test(lower))
+  ) {
     return { kind: "reminder_set", confident: true, ...parseClock(lower) };
   }
 
-  if (/^(hva (trener|gjør) jeg( i dag)?|i dag\??|neste økt)$/i.test(lower)) {
+  if (
+    /^(hva (trener|gjør) jeg( i dag)?|i dag\??|neste økt)$/i.test(lower) ||
+    /^(what am i training( today)?|today'?s (workout|session)|next session)$/i.test(lower)
+  ) {
     return { kind: "today", confident: true };
   }
 
-  if (/^(lett|passe|brutalt|hoppet)$/i.test(lower) || /^hoppet over$/i.test(lower)) {
-    const q = lower.startsWith("hoppet") ? "hoppet" : (lower as "lett" | "passe" | "brutalt");
-    return { kind: "rpe", confident: true, quality: q };
+  if (/^(lett|passe|brutalt|hoppet|easy|ok|okay|brutal|skipped)$/i.test(lower) || /^hoppet over$/i.test(lower) || /^skip(ped)?$/i.test(lower)) {
+    let quality: "lett" | "passe" | "brutalt" | "hoppet";
+    if (lower.startsWith("hoppet") || lower.startsWith("skip")) quality = "hoppet";
+    else if (lower === "easy" || lower === "lett") quality = "lett";
+    else if (lower === "brutal" || lower === "brutalt") quality = "brutalt";
+    else quality = "passe";
+    return { kind: "rpe", confident: true, quality };
   }
 
   const water =
-    text.match(new RegExp(`(?:drakk|drukket)\\s+(et|ett|${NUM})\\s*glass`, "i")) ||
+    text.match(new RegExp(`(?:drakk|drukket|drank)\\s+(et|ett|a|${NUM})\\s*glass`, "i")) ||
+    text.match(new RegExp(`(${NUM}|et|ett|a)\\s*glasses?(?:\\s+of\\s+water)?`, "i")) ||
     text.match(new RegExp(`(${NUM}|et|ett)\\s*glass(?:\\s+vann)?`, "i")) ||
     text.match(/vannglass/i);
   if (water) {
@@ -105,9 +122,9 @@ export function parseMessage(body: string): HeuristicIntent {
   }
 
   const med = text.match(
-    new RegExp(`(?:mediterte|meditasjon|mediterer).{0,20}?(?:i\\s*)?${NUM}\\s*(sek(?:under)?|min(?:utt(?:er)?)?)`, "i"),
+    new RegExp(`(?:mediterte|meditasjon|mediterer|meditated).{0,20}?(?:i\\s*|for\\s*)?${NUM}\\s*(sek(?:under)?|min(?:utt(?:er)?)?|sec(?:onds)?|minutes?)`, "i"),
   );
-  const medBare = /mediterte|meditasjon/i.test(text);
+  const medBare = /mediterte|meditasjon|meditated/i.test(text);
   if (med) {
     const unit = /min/i.test(med[2]) ? "min" : "s";
     return {
@@ -139,6 +156,7 @@ export function parseClock(text: string): { hour: number; minute: number } {
   const m =
     text.match(/\bkl\.?\s*(\d{1,2})(?:[:.](\d{2}))?\b/i) ||
     text.match(/\bklokken\s*(\d{1,2})(?:[:.](\d{2}))?\b/i) ||
+    text.match(/\bat\s*(\d{1,2})(?:[:.](\d{2}))?\b/i) ||
     text.match(/\b(\d{1,2})[:.](\d{2})\b/);
   if (m) {
     const hour = Number(m[1]);
@@ -146,4 +164,36 @@ export function parseClock(text: string): { hour: number; minute: number } {
     if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) return { hour, minute };
   }
   return { hour: 8, minute: 0 };
+}
+
+function parseArchiveEntry(text: string): Extract<HeuristicIntent, { kind: "archive_entry" }> | null {
+  const lower = text.toLowerCase().trim();
+  if (/arkiver og lag nytt|archive and start new/i.test(lower)) return null;
+  if (
+    /\b(slett|fjern|delete|remove)\b/.test(lower) &&
+    /\b(alt|alle|everything|all (logs|entries)|hele programmet|programmet)\b/.test(lower) &&
+    !/\b(siste|last|latest)\b/.test(lower)
+  ) {
+    return null;
+  }
+
+  const nb =
+    /\b(slett|fjern|ta bort|arkiver)\b/.test(lower) &&
+    (/\b(siste|loggen|logg(?:en)?)\b/.test(lower) || /økt(en)?/i.test(lower));
+  const en =
+    /\b(delete|remove|archive)\b/.test(lower) &&
+    /\b(last|latest)\b/.test(lower) &&
+    /\b(log|entry|session|workout)\b/.test(lower);
+  const shortNb = /^(slett|fjern|ta bort) (siste|loggen)(\s+\S+)?$/i.test(lower);
+  const shortEn = /^(delete|remove) (the )?last(\s+\S+)?( log| entry)?$/i.test(lower);
+  if (!nb && !en && !shortNb && !shortEn) return null;
+
+  let slug: string | undefined;
+  if (/\b(vann|water|glasses?)\b/i.test(lower)) slug = "vann";
+  else if (/\b(meditasjon|meditation)\b/i.test(lower)) slug = "meditasjon";
+  else if (/\b(kaldt\s*bad|isbad|cold\s*plunge)\b/i.test(lower)) slug = "kaldt-bad";
+
+  const trackKind =
+    !slug && /(økt|trening|workout|session)/i.test(lower) ? ("training" as const) : undefined;
+  return { kind: "archive_entry", confident: true, slug, trackKind };
 }
