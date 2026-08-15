@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="no">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -7,42 +7,43 @@
     <meta name="color-scheme" content="light" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="description" content="Vilkår for lodd.ai" />
+    <meta name="description" content="Terms for lodd.ai" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/lodd.css" />
-    <title>Vilkår · lodd.ai</title>
+    <title data-i18n="termsPageTitle">Terms · lodd.ai</title>
   </head>
   <body>
-    <a class="close" href="../" aria-label="Lukk">
+    <a class="close" href="../" data-i18n-aria="close" aria-label="Close">
       <span aria-hidden="true">×</span>
     </a>
     <main class="stage stage-legal">
       <article class="legal-doc">
-        <h1>Vilkår</h1>
-        <p class="legal-kicker">lodd.ai · oppdatert 15. august 2026</p>
-        <p>
-          Når du sender navn og telefonnummer, ber du om å bli kontaktet om lodd.ai —
-          en personlig trener i iMessage.
+        <h1 data-i18n="termsTitle">Terms</h1>
+        <p class="legal-kicker" data-i18n="termsKicker">lodd.ai · updated 15 August 2026</p>
+        <p data-i18n="termsIntro">
+          When you send your name and phone number, you ask to be contacted about lodd.ai —
+          a personal trainer in iMessage.
         </p>
-        <h2>Hva vi bruker</h2>
-        <p>
-          Navn og nummer brukes bare til å ta kontakt og vise deg konseptet.
-          Vi selger ikke opplysningene, og vi bruker dem ikke til reklame fra andre.
+        <h2 data-i18n="termsUseTitle">What we use</h2>
+        <p data-i18n="termsUse">
+          Name and number are used only to reach you and show you the concept.
+          We don’t sell your details, and we don’t use them for ads from others.
         </p>
-        <h2>Hvordan vi tar kontakt</h2>
-        <p>
-          Du får en iMessage eller SMS. Du kan når som helst svare at du ikke vil høre mer,
-          så slutter vi å skrive.
+        <h2 data-i18n="termsContactTitle">How we contact you</h2>
+        <p data-i18n="termsContact">
+          You’ll get an iMessage or SMS. Reply any time that you don’t want to hear more,
+          and we’ll stop writing.
         </p>
-        <h2>Sletting</h2>
-        <p>
-          Si ifra i samme tråd, så sletter vi navn og nummer vi har lagret om deg.
+        <h2 data-i18n="termsDeleteTitle">Deleting</h2>
+        <p data-i18n="termsDelete">
+          Tell us in the same thread, and we’ll delete the name and number we have for you.
         </p>
       </article>
-      <a class="btn btn-ghost" href="../signup/">← Tilbake</a>
+      <a class="btn btn-ghost" href="../signup/" data-i18n="back">← Back</a>
     </main>
+    <script type="module" src="/src/i18n.js"></script>
   </body>
 </html>

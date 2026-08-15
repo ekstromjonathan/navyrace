@@ -7,60 +7,59 @@
     <meta name="color-scheme" content="light" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="description" content="Sign up for lodd.ai — a personal trainer in iMessage." />
+    <meta name="description" content="Sign up for your personal coach in iMessage." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/lodd.css" />
-    <title>Sign up · lodd.ai</title>
+    <title data-i18n="signupPageTitle">Sign up · lodd.ai</title>
   </head>
   <body>
-    <a class="close" href="../" aria-label="Close">
+    <a class="close" href="../" data-i18n-aria="close" aria-label="Close">
       <span aria-hidden="true">×</span>
     </a>
     <main class="stage stage-signup">
       <header class="signup-head">
-        <h1>Sign up for iMessage</h1>
-        <p>
-          A coach in Messages. You text what you trained. Your trainer texts back — no app.
-          Leave your name and number and we’ll iMessage you.
-        </p>
+        <h1 data-i18n="signupTitle">Sign up for your personal coach in iMessage</h1>
+        <p data-i18n="signupLead">You text what you trained. Your trainer texts back — no app.</p>
       </header>
       <form class="signup-form" id="signup-form">
-        <label class="field">
-          <input
-            id="pt-name"
-            name="name"
-            type="text"
-            autocomplete="name"
-            placeholder=" "
-            maxlength="80"
-            required
-          />
-          <span class="field-label">Name</span>
-        </label>
-        <label class="field">
-          <input
-            id="pt-phone"
-            name="phone"
-            type="tel"
-            inputmode="tel"
-            autocomplete="tel"
-            placeholder="+47"
-            maxlength="20"
-            required
-          />
-          <span class="field-label">Phone</span>
-        </label>
-        <button class="btn btn-solid" type="submit">Send iMessage</button>
+        <div class="field-block">
+          <label class="field">
+            <input
+              id="pt-name"
+              name="name"
+              type="text"
+              autocomplete="name"
+              placeholder=" "
+              maxlength="80"
+              required
+            />
+            <span class="field-label" data-i18n="name">Name</span>
+          </label>
+          <label class="field">
+            <input
+              id="pt-phone"
+              name="phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="+47"
+              maxlength="20"
+              required
+            />
+            <span class="field-label" data-i18n="phone">Phone</span>
+          </label>
+        </div>
+        <p class="legal">
+          <span data-i18n="consent">By submitting, you agree to be contacted for more information.</span>
+          <a href="../vilkar/" data-i18n="terms">Terms</a>
+        </p>
+        <button class="btn btn-solid" type="submit" data-i18n="send">Send iMessage</button>
         <p class="form-note" data-pt-status hidden></p>
       </form>
-      <a class="btn btn-ghost" href="../">← Tilbake</a>
-      <p class="legal">
-        Ved å sende godtar du å bli kontaktet for mer informasjon.
-        <a href="../vilkar/">Vilkår</a>
-      </p>
+      <a class="btn btn-ghost" href="../" data-i18n="back">← Back</a>
     </main>
     <script type="module" src="/src/lodd.js"></script>
   </body>

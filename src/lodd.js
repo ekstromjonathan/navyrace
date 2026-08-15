@@ -1,3 +1,5 @@
+import { t } from "./i18n.js";
+
 const NOTIFY_NUMBER = "+4740343295";
 const WAITLIST_KEY = "lodd:pt-waitlist";
 
@@ -65,12 +67,14 @@ form?.addEventListener("submit", (event) => {
   const phone = normalizePhone(phoneInput?.value);
 
   if (!name || !phone) {
-    setStatus("Add your name and number.");
+    setStatus(t("missing"));
     (!name ? nameInput : phoneInput)?.focus();
     return;
   }
 
   remember(name, phone);
-  setStatus("Opening Messages…");
-  window.location.href = smsHref(`lodd.ai signup\nName: ${name}\nPhone: ${phone}`);
+  setStatus(t("opening"));
+  window.location.href = smsHref(
+    `lodd.ai signup\n${t("smsName")}: ${name}\n${t("smsPhone")}: ${phone}`,
+  );
 });
