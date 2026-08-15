@@ -45,7 +45,9 @@ If you ask the PT to remind you (e.g. «minn meg på å trene kl 8»), it stores
 
 Railway auto-deploys `main` to [lodd.ai](https://lodd.ai). The root `Dockerfile` runs this PT (webhook + scheduler) and serves the Vite app from the same process so `/webhook` is not swallowed by the static host.
 
-After a `main` deploy, `GET https://lodd.ai/health` must return JSON (`ok: true`). Then:
+**Railway service settings that must stay true:** Root Directory empty (repo root), Builder = Dockerfile. Do not set Root Directory to `pt/` — that ships the webhook without the landing page (`spa: false`, `/` → 404). Apex HTTPS is handled by Railway/Let’s Encrypt; add `www.lodd.ai` as a custom domain in Railway if you want www (otherwise the cert won’t cover it).
+
+After a `main` deploy, `GET https://lodd.ai/health` must return JSON (`ok: true`, `spa: true`). Then:
 
 ```bash
 linq webhooks create --url https://lodd.ai/webhook --events message.received

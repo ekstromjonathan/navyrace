@@ -14,10 +14,16 @@ ARG VITE_SUPABASE_ANON_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 
-RUN npm run build
+RUN npm run build \
+  && test -f dist/index.html \
+  && rm -rf pt/dist \
+  && cp -a dist pt/dist \
+  && test -f pt/dist/index.html
 
+# Serve from cwd (/app/pt); avoid "../dist" which some static helpers reject.
+ENV PT_STATIC_DIR=dist
+ENV PT_REQUIRE_SPA=1
 ENV NODE_ENV=production
-ENV PT_STATIC_DIR=../dist
 WORKDIR /app/pt
 EXPOSE 8080
 CMD ["npx", "tsx", "src/index.ts"]
