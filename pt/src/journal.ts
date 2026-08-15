@@ -251,7 +251,12 @@ export function archiveTrack(trackId: string, reason: string): TrackRow {
 }
 
 export function entryCount(trackId: string): number {
-  return (row<{ n: number }>("SELECT COUNT(*) AS n FROM entries WHERE track_id = ?", trackId)?.n ?? 0);
+  return (
+    row<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM entries WHERE track_id = ? AND archived_at IS NULL",
+      trackId,
+    )?.n ?? 0
+  );
 }
 
 export function noteCount(trackId: string): number {
@@ -294,6 +299,102 @@ export function logEntry(input: {
   }
 }
 
+export type ArchivedEntry = {
+  id: string;
+  slug: string;
+  name: string;
+  kind: TrackKind;
+  occurred_at: string;
+  quantity: string | null;
+  quality: string | null;
+  note: string | null;
+  session_ref: string | null;
+  alreadyArchived?: boolean;
+};
+
+type EntryLookup = {
+  id: string;
+  user_id: string;
+  archived_at: string | null;
+  occurred_at: string;
+  quantity: string | null;
+  quality: string | null;
+  note: string | null;
+  session_ref: string | null;
+  slug: string;
+  name: string;
+  kind: TrackKind;
+};
+
+function entryLookup(id: string): EntryLookup | undefined {
+  return row<EntryLookup>(
+    `SELECT e.id, e.user_id, e.archived_at, e.occurred_at, e.quantity, e.quality, e.note, e.session_ref,
+            t.slug, t.name, t.kind
+     FROM entries e JOIN tracks t ON t.id = e.track_id
+     WHERE e.id = ?`,
+    id,
+  );
+}
+
+function toArchived(rec: EntryLookup, alreadyArchived?: boolean): ArchivedEntry {
+  return {
+    id: rec.id,
+    slug: rec.slug,
+    name: rec.name,
+    kind: rec.kind,
+    occurred_at: rec.occurred_at,
+    quantity: rec.quantity,
+    quality: rec.quality,
+    note: rec.note,
+    session_ref: rec.session_ref,
+    alreadyArchived,
+  };
+}
+
+export function archiveEntry(input: {
+  userId: string;
+  entryId?: string;
+  slug?: string;
+  trackKind?: TrackKind;
+  reason?: string;
+}): ArchivedEntry | null {
+  let rec: EntryLookup | undefined;
+  if (input.entryId) {
+    rec = entryLookup(input.entryId);
+    if (!rec || rec.user_id !== input.userId) return null;
+    if (rec.archived_at) return toArchived(rec, true);
+  } else {
+    const slug = input.slug?.trim() || null;
+    const kind = input.trackKind ?? null;
+    rec = row<EntryLookup>(
+      `SELECT e.id, e.user_id, e.archived_at, e.occurred_at, e.quantity, e.quality, e.note, e.session_ref,
+              t.slug, t.name, t.kind
+       FROM entries e JOIN tracks t ON t.id = e.track_id
+       WHERE e.user_id = ? AND e.archived_at IS NULL
+         AND (? IS NULL OR t.slug = ?)
+         AND (? IS NULL OR t.kind = ?)
+       ORDER BY e.occurred_at DESC, e.created_at DESC
+       LIMIT 1`,
+      input.userId,
+      slug,
+      slug,
+      kind,
+      kind,
+    );
+    if (!rec) return null;
+  }
+  const ts = nowIso();
+  run(
+    "UPDATE entries SET archived_at = ?, archive_reason = ? WHERE id = ? AND user_id = ? AND archived_at IS NULL",
+    ts,
+    input.reason ?? "user_requested",
+    rec.id,
+    input.userId,
+  );
+  const updated = entryLookup(rec.id);
+  return updated ? toArchived(updated) : null;
+}
+
 export function addNote(input: { userId: string; trackId?: string | null; kind: string; body: string }): string {
   const id = randomUUID();
   run(
@@ -312,7 +413,8 @@ export function recentEntries(userId: string, limit = 8): Record<string, unknown
   return rows(
     `SELECT e.id, e.occurred_at, e.quantity, e.quality, e.note, e.session_ref, t.slug, t.name, t.kind
      FROM entries e JOIN tracks t ON t.id = e.track_id
-     WHERE e.user_id = ? ORDER BY e.occurred_at DESC LIMIT ?`,
+     WHERE e.user_id = ? AND e.archived_at IS NULL
+     ORDER BY e.occurred_at DESC LIMIT ?`,
     userId,
     limit,
   );
@@ -373,7 +475,8 @@ export function lastRpeForLoadKey(userId: string, loadKey: string): string | nul
   const rec = row<{ quality: string }>(
     `SELECT e.quality FROM entries e
      JOIN tracks t ON t.id = e.track_id
-     WHERE e.user_id = ? AND e.session_ref LIKE ? AND e.quality IS NOT NULL AND e.quality != 'hoppet'
+     WHERE e.user_id = ? AND e.session_ref LIKE ? AND e.archived_at IS NULL
+       AND e.quality IS NOT NULL AND e.quality != 'hoppet'
      ORDER BY e.occurred_at DESC LIMIT 1`,
     userId,
     `%${loadKey}%`,
@@ -388,7 +491,7 @@ export function nextSession(userId: string, track: TrackRow): { session: PlanSes
   if (!plan?.sessions?.length) return null;
   const done = new Set(
     rows<{ session_ref: string }>(
-      "SELECT session_ref FROM entries WHERE track_id = ? AND session_ref IS NOT NULL AND quality != 'hoppet'",
+      "SELECT session_ref FROM entries WHERE track_id = ? AND archived_at IS NULL AND session_ref IS NOT NULL AND quality != 'hoppet'",
       track.id,
     )
       .map((r) => r.session_ref)

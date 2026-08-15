@@ -114,6 +114,20 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     },
   },
   {
+    name: "archive_entry",
+    description:
+      "Arkiver én logg. Sletting/fjerning = arkivering, aldri hard delete. Ingen dobbeltbekreftelse. Bruk entryId fra snapshot, eller siste live logg (valgfri slug / kind).",
+    input_schema: {
+      type: "object",
+      properties: {
+        entryId: { type: "string" },
+        slug: { type: "string", description: "Hvis entryId mangler: siste live logg på dette sporet (f.eks. vann)." },
+        kind: { type: "string", enum: ["training", "nutrition", "habit", "recovery", "custom"] },
+        reason: { type: "string" },
+      },
+    },
+  },
+  {
     name: "request_activate",
     description: "Be om bekreftelse for å låse et draft-program. Brukeren må skrive «kjør programmet».",
     input_schema: {
@@ -162,6 +176,7 @@ Max 4–6 lines. One next action. At most one question, and only if that field i
 Don't dump the whole program. Send today / this week.
 When they want a new plan: collect what's missing, then call propose_plan (the programmer hat writes sessions). Don't invent a 10-week plan in chat.
 Don't delete or overwrite an active program. Use request_archive. Activation requires request_activate.
+Never hard-delete logs. When they ask to remove/delete a single log, call archive_entry. No double-confirm for one log.
 When they ask to be reminded (e.g. every day at 8): call set_reminder. Don't promise reminders without the tool. No nagging — one short ping, skip if a session is already logged.
 You are not a doctor. On pain: log it, ease load, refer to a professional if it lasts.
 No links unless they ask.
@@ -333,6 +348,30 @@ async function runTool(
         askedAt: new Date().toISOString(),
       });
       return JSON.stringify({ confirm: summary });
+    }
+    case "archive_entry": {
+      const kindRaw = input.kind ? String(input.kind) : "";
+      const trackKind = (
+        ["training", "nutrition", "habit", "recovery", "custom"] as const
+      ).includes(kindRaw as TrackKind)
+        ? (kindRaw as TrackKind)
+        : undefined;
+      const rec = journal.archiveEntry({
+        userId: user.id,
+        entryId: input.entryId ? String(input.entryId) : undefined,
+        slug: input.slug ? String(input.slug) : undefined,
+        trackKind,
+        reason: input.reason ? String(input.reason) : "user_requested",
+      });
+      if (!rec) return JSON.stringify({ error: "no live log to archive" });
+      return JSON.stringify({
+        ok: true,
+        alreadyArchived: Boolean(rec.alreadyArchived),
+        id: rec.id,
+        slug: rec.slug,
+        name: rec.name,
+        confirm: copy.entryArchived(lang, rec.name),
+      });
     }
     case "request_activate": {
       const track = journal.getTrack(String(input.trackId));

@@ -58,6 +58,17 @@ export function duplicateLog(lang: Lang): string {
   return lang === "en" ? "I already had that one." : "Den hadde jeg allerede.";
 }
 
+export function entryArchived(lang: Lang, name: string): string {
+  if (lang === "en") {
+    return `Archived — “${name}” is out of the live log. It sits as a snapshot.`;
+  }
+  return `Arkivert — «${name}» er tatt ut av den levende loggen. Den ligger som snapshot.`;
+}
+
+export function noEntryToArchive(lang: Lang): string {
+  return lang === "en" ? "No log to archive." : "Fant ingen logg å arkivere.";
+}
+
 export function activatePrompt(lang: Lang, name: string, sessionCount: number): string {
   if (lang === "en") {
     return [

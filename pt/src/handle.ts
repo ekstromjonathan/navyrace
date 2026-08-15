@@ -171,6 +171,17 @@ function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): string | n
     return summary;
   }
 
+  if (parsed.kind === "archive_entry") {
+    const rec = journal.archiveEntry({
+      userId: user.id,
+      slug: parsed.slug,
+      trackKind: parsed.trackKind,
+      reason: "user_requested",
+    });
+    if (!rec) return copy.noEntryToArchive(lang);
+    return copy.entryArchived(lang, rec.name);
+  }
+
   if (parsed.kind === "rpe") {
     const training = journal.activeTraining(user.id);
     if (!training) return copy.noRpePlan(lang);

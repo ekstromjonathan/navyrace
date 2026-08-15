@@ -118,4 +118,73 @@ describe("journal", () => {
     assert.equal(journal.isFreshStart(fresh.id), true);
     assert.equal(journal.isFreshStart(user.id), false);
   });
+
+  it("archives individual logs instead of deleting them", () => {
+    const u = journal.upsertUser("chat-archive-entry", "+4740343298");
+    const water = journal.ensureTrack({
+      userId: u.id,
+      kind: "habit",
+      slug: "vann",
+      name: "Vann",
+      tags: ["vann"],
+    });
+    journal.logEntry({
+      trackId: water.id,
+      userId: u.id,
+      quantity: { value: 1, unit: "glass" },
+      source: "heuristic",
+      linqMessageId: "ae-1",
+    });
+    journal.logEntry({
+      trackId: water.id,
+      userId: u.id,
+      quantity: { value: 2, unit: "glass" },
+      source: "heuristic",
+      linqMessageId: "ae-2",
+    });
+    assert.equal(journal.entryCount(water.id), 2);
+    const archived = journal.archiveEntry({ userId: u.id, slug: "vann", reason: "user_requested" });
+    assert.ok(archived);
+    assert.equal(archived?.slug, "vann");
+    assert.equal(archived?.alreadyArchived, undefined);
+    assert.equal(journal.entryCount(water.id), 1);
+    assert.equal(journal.recentEntries(u.id, 8).length, 1);
+    assert.equal(journal.isFreshStart(u.id), false);
+
+    const again = journal.logEntry({
+      trackId: water.id,
+      userId: u.id,
+      quantity: { value: 1, unit: "glass" },
+      source: "heuristic",
+      linqMessageId: "ae-2",
+    });
+    assert.equal(again.duplicate, true);
+
+    const training = journal.createTrack({
+      userId: u.id,
+      kind: "training",
+      slug: "program",
+      name: "OCR",
+      status: "draft",
+      plan: {
+        sessions: [
+          { id: "w1d1", title: "Styrke A", loadKey: "strA", load: 4, unit: "runder" },
+          { id: "w1d2", title: "Løp", loadKey: "easyrun", load: 5, unit: "km" },
+        ],
+      },
+    });
+    journal.activateTrack(training.id);
+    journal.logEntry({
+      trackId: training.id,
+      userId: u.id,
+      quality: "passe",
+      sessionRef: "w1d1",
+      source: "heuristic",
+    });
+    assert.equal(journal.nextSession(u.id, journal.getTrack(training.id)!)?.session.id, "w1d2");
+    const sessionLog = journal.archiveEntry({ userId: u.id, trackKind: "training" });
+    assert.equal(sessionLog?.session_ref, "w1d1");
+    assert.equal(journal.nextSession(u.id, journal.getTrack(training.id)!)?.session.id, "w1d1");
+    assert.equal(journal.archiveEntry({ userId: u.id, entryId: "missing" }), null);
+  });
 });

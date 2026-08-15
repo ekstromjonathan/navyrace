@@ -15,6 +15,7 @@ export type HeuristicIntent =
   | { kind: "archive"; confident: true }
   | { kind: "reminder_set"; confident: true; hour: number; minute: number }
   | { kind: "reminder_cancel"; confident: true }
+  | { kind: "archive_entry"; confident: true; slug?: string; trackKind?: "training" }
   | { kind: "unknown"; confident: false };
 
 const NUM = "(\\d+(?:[.,]\\d+)?)";
@@ -41,6 +42,9 @@ export function parseMessage(body: string): HeuristicIntent {
   if (/^(arkiver og lag nytt|archive and start new)$/i.test(text)) {
     return { kind: "archive", confident: true };
   }
+
+  const archiveEntry = parseArchiveEntry(text);
+  if (archiveEntry) return archiveEntry;
 
   if (/\b(slutt å minne|ikke minn meg|avbryt påminnelse|skru av påminnelse|stop reminding|don't remind)\b/i.test(lower)) {
     return { kind: "reminder_cancel", confident: true };
@@ -160,4 +164,36 @@ export function parseClock(text: string): { hour: number; minute: number } {
     if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) return { hour, minute };
   }
   return { hour: 8, minute: 0 };
+}
+
+function parseArchiveEntry(text: string): Extract<HeuristicIntent, { kind: "archive_entry" }> | null {
+  const lower = text.toLowerCase().trim();
+  if (/arkiver og lag nytt|archive and start new/i.test(lower)) return null;
+  if (
+    /\b(slett|fjern|delete|remove)\b/.test(lower) &&
+    /\b(alt|alle|everything|all (logs|entries)|hele programmet|programmet)\b/.test(lower) &&
+    !/\b(siste|last|latest)\b/.test(lower)
+  ) {
+    return null;
+  }
+
+  const nb =
+    /\b(slett|fjern|ta bort|arkiver)\b/.test(lower) &&
+    (/\b(siste|loggen|logg(?:en)?)\b/.test(lower) || /økt(en)?/i.test(lower));
+  const en =
+    /\b(delete|remove|archive)\b/.test(lower) &&
+    /\b(last|latest)\b/.test(lower) &&
+    /\b(log|entry|session|workout)\b/.test(lower);
+  const shortNb = /^(slett|fjern|ta bort) (siste|loggen)(\s+\S+)?$/i.test(lower);
+  const shortEn = /^(delete|remove) (the )?last(\s+\S+)?( log| entry)?$/i.test(lower);
+  if (!nb && !en && !shortNb && !shortEn) return null;
+
+  let slug: string | undefined;
+  if (/\b(vann|water|glasses?)\b/i.test(lower)) slug = "vann";
+  else if (/\b(meditasjon|meditation)\b/i.test(lower)) slug = "meditasjon";
+  else if (/\b(kaldt\s*bad|isbad|cold\s*plunge)\b/i.test(lower)) slug = "kaldt-bad";
+
+  const trackKind =
+    !slug && /(økt|trening|workout|session)/i.test(lower) ? ("training" as const) : undefined;
+  return { kind: "archive_entry", confident: true, slug, trackKind };
 }

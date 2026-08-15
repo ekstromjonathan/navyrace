@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS entries (
   source TEXT NOT NULL CHECK (source IN ('heuristic', 'llm', 'user')),
   linq_message_id TEXT UNIQUE,
   created_at TEXT NOT NULL,
+  archived_at TEXT,
+  archive_reason TEXT,
   FOREIGN KEY (track_id) REFERENCES tracks(id),
   FOREIGN KEY (user_id) REFERENCES users(id)
 );

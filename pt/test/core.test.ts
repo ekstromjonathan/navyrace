@@ -45,6 +45,26 @@ describe("parser", () => {
     assert.equal(parseMessage("easy").kind, "rpe");
   });
 
+  it("archives a single log instead of treating delete as a hard remove", () => {
+    const last = parseMessage("slett siste");
+    assert.equal(last.kind, "archive_entry");
+    if (last.kind === "archive_entry") {
+      assert.equal(last.slug, undefined);
+      assert.equal(last.trackKind, undefined);
+    }
+    const water = parseMessage("fjern siste vann");
+    assert.equal(water.kind, "archive_entry");
+    if (water.kind === "archive_entry") assert.equal(water.slug, "vann");
+    const en = parseMessage("delete the last log");
+    assert.equal(en.kind, "archive_entry");
+    const session = parseMessage("fjern siste økt");
+    assert.equal(session.kind, "archive_entry");
+    if (session.kind === "archive_entry") assert.equal(session.trackKind, "training");
+    assert.equal(parseMessage("arkiver og lag nytt").kind, "archive");
+    assert.equal(parseMessage("slett alt").kind, "unknown");
+    assert.equal(parseMessage("fjern loggen").kind, "archive_entry");
+  });
+
   it("does not treat a full sentence as rpe", () => {
     assert.equal(parseMessage("det var brutalt i går og kneet hovnet").kind, "unknown");
   });
