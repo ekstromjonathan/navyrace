@@ -106,6 +106,17 @@ export function setFacts(userId: string, patch: UserFacts): UserFacts {
   return next;
 }
 
+export function setLocale(userId: string, locale: string): void {
+  run("UPDATE users SET locale = ?, updated_at = ? WHERE id = ?", locale, nowIso(), userId);
+}
+
+export function isFreshStart(userId: string): boolean {
+  const entries = row<{ n: number }>("SELECT COUNT(*) AS n FROM entries WHERE user_id = ?", userId)?.n ?? 0;
+  const notes = row<{ n: number }>("SELECT COUNT(*) AS n FROM notes WHERE user_id = ?", userId)?.n ?? 0;
+  if (entries > 0 || notes > 0) return false;
+  return !activeTraining(userId) && !draftTraining(userId);
+}
+
 export function touchContactCard(userId: string): void {
   run("UPDATE users SET last_contact_card_at = ?, updated_at = ? WHERE id = ?", nowIso(), nowIso(), userId);
 }
@@ -372,7 +383,7 @@ export function lastRpeForLoadKey(userId: string, loadKey: string): string | nul
 
 const RPE_MULT: Record<string, number> = { lett: 1.08, passe: 1, brutalt: 0.9 };
 
-export function nextSession(userId: string, track: TrackRow): { session: PlanSession; load: number | null; note: string | null } | null {
+export function nextSession(userId: string, track: TrackRow): { session: PlanSession; load: number | null; adapt: "lett" | "brutalt" | null } | null {
   const plan = planOf(track);
   if (!plan?.sessions?.length) return null;
   const done = new Set(
@@ -386,7 +397,7 @@ export function nextSession(userId: string, track: TrackRow): { session: PlanSes
   const session = plan.sessions.find((s) => !done.has(s.id)) ?? null;
   if (!session) return null;
   let load = session.load ?? null;
-  let note: string | null = null;
+  let adapt: "lett" | "brutalt" | null = null;
   if (load != null && session.loadKey) {
     const prev = lastRpeForLoadKey(userId, session.loadKey);
     const m = prev ? RPE_MULT[prev] : null;
@@ -394,11 +405,11 @@ export function nextSession(userId: string, track: TrackRow): { session: PlanSes
       const unit = session.unit === "km" ? Math.round(load * m * 2) / 2 : Math.round(load * m);
       if (unit !== load) {
         load = unit;
-        note = prev === "lett" ? "Forrige føltes lett — skrur opp litt." : "Forrige var hard — letter litt.";
+        adapt = prev === "lett" ? "lett" : "brutalt";
       }
     }
   }
-  return { session, load, note };
+  return { session, load, adapt };
 }
 
 export function snapshot(user: UserRow) {
@@ -431,7 +442,7 @@ export function snapshot(user: UserRow) {
           unit: today.session.unit,
           items: (today.session.items ?? []).slice(0, 6),
           est: today.session.est,
-          adaptNote: today.note,
+          adapt: today.adapt,
         }
       : null,
     recentEntries: recentEntries(user.id, 6),

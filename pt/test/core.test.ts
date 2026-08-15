@@ -4,6 +4,7 @@ import { parseMessage } from "../src/parser.ts";
 import { isOptOut, isLinqKeywordOptOut } from "../src/optout.ts";
 import { isActivatePhrase, isArchivePhrase } from "../src/gates.ts";
 import { normalizeEvent } from "../src/webhook.ts";
+import { detectLang } from "../src/locale.ts";
 
 describe("parser", () => {
   it("logs cold plunge with duration", () => {
@@ -37,7 +38,11 @@ describe("parser", () => {
     assert.equal(parseMessage("brutalt").kind, "rpe");
     assert.equal(parseMessage("hva trener jeg i dag").kind, "today");
     assert.equal(parseMessage("kjør programmet").kind, "activate");
+    assert.equal(parseMessage("run the program").kind, "activate");
     assert.equal(parseMessage("arkiver og lag nytt").kind, "archive");
+    assert.equal(parseMessage("archive and start new").kind, "archive");
+    assert.equal(parseMessage("what am i training today").kind, "today");
+    assert.equal(parseMessage("easy").kind, "rpe");
   });
 
   it("does not treat a full sentence as rpe", () => {
@@ -63,7 +68,8 @@ describe("parser", () => {
       assert.equal(def.hour, 8);
       assert.equal(def.minute, 0);
     }
-    assert.equal(parseMessage("slutt å minne meg").kind, "reminder_cancel");
+    assert.equal(parseMessage("remind me to train at 8").kind, "reminder_set");
+    assert.equal(parseMessage("stop reminding me").kind, "reminder_cancel");
     assert.equal(parseMessage("Hva har du logget til nå?").kind, "unknown");
   });
 });
@@ -86,8 +92,10 @@ describe("opt-out", () => {
 describe("gates", () => {
   it("requires exact confirmation phrases", () => {
     assert.equal(isActivatePhrase("kjør programmet"), true);
+    assert.equal(isActivatePhrase("run the program"), true);
     assert.equal(isActivatePhrase("ok kjør"), false);
     assert.equal(isArchivePhrase("arkiver og lag nytt"), true);
+    assert.equal(isArchivePhrase("archive and start new"), true);
     assert.equal(isArchivePhrase("slett alt"), false);
   });
 });
@@ -109,5 +117,14 @@ describe("webhook normalize", () => {
     assert.equal(n?.inbound?.body, "Hei");
     assert.equal(n?.inbound?.chatId, "chat-1");
     assert.equal(n?.inbound?.phone, "+4740343295");
+  });
+});
+
+describe("locale", () => {
+  it("detects the language the user starts with", () => {
+    assert.equal(detectLang("Er vi på?"), "nb");
+    assert.equal(detectLang("Hei, kan du minne meg på å trene"), "nb");
+    assert.equal(detectLang("Are we on?"), "en");
+    assert.equal(detectLang("Hi, remind me to train at 8"), "en");
   });
 });

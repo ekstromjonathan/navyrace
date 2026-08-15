@@ -108,4 +108,14 @@ describe("journal", () => {
     assert.equal(journal.listReminders(user.id)[0]?.enabled, 0);
     assert.equal(journal.snapshot(user).reminders.length, 0);
   });
+
+  it("treats a new user with no entries as a fresh start", () => {
+    const fresh = journal.upsertUser("chat-fresh", "+4740343297");
+    assert.equal(journal.isFreshStart(fresh.id), true);
+    journal.setLocale(fresh.id, "en");
+    journal.setFacts(fresh.id, { uiLang: "en" });
+    assert.equal(journal.getUser(fresh.id)?.locale, "en");
+    assert.equal(journal.isFreshStart(fresh.id), true);
+    assert.equal(journal.isFreshStart(user.id), false);
+  });
 });

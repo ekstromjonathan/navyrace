@@ -59,10 +59,10 @@ Text `+14044465379` from the allowlisted number.
 
 | Action | Phrase (exact) |
 |---|---|
-| Activate a draft program | `kjør programmet` (twice: first shows summary) |
-| Archive the active program | `arkiver og lag nytt` (twice: first shows what would be archived) |
-| Daily training reminder | `minn meg på å trene kl 8` (time optional, default 08:00) |
-| Cancel reminder | `slutt å minne meg` |
+| Activate a draft program | `kjør programmet` / `run the program` (twice: first shows summary) |
+| Archive the active program | `arkiver og lag nytt` / `archive and start new` (twice) |
+| Daily training reminder | `minn meg på å trene kl 8` / `remind me to train at 8` |
+| Cancel reminder | `slutt å minne meg` / `stop reminding me` |
 
 Nothing is hard-deleted. Archives stay in the same DB.
 

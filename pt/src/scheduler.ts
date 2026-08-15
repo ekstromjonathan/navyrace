@@ -1,27 +1,27 @@
 import { env } from "./env.ts";
 import { localParts } from "./db.ts";
 import * as journal from "./journal.ts";
+import * as copy from "./copy.ts";
 import * as linq from "./linq.ts";
+import { isLang } from "./locale.ts";
 import type { ReminderRow, UserRow } from "./types.ts";
 
 const CATCHUP_MINUTES = 180;
 const TICK_MS = 30_000;
 
 export function reminderBody(user: UserRow): string {
+  const raw = journal.factsOf(user).uiLang;
+  const lang = isLang(raw) ? raw : isLang(user.locale) ? user.locale : "nb";
   const training = journal.activeTraining(user.id);
-  if (!training) {
-    return "Påminnelse — du ville trene i dag. Hva har du tid til?";
-  }
+  if (!training) return copy.reminderPingNoPlan(lang);
   const next = journal.nextSession(user.id, training);
-  if (!next) {
-    return `Påminnelse — «${training.name}» er ferdig ut. Vil du ha en ny blokk?`;
-  }
+  if (!next) return copy.reminderPingDone(lang, training.name);
   const load = next.load != null ? `${next.load}${next.session.unit ? ` ${next.session.unit}` : ""}` : "";
-  return [
-    `Påminnelse — trening i dag.`,
-    `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`,
-    "Si «hva trener jeg i dag» når du starter.",
-  ].join("\n");
+  const line =
+    lang === "en"
+      ? `Today: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
+      : `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`;
+  return copy.reminderPingToday(lang, line);
 }
 
 export function isReminderDue(reminder: ReminderRow, user: UserRow, now: Date): boolean {

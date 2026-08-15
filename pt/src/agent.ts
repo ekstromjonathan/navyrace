@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.ts";
 import * as journal from "./journal.ts";
-import { activatePrompt, archivePrompt } from "./gates.ts";
+import * as copy from "./copy.ts";
+import type { Lang } from "./locale.ts";
 import type { Plan, TrackKind, UserRow } from "./types.ts";
 
 const TOOLS: Anthropic.Messages.Tool[] = [
@@ -140,19 +141,32 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   },
 ];
 
-function systemPrompt(): string {
-  return `Du er ${env.coachName}, en personlig trener over iMessage. Norsk, kort, konkret.
+function systemPrompt(lang: Lang, onboarding: boolean): string {
+  const language = lang === "en" ? "English" : "Norwegian (bokmål)";
+  const confirm =
+    lang === "en"
+      ? 'Activate with exactly “run the program”. Archive with exactly “archive and start new”.'
+      : 'Aktiver med nøyaktig «kjør programmet». Arkiver med nøyaktig «arkiver og lag nytt».';
+  const onboard = onboarding
+    ? lang === "en"
+      ? `The journal is empty. This is first contact. Introduce yourself as ${env.coachName}, their iMessage PT. You keep a private log (training, food, habits, recovery) and can draft a program they must confirm. One short intro, one question (what they want from this). Do not dump features. Do not invent history they haven't told you.`
+      : `Journalen er tom. Dette er første møte. Presenter deg som ${env.coachName}, PT over iMessage. Du fører en privat logg (trening, mat, vaner, restitusjon) og kan lage et program de må bekrefte. Én kort intro, ett spørsmål (hva de vil ha ut av dette). Ikke dump funksjoner. Ikke finn på historikk de ikke har fortalt.`
+    : "";
+  return `You are ${env.coachName}, a personal trainer over iMessage.
 
-Du eier ikke sannheten — journalen gjør det. Kall get_snapshot før du anbefaler.
-Siste meldinger er arbeidshukommelse for «ja/den/ok» og oppfølging. De er ikke sannhet.
-Svar maks 4–6 linjer. Én neste handling. Still maks ett spørsmål, og bare hvis feltet mangler for *denne* avgjørelsen.
-Ikke dump hele programmet. Send i dag / denne uken.
-Når brukeren vil ha et nytt opplegg: samle det som mangler, så kall propose_plan (programmer-hatten skriver øktene). Ikke finn opp en 10-ukersplan i chatten.
-Ikke slett eller overskriv et aktivt program. Bruk request_archive. Aktivering krever request_activate.
-Når brukeren ber om å bli minnet (f.eks. hver dag kl 8): kall set_reminder. Ikke lov påminnelser uten verktøyet. Avslå/mas er forbudt — én kort ping, hopp over hvis økt allerede er logget.
-Du er ikke lege. Ved smerte: logg, lett belastning, henvis til fagperson hvis det vedvarer.
-Ingen lenker i svaret med mindre brukeren ber om det.
-Effekter og mas er forbudt. Høres ut som en venn som kan trening.`;
+Language: Reply only in ${language}. The user started in this language. Never switch. ${confirm}
+
+You do not own the truth — the journal does. Call get_snapshot before you advise.
+Recent messages are working memory for “yes/that/ok”, not truth.
+Max 4–6 lines. One next action. At most one question, and only if that field is missing for *this* decision.
+Don't dump the whole program. Send today / this week.
+When they want a new plan: collect what's missing, then call propose_plan (the programmer hat writes sessions). Don't invent a 10-week plan in chat.
+Don't delete or overwrite an active program. Use request_archive. Activation requires request_activate.
+When they ask to be reminded (e.g. every day at 8): call set_reminder. Don't promise reminders without the tool. No nagging — one short ping, skip if a session is already logged.
+You are not a doctor. On pain: log it, ease load, refer to a professional if it lasts.
+No links unless they ask.
+No effects, no spam. Sound like a friend who knows training.
+${onboard}`.trim();
 }
 
 function extractJsonObject(text: string): unknown {
@@ -204,7 +218,13 @@ Regler: utstyr og skader i facts styrer øvelsene. loadKey grupperer like økter
   return parsed;
 }
 
-async function runTool(user: UserRow, name: string, input: Record<string, unknown>, messageId: string): Promise<string> {
+async function runTool(
+  user: UserRow,
+  lang: Lang,
+  name: string,
+  input: Record<string, unknown>,
+  messageId: string,
+): Promise<string> {
   switch (name) {
     case "get_snapshot":
       return JSON.stringify(journal.snapshot(user));
@@ -288,7 +308,7 @@ async function runTool(user: UserRow, name: string, input: Record<string, unknow
       journal.setPending(user.id, {
         type: "activate_confirm",
         trackId: track.id,
-        summary: activatePrompt(track.name, plan.sessions.length),
+        summary: copy.activatePrompt(lang, track.name, plan.sessions.length),
         askedAt: new Date().toISOString(),
       });
       return JSON.stringify({
@@ -298,14 +318,14 @@ async function runTool(user: UserRow, name: string, input: Record<string, unknow
         daysPerWeek: plan.daysPerWeek,
         sessionCount: plan.sessions.length,
         titles: plan.sessions.slice(0, 8).map((s) => s.title),
-        confirm: activatePrompt(track.name, plan.sessions.length),
+        confirm: copy.activatePrompt(lang, track.name, plan.sessions.length),
         writer: env.smartModel || env.model,
       });
     }
     case "request_archive": {
       const track = journal.getTrack(String(input.trackId));
       if (!track) return JSON.stringify({ error: "missing track" });
-      const summary = archivePrompt(track.name, journal.entryCount(track.id), journal.noteCount(track.id));
+      const summary = copy.archivePrompt(lang, track.name, journal.entryCount(track.id), journal.noteCount(track.id));
       journal.setPending(user.id, {
         type: "archive_confirm",
         trackId: track.id,
@@ -318,7 +338,7 @@ async function runTool(user: UserRow, name: string, input: Record<string, unknow
       const track = journal.getTrack(String(input.trackId));
       if (!track) return JSON.stringify({ error: "missing track" });
       const sessions = journal.planOf(track)?.sessions.length ?? 0;
-      const summary = activatePrompt(track.name, sessions);
+      const summary = copy.activatePrompt(lang, track.name, sessions);
       journal.setPending(user.id, {
         type: "activate_confirm",
         trackId: track.id,
@@ -336,7 +356,7 @@ async function runTool(user: UserRow, name: string, input: Record<string, unknow
         hour: rec.hour,
         minute: rec.minute,
         tz: user.tz,
-        confirm: `daglig kl ${journal.hhmm(rec.hour, rec.minute)} (${user.tz})`,
+        confirm: lang === "en" ? `daily at ${journal.hhmm(rec.hour, rec.minute)} (${user.tz})` : `daglig kl ${journal.hhmm(rec.hour, rec.minute)} (${user.tz})`,
       });
     }
     case "cancel_reminder": {
@@ -348,16 +368,59 @@ async function runTool(user: UserRow, name: string, input: Record<string, unknow
   }
 }
 
-function agentErrorReply(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  console.error("agent failed", msg);
-  if (/deprecated|not_found_error/i.test(msg)) {
-    return "Jeg hørte deg, men modellnavnet er ugyldig hos OpenRouter. Bytt PT_MODEL i pt/.env.";
+export async function runAgent(
+  user: UserRow,
+  body: string,
+  messageId: string,
+  opts: { lang: Lang; onboarding: boolean },
+): Promise<string> {
+  const client = llmClient();
+  if (!client) {
+    return copy.noLlm(opts.lang);
   }
-  if (/credit balance|too low|purchase credits/i.test(msg)) {
-    return "Jeg hørte deg, men LLM-kontoen er tom for kreditt. Sett OPENROUTER_API_KEY i pt/.env, eller bruk en enkel logg: «mediterte i 30 sekunder».";
+  try {
+    const snap = journal.snapshot(user);
+    const { recentChat: _chatInSnap, ...journalSnap } = snap;
+    const chat = journal.recentChat(user.id, 8, messageId);
+    const chatLines =
+      chat.length === 0
+        ? "(none yet)"
+        : chat.map((m) => `${m.role === "user" ? "User" : "PT"}: ${m.body}`).join("\n");
+    const messages: Anthropic.Messages.MessageParam[] = [
+      {
+        role: "user",
+        content: `Recent messages (working memory, not truth):\n${chatLines}\n\nJournal (short):\n${JSON.stringify({ ...journalSnap, fresh: opts.onboarding, locale: opts.lang })}\n\nUser message:\n${body}`,
+      },
+    ];
+
+    for (let i = 0; i < 4; i++) {
+      const res = await client.messages.create({
+        model: env.model,
+        max_tokens: 800,
+        system: systemPrompt(opts.lang, opts.onboarding),
+        tools: TOOLS,
+        messages,
+      });
+      const toolUses = res.content.filter((c): c is Anthropic.Messages.ToolUseBlock => c.type === "tool_use");
+      const texts = res.content.filter((c): c is Anthropic.Messages.TextBlock => c.type === "text").map((c) => c.text);
+      if (res.stop_reason === "end_turn" || toolUses.length === 0) {
+        return (texts.join("\n").trim() || "Ok.").slice(0, 1200);
+      }
+      messages.push({ role: "assistant", content: res.content });
+      const results: Anthropic.Messages.ToolResultBlockParam[] = [];
+      for (const tu of toolUses) {
+        results.push({
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: await runTool(user, opts.lang, tu.name, (tu.input ?? {}) as Record<string, unknown>, messageId),
+        });
+      }
+      messages.push({ role: "user", content: results });
+    }
+    return copy.agentStopped(opts.lang);
+  } catch (err) {
+    return copy.agentError(opts.lang, err);
   }
-  return "Jeg hørte deg, men fikk ikke laget et skikkelig svar. Prøv en kort logg, eller prøv igjen om litt.";
 }
 
 function llmClient(): Anthropic | null {
@@ -373,54 +436,4 @@ function llmClient(): Anthropic | null {
   }
   if (env.anthropicKey) return new Anthropic({ apiKey: env.anthropicKey });
   return null;
-}
-
-export async function runAgent(user: UserRow, body: string, messageId: string): Promise<string> {
-  const client = llmClient();
-  if (!client) {
-    return "Jeg kan logge enkle ting (vann, kaldt bad, meditasjon, lett/passe/brutalt), men trenger OPENROUTER_API_KEY (eller Anthropic) for å svare fritt.";
-  }
-  try {
-    const snap = journal.snapshot(user);
-    const { recentChat: _chatInSnap, ...journalSnap } = snap;
-    const chat = journal.recentChat(user.id, 8, messageId);
-    const chatLines =
-      chat.length === 0
-        ? "(ingen ennå)"
-        : chat.map((m) => `${m.role === "user" ? "Bruker" : "PT"}: ${m.body}`).join("\n");
-    const messages: Anthropic.Messages.MessageParam[] = [
-      {
-        role: "user",
-        content: `Siste meldinger (arbeidshukommelse, ikke sannhet):\n${chatLines}\n\nJournal (kort):\n${JSON.stringify(journalSnap)}\n\nMelding fra bruker:\n${body}`,
-      },
-    ];
-
-    for (let i = 0; i < 4; i++) {
-      const res = await client.messages.create({
-        model: env.model,
-        max_tokens: 800,
-        system: systemPrompt(),
-        tools: TOOLS,
-        messages,
-      });
-      const toolUses = res.content.filter((c): c is Anthropic.Messages.ToolUseBlock => c.type === "tool_use");
-      const texts = res.content.filter((c): c is Anthropic.Messages.TextBlock => c.type === "text").map((c) => c.text);
-      if (res.stop_reason === "end_turn" || toolUses.length === 0) {
-        return (texts.join("\n").trim() || "Ok.").slice(0, 1200);
-      }
-      messages.push({ role: "assistant", content: res.content });
-      const results: Anthropic.Messages.ToolResultBlockParam[] = [];
-      for (const tu of toolUses) {
-        results.push({
-          type: "tool_result",
-          tool_use_id: tu.id,
-          content: await runTool(user, tu.name, (tu.input ?? {}) as Record<string, unknown>, messageId),
-        });
-      }
-      messages.push({ role: "user", content: results });
-    }
-    return "Jeg måtte stoppe — send gjerne én ting om gangen.";
-  } catch (err) {
-    return agentErrorReply(err);
-  }
 }
