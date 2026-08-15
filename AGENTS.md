@@ -2,7 +2,7 @@
 
 ## Cursor Cloud specific instructions
 
-This repo is a **Vite + React 19** training app ("MAI/Navy Race TRAINER") plus an optional iMessage PT in `pt/`. Package manager is **npm**; Node 22 is used in CI. Frontend CI (`.github/workflows/deploy.yml`) runs `npm ci` + `npm run build`. PT tests live in `.github/workflows/pt.yml`.
+This repo is a **Vite + React 19** app (Norwegian fitness training app, "MAI/Navy Race TRAINER") with a static landing page at `/` (lodd.ai iMessage signup). The trainer lives at `/app/`. There is also an optional iMessage PT in `pt/`. Package manager is **npm** (`package-lock.json`); Node 22 is used in CI. Frontend CI (`.github/workflows/deploy.yml`) runs `npm ci` + `npm run build`. PT tests live in `.github/workflows/pt.yml`.
 
 ### iMessage PT (`pt/`)
 
@@ -18,7 +18,7 @@ Local forward: `linq webhooks listen --forward-to http://localhost:8787/webhook`
 
 The Vite frontend is the original app. All commands are the standard scripts in `package.json`:
 
-- Dev server: `npm run dev` → http://localhost:5173 (this is what to run for development).
+- Dev server: `npm run dev` → http://localhost:8080 (this is what to run for development; not 3000).
 - Build: `npm run build` (outputs to `dist/`).
 - Preview a build: `npm run preview`.
 
@@ -32,4 +32,4 @@ The dev server is started for you as the `vite` terminal on startup; it does not
 
 ### Testing note
 
-The main flow to exercise is the chat-style onboarding, which generates a weekly training program and lands on the workout dashboard.
+The landing (`/`) is the iMessage signup. The Navy Race trainer is at `/app/`. Terms live at `/vilkar/`. The trainer flow to exercise is chat-style onboarding, which generates a weekly training program and lands on the workout dashboard.

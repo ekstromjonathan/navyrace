@@ -7,7 +7,7 @@ React-app, opprinnelig bygget som en Claude-artifact og nå pakket som et Vite-p
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://localhost:8080
 ```
 
 ```bash
@@ -19,9 +19,12 @@ npm run preview  # server dist/ lokalt
 
 | Fil | Innhold |
 |-----|---------|
+| `index.html` | lodd.ai-landing — iMessage-signup |
+| `public/signup/index.html` | Redirect til `/` |
+| `vilkar/index.html` | Vilkår |
+| `app/index.html` | Navy Race-appen |
 | `src/NavyRaceTrainer.jsx` | Hele appen — programdata, økter, timer og CSS i én komponent |
 | `src/main.jsx` | React-rot, monterer appen |
-| `index.html` | Vite-entrypoint |
 
 Eneste eksterne avhengigheter er `react`, `react-dom` og `lucide-react` (ikoner).
 All styling ligger som en `CSS`-konstant i `NavyRaceTrainer.jsx` og injiseres via `<style>`.
