@@ -647,8 +647,15 @@ export async function recallChat(
   opts: { limit?: number; contains?: string } = {},
 ): Promise<ChatTurn[]> {
   const limit = Math.min(40, Math.max(1, opts.limit ?? 20));
-  const needle = opts.contains?.trim().toLowerCase();
-  if (!needle) return recentChat(userId, limit);
+  const terms = (opts.contains ?? "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+
+  const recent = await recentChat(userId, limit);
+  if (terms.length === 0) return recent;
+
   const { data, error } = await getSupabase()
     .from("message_log")
     .select("role, body, linq_message_id, created_at")
@@ -656,10 +663,22 @@ export async function recallChat(
     .order("created_at", { ascending: false })
     .limit(100);
   throwIf(error);
-  return ([...(data ?? [])] as ChatTurn[])
-    .filter((m) => m.body.toLowerCase().includes(needle))
-    .reverse()
-    .slice(-limit);
+  const list = (data ?? []) as ChatTurn[];
+  const matched = list.filter((m) => {
+    const body = m.body.toLowerCase();
+    return terms.some((t) => body.includes(t));
+  });
+
+  // Keep recent context even when the keyword only appears in PT questions,
+  // so user answers like «3-4 ganger» still show up next to «dager».
+  const byKey = new Map<string, ChatTurn>();
+  for (const m of [...matched.reverse(), ...recent]) {
+    const key = `${m.created_at}|${m.role}|${m.body}`;
+    byKey.set(key, m);
+  }
+  return [...byKey.values()]
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .slice(-Math.max(limit, Math.min(40, matched.length + recent.length)));
 }
 
 export async function lastRpeForLoadKey(userId: string, loadKey: string): Promise<string | null> {
