@@ -33,10 +33,13 @@ function optional(name: string, fallback = ""): string {
 }
 
 export const env = {
-  port: Number(optional("PT_PORT", "8787")),
+  port: Number(optional("PORT", optional("PT_PORT", "8787"))),
+  hostname: optional("PT_HOST", "0.0.0.0"),
   tz: optional("PT_TZ", "Europe/Oslo"),
   coachName: optional("PT_COACH_NAME", "MAI"),
   get dbPath() {
+    const volume = optional("RAILWAY_VOLUME_MOUNT_PATH");
+    if (volume) return `${volume.replace(/\/$/, "")}/journal.sqlite`;
     return optional("PT_DB_PATH", "./data/journal.sqlite");
   },
   get openrouterKey() {
@@ -62,6 +65,9 @@ export const env = {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+  },
+  get hasLinqToken() {
+    return Boolean(optional("LINQ_API_TOKEN"));
   },
   get linqToken() {
     return required("LINQ_API_TOKEN");

@@ -23,6 +23,18 @@ If you ask the PT to remind you (e.g. «minn meg på å trene kl 8»), it stores
 - «slutt å minne meg» turns it off.
 - Only fires while `npm start` is running.
 
+## Hosting
+
+Railway auto-deploys `main` to [lodd.ai](https://lodd.ai). The root `Dockerfile` runs this PT (webhook + scheduler) and serves the Vite app from the same process so `/webhook` is not swallowed by the static host.
+
+After a `main` deploy, `GET https://lodd.ai/health` must return JSON (`ok: true`). Then:
+
+```bash
+linq webhooks create --url https://lodd.ai/webhook --events message.received
+```
+
+Set these in the Railway service variables (not in git): `LINQ_API_TOKEN`, `OPENROUTER_API_KEY`. Attach a volume if you want the SQLite journal to survive redeploys (`RAILWAY_VOLUME_MOUNT_PATH` is picked up automatically).
+
 ## Run locally
 
 ```bash
