@@ -316,6 +316,9 @@ async function runTool(user: UserRow, name: string, input: Record<string, unknow
 function agentErrorReply(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   console.error("agent failed", msg);
+  if (/deprecated|not_found_error/i.test(msg)) {
+    return "Jeg hørte deg, men modellnavnet er ugyldig hos OpenRouter. Bytt PT_MODEL i pt/.env.";
+  }
   if (/credit balance|too low|purchase credits/i.test(msg)) {
     return "Jeg hørte deg, men LLM-kontoen er tom for kreditt. Sett OPENROUTER_API_KEY i pt/.env, eller bruk en enkel logg: «mediterte i 30 sekunder».";
   }
