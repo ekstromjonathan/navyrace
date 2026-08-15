@@ -201,38 +201,70 @@ body {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.field-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
+  position: relative;
+  display: block;
 }
 
 .field input {
   width: 100%;
-  min-height: 52px;
-  padding: 14px 16px;
+  height: 58px;
+  padding: 22px 16px 8px;
   border: 0;
   border-radius: 16px;
   background: var(--fill);
   color: var(--ink);
   font-family: inherit;
   font-size: 16px;
+  line-height: 1.2;
   outline: none;
+  transition: box-shadow 160ms var(--ease-out), background-color 160ms var(--ease-out);
+}
+
+.field input::placeholder {
+  color: transparent;
+}
+
+.field input:focus::placeholder {
+  color: rgba(17, 17, 17, 0.28);
 }
 
 .field input:focus {
+  background: rgba(17, 17, 17, 0.06);
   box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+.field-label {
+  position: absolute;
+  left: 16px;
+  top: 19px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: none;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(0) scale(1);
+  transform-origin: 0 0;
+  transition:
+    transform 180ms var(--ease-out),
+    color 180ms var(--ease-out);
+}
+
+.field input:focus ~ .field-label,
+.field input:not(:placeholder-shown) ~ .field-label,
+.field input[data-filled] ~ .field-label,
+.field input:-webkit-autofill ~ .field-label {
+  transform: translateY(-8px) scale(0.72);
+}
+
+.field input:focus ~ .field-label {
+  color: var(--ink);
 }
 
 .form-note {
@@ -267,7 +299,9 @@ body {
   }
 
   .btn,
-  .close {
+  .close,
+  .field-label,
+  .field input {
     transition: none;
   }
 
