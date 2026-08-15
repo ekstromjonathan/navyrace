@@ -13,20 +13,34 @@ import * as journal from "./journal.ts";
 const backend = initJournal();
 
 function findStaticRoot(): string | null {
-  const candidates = [process.env.PT_STATIC_DIR, "../dist", "dist"].filter(
-    (v): v is string => Boolean(v && v.trim()),
-  );
+  const candidates = [
+    process.env.PT_STATIC_DIR,
+    "dist",
+    "../dist",
+    "/app/pt/dist",
+    "/app/dist",
+  ].filter((v): v is string => Boolean(v && String(v).trim()));
+
+  let fallbackWithDotDot: string | null = null;
   for (const raw of candidates) {
     const abs = resolve(process.cwd(), raw);
-    if (existsSync(join(abs, "index.html"))) {
-      const rel = relative(process.cwd(), abs);
-      return rel === "" ? "." : rel;
-    }
+    if (!existsSync(join(abs, "index.html"))) continue;
+    const rel = relative(process.cwd(), abs);
+    const root = rel === "" ? "." : rel;
+    /* Prefer roots that stay under cwd — serve-static is happier without "..". */
+    if (root === "." || (!root.startsWith(`..${"/"}`) && root !== "..")) return root;
+    fallbackWithDotDot ??= root;
   }
-  return null;
+  return fallbackWithDotDot;
 }
 
 const staticRoot = findStaticRoot();
+if (!staticRoot && process.env.PT_REQUIRE_SPA === "1") {
+  console.error(
+    "PT_REQUIRE_SPA=1 but no Vite dist/ found (tried PT_STATIC_DIR, dist, ../dist). Rebuild with root Dockerfile or npm run build.",
+  );
+  process.exit(1);
+}
 
 const app = new Hono();
 

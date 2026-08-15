@@ -1,5 +1,9 @@
-# Used only if a Railway service has rootDirectory = pt.
-# The lodd.ai service builds from repo root via /railway.toml + Dockerfile.
+# Do not point the lodd.ai service here.
+# Root Directory must be empty (repo root) so /railway.toml + Dockerfile run.
+# That image builds the Vite app into pt/dist and starts this PT with spa=true.
+#
+# If a service accidentally uses rootDirectory=pt, it will only run the webhook
+# (spa=false) and https://lodd.ai/ will 404.
 
 [build]
 builder = "RAILPACK"

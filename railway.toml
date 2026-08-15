@@ -1,6 +1,7 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+watchPatterns = ["Dockerfile", "package.json", "package-lock.json", "index.html", "app/**", "vilkar/**", "src/**", "public/**", "pt/**", "scripts/**"]
 
 [deploy]
 healthcheckPath = "/health"
@@ -12,4 +13,6 @@ PT_COACH_NAME = "lodd.ai"
 PT_MODEL = "x-ai/grok-4.3"
 PT_MODEL_SMART = "x-ai/grok-4.6"
 PT_TZ = "Europe/Oslo"
+PT_STATIC_DIR = "dist"
+PT_REQUIRE_SPA = "1"
 LINQ_ALLOWLIST = "+4740343295"
