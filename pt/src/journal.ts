@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDb, nowIso, parseJson, todayInTz } from "./db.ts";
 import type {
+  ChatTurn,
   Pending,
   Plan,
   PlanSession,
@@ -304,6 +305,53 @@ export function recentNotes(userId: string, limit = 5): { kind: string; body: st
   return rows("SELECT kind, body, created_at FROM notes WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", userId, limit);
 }
 
+const MAX_LOG_CHARS = 500;
+const MAX_LOG_ROWS = 50;
+
+export function logMessage(
+  userId: string,
+  role: "user" | "pt",
+  body: string,
+  linqMessageId?: string | null,
+): void {
+  const trimmed = body.trim().slice(0, MAX_LOG_CHARS);
+  if (!trimmed) return;
+  run(
+    `INSERT INTO message_log (id, user_id, role, body, linq_message_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    randomUUID(),
+    userId,
+    role,
+    trimmed,
+    linqMessageId ?? null,
+    nowIso(),
+  );
+  run(
+    `DELETE FROM message_log WHERE user_id = ? AND id IN (
+       SELECT id FROM (
+         SELECT id FROM message_log WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET ?
+       )
+     )`,
+    userId,
+    userId,
+    MAX_LOG_ROWS,
+  );
+}
+
+export function recentChat(userId: string, limit = 8, excludeLinqMessageId?: string | null): ChatTurn[] {
+  const list = rows<ChatTurn>(
+    `SELECT role, body, linq_message_id, created_at FROM message_log
+     WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+    userId,
+    excludeLinqMessageId ? limit + 4 : limit,
+  );
+  const chronological = list.reverse();
+  if (!excludeLinqMessageId) return chronological.slice(-limit);
+  return chronological
+    .filter((m) => !(m.role === "user" && m.linq_message_id === excludeLinqMessageId))
+    .slice(-limit);
+}
+
 export function lastRpeForLoadKey(userId: string, loadKey: string): string | null {
   const rec = row<{ quality: string }>(
     `SELECT e.quality FROM entries e
@@ -382,5 +430,6 @@ export function snapshot(user: UserRow) {
       : null,
     recentEntries: recentEntries(user.id, 6),
     recentNotes: recentNotes(user.id, 5),
+    recentChat: recentChat(user.id, 8),
   };
 }

@@ -8,6 +8,12 @@ OpenRouter. Floor: `PT_MODEL` (e.g. `x-ai/grok-4.1-fast`). Programmer hat: `PT_M
 
 Obvious logs skip the model. Drafts go live only after `kjør programmet`.
 
+## Memory
+
+Journal (tracks, entries, notes, facts) is the source of truth. iMessage is not dumped.
+
+A rolling `message_log` keeps the last ~50 turns per user (bodies truncated to 500 chars). The floor coach sees the last 8 as working memory so short follow-ups like «ja» / «den» / «ok» resolve. Heuristic logs (water, plunge, RPE) still skip the model.
+
 ## Run locally
 
 ```bash

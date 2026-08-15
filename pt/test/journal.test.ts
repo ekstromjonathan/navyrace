@@ -74,4 +74,24 @@ describe("journal", () => {
     journal.releaseEvent("e1");
     assert.equal(journal.claimEvent("e1"), true);
   });
+
+  it("keeps a rolling chat log and prunes old turns", () => {
+    const chatUser = journal.upsertUser("chat-log", "+4740343295");
+    journal.logMessage(chatUser.id, "user", "hvilken økt?", "m-q");
+    journal.logMessage(chatUser.id, "pt", "Styrke A i dag.");
+    journal.logMessage(chatUser.id, "user", "ja den", "m-ja");
+    const recent = journal.recentChat(chatUser.id, 8);
+    assert.equal(recent.length, 3);
+    assert.equal(recent[0]?.role, "user");
+    assert.equal(recent[2]?.body, "ja den");
+    const withoutCurrent = journal.recentChat(chatUser.id, 8, "m-ja");
+    assert.equal(withoutCurrent.at(-1)?.body, "Styrke A i dag.");
+    assert.equal(journal.snapshot(chatUser).recentChat.length, 3);
+
+    for (let i = 0; i < 60; i++) journal.logMessage(chatUser.id, "user", `n${i}`, `m-${i}`);
+    const kept = journal.recentChat(chatUser.id, 100);
+    assert.equal(kept.length, 50);
+    assert.equal(kept[0]?.body, "n10");
+    assert.equal(kept.at(-1)?.body, "n59");
+  });
 });

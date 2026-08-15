@@ -8,7 +8,11 @@ import * as linq from "./linq.ts";
 import { normalizeEvent } from "./webhook.ts";
 import type { Inbound, UserRow } from "./types.ts";
 
-async function reply(chatId: string, text: string, opts?: { overrideOptout?: boolean; replyTo?: string }) {
+async function reply(
+  chatId: string,
+  text: string,
+  opts?: { overrideOptout?: boolean; replyTo?: string; userId?: string },
+) {
   const clipped = text.trim().slice(0, 1200);
   if (!clipped) return;
   try {
@@ -17,6 +21,7 @@ async function reply(chatId: string, text: string, opts?: { overrideOptout?: boo
     if (linq.isOptOutRejected(err)) return;
     throw err;
   }
+  if (opts?.userId) journal.logMessage(opts.userId, "pt", clipped);
 }
 
 async function withTyping(chatId: string, fn: () => Promise<string>): Promise<string> {
@@ -188,42 +193,48 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
   if (!isAllowlisted(inbound.phone)) return;
   if (!journal.claimMessage(inbound.messageId)) return;
 
+  let user: UserRow | undefined;
   try {
-  const user = journal.upsertUser(inbound.chatId, inbound.phone);
-  if (inbound.healthStatus) journal.setHealth(user.id, inbound.healthStatus);
-  if (user.health_status === "OPTED_OUT" && !isOptOut(inbound.body)) {
-    /* Linq clears OPTED_OUT on any non-keyword reply; treat as re-opt-in locally. */
-    journal.setHealth(user.id, inbound.healthStatus || "HEALTHY");
-  }
-
-  if (isOptOut(inbound.body)) {
-    journal.setHealth(user.id, "OPTED_OUT");
-    await reply(inbound.chatId, "Ok, jeg er stille. Skriv når du vil igjen.", { overrideOptout: true });
-    return;
-  }
-
-  if (user.health_status === "CRITICAL") return;
-
-  const pendingReply = handlePending(user, inbound.body);
-  if (pendingReply) {
-    await reply(inbound.chatId, pendingReply, { replyTo: inbound.messageId });
-    await maybeCard(user, inbound.chatId);
-    return;
-  }
-
-  const heuristic = applyHeuristic(user, inbound);
-  if (heuristic) {
-    await reply(inbound.chatId, heuristic, { replyTo: inbound.messageId });
-    if (parseMessage(inbound.body).kind === "rpe" && inbound.body.toLowerCase() !== "hoppet") {
-      await linq.reactLove(inbound.messageId);
+    const current = journal.upsertUser(inbound.chatId, inbound.phone);
+    user = current;
+    journal.logMessage(current.id, "user", inbound.body, inbound.messageId);
+    if (inbound.healthStatus) journal.setHealth(current.id, inbound.healthStatus);
+    if (current.health_status === "OPTED_OUT" && !isOptOut(inbound.body)) {
+      /* Linq clears OPTED_OUT on any non-keyword reply; treat as re-opt-in locally. */
+      journal.setHealth(current.id, inbound.healthStatus || "HEALTHY");
     }
-    await maybeCard(user, inbound.chatId);
-    return;
-  }
 
-  const text = await withTyping(inbound.chatId, () => runAgent(user, inbound.body, inbound.messageId));
-  await reply(inbound.chatId, text, { replyTo: inbound.messageId });
-  await maybeCard(user, inbound.chatId);
+    if (isOptOut(inbound.body)) {
+      journal.setHealth(current.id, "OPTED_OUT");
+      await reply(inbound.chatId, "Ok, jeg er stille. Skriv når du vil igjen.", {
+        overrideOptout: true,
+        userId: current.id,
+      });
+      return;
+    }
+
+    if (current.health_status === "CRITICAL") return;
+
+    const pendingReply = handlePending(current, inbound.body);
+    if (pendingReply) {
+      await reply(inbound.chatId, pendingReply, { replyTo: inbound.messageId, userId: current.id });
+      await maybeCard(current, inbound.chatId);
+      return;
+    }
+
+    const heuristic = applyHeuristic(current, inbound);
+    if (heuristic) {
+      await reply(inbound.chatId, heuristic, { replyTo: inbound.messageId, userId: current.id });
+      if (parseMessage(inbound.body).kind === "rpe" && inbound.body.toLowerCase() !== "hoppet") {
+        await linq.reactLove(inbound.messageId);
+      }
+      await maybeCard(current, inbound.chatId);
+      return;
+    }
+
+    const text = await withTyping(inbound.chatId, () => runAgent(current, inbound.body, inbound.messageId));
+    await reply(inbound.chatId, text, { replyTo: inbound.messageId, userId: current.id });
+    await maybeCard(current, inbound.chatId);
   } catch (err) {
     console.error("handleInbound failed", err);
     try {
@@ -231,6 +242,7 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       await reply(
         inbound.chatId,
         "Jeg hørte deg, men noe røk på min side. Prøv igjen, eller si f.eks. «mediterte i 30 sekunder».",
+        user ? { userId: user.id } : undefined,
       );
     } catch {
       /* still return 200 so Linq does not retry the typing loop */

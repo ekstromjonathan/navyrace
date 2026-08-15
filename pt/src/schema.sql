@@ -69,6 +69,19 @@ CREATE TABLE IF NOT EXISTS notes (
 
 CREATE INDEX IF NOT EXISTS notes_user_time ON notes(user_id, created_at DESC);
 
+-- Rolling working memory (last ~50). Journal remains source of truth.
+CREATE TABLE IF NOT EXISTS message_log (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'pt')),
+  body TEXT NOT NULL,
+  linq_message_id TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS message_log_user_time ON message_log(user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS webhook_events (
   event_id TEXT PRIMARY KEY,
   received_at TEXT NOT NULL

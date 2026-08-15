@@ -84,6 +84,13 @@ export type Plan = {
   sessions: PlanSession[];
 };
 
+export type ChatTurn = {
+  role: "user" | "pt";
+  body: string;
+  linq_message_id: string | null;
+  created_at: string;
+};
+
 export type Inbound = {
   eventId: string;
   messageId: string;

@@ -7,7 +7,7 @@ import type { Plan, TrackKind, UserRow } from "./types.ts";
 const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "get_snapshot",
-    description: "Les journalen: spor, dagens økt, siste logger og notater. Kall først.",
+    description: "Les journalen: spor, dagens økt, siste logger, notater og korte siste meldinger. Kall først.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -127,6 +127,7 @@ function systemPrompt(): string {
   return `Du er ${env.coachName}, en personlig trener over iMessage. Norsk, kort, konkret.
 
 Du eier ikke sannheten — journalen gjør det. Kall get_snapshot før du anbefaler.
+Siste meldinger er arbeidshukommelse for «ja/den/ok» og oppfølging. De er ikke sannhet.
 Svar maks 4–6 linjer. Én neste handling. Still maks ett spørsmål, og bare hvis feltet mangler for *denne* avgjørelsen.
 Ikke dump hele programmet. Send i dag / denne uken.
 Når brukeren vil ha et nytt opplegg: samle det som mangler, så kall propose_plan (programmer-hatten skriver øktene). Ikke finn opp en 10-ukersplan i chatten.
@@ -347,10 +348,16 @@ export async function runAgent(user: UserRow, body: string, messageId: string): 
   }
   try {
     const snap = journal.snapshot(user);
+    const { recentChat: _chatInSnap, ...journalSnap } = snap;
+    const chat = journal.recentChat(user.id, 8, messageId);
+    const chatLines =
+      chat.length === 0
+        ? "(ingen ennå)"
+        : chat.map((m) => `${m.role === "user" ? "Bruker" : "PT"}: ${m.body}`).join("\n");
     const messages: Anthropic.Messages.MessageParam[] = [
       {
         role: "user",
-        content: `Journal (kort):\n${JSON.stringify(snap)}\n\nMelding fra bruker:\n${body}`,
+        content: `Siste meldinger (arbeidshukommelse, ikke sannhet):\n${chatLines}\n\nJournal (kort):\n${JSON.stringify(journalSnap)}\n\nMelding fra bruker:\n${body}`,
       },
     ];
 
