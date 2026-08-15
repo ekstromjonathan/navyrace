@@ -56,19 +56,19 @@ body {
 .mark {
   margin: 0;
   font-family: Lato, "Lato", ui-sans-serif, system-ui, sans-serif;
-  font-weight: 700;
-  font-size: 13px;
+  font-weight: 900;
+  font-size: 18px;
   line-height: 1;
   text-transform: uppercase;
-  letter-spacing: 24pt;
-  text-indent: 24pt;
+  letter-spacing: 16pt;
+  text-indent: 16pt;
   color: var(--ink);
   white-space: nowrap;
 }
 
 .tagline {
   margin: 0;
-  max-width: 16.5rem;
+  max-width: 18rem;
   text-align: center;
   font-size: 16px;
   font-weight: 400;
@@ -289,7 +289,7 @@ body {
 
 @media (min-width: 640px) {
   .mark {
-    font-size: 14px;
+    font-size: 20px;
   }
 }
 
