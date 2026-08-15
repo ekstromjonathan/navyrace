@@ -17,6 +17,8 @@ function findStaticRoot(): string | null {
     process.env.PT_STATIC_DIR,
     "dist",
     "../dist",
+    "/srv/pt/dist",
+    "/srv/dist",
     "/app/pt/dist",
     "/app/dist",
   ].filter((v): v is string => Boolean(v && String(v).trim()));
