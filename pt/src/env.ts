@@ -37,6 +37,13 @@ export const env = {
   hostname: optional("PT_HOST", "0.0.0.0"),
   tz: optional("PT_TZ", "Europe/Oslo"),
   coachName: optional("PT_COACH_NAME", "lodd.ai"),
+  /** Prefer SUPABASE_URL; fall back to the Vite public URL when set in the same process. */
+  get supabaseUrl() {
+    return optional("SUPABASE_URL", optional("VITE_SUPABASE_URL"));
+  },
+  get supabaseServiceRoleKey() {
+    return optional("SUPABASE_SERVICE_ROLE_KEY");
+  },
   get dbPath() {
     const volume = optional("RAILWAY_VOLUME_MOUNT_PATH");
     if (volume) return `${volume.replace(/\/$/, "")}/journal.sqlite`;

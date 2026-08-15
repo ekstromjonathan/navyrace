@@ -1,3 +1,4 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,18 +7,46 @@ import { env } from "./env.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-let db: DatabaseSync | null = null;
+let sqlite: DatabaseSync | null = null;
+// Schema `pt` is not in the default Database generics; keep the client loosely typed.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let supabase: SupabaseClient<any, "pt", any> | null = null;
 
+export type JournalBackend = "supabase" | "sqlite";
+
+export function journalBackend(): JournalBackend {
+  const forced = process.env.PT_JOURNAL_BACKEND?.trim().toLowerCase();
+  if (forced === "sqlite") return "sqlite";
+  if (forced === "supabase") return "supabase";
+  return env.supabaseUrl && env.supabaseServiceRoleKey ? "supabase" : "sqlite";
+}
+
+export function getSupabase(): SupabaseClient<any, "pt", any> {
+  if (supabase) return supabase;
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  }
+  supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    db: { schema: "pt" },
+  });
+  return supabase;
+}
+
+/** SQLite fallback for unit tests / local without Supabase credentials. */
 export function getDb(): DatabaseSync {
-  if (db) return db;
+  if (sqlite) return sqlite;
+  if (journalBackend() === "supabase") {
+    throw new Error("SQLite journal disabled when Supabase credentials are set");
+  }
   const path = resolve(process.cwd(), env.dbPath);
   mkdirSync(dirname(path), { recursive: true });
-  db = new DatabaseSync(path);
-  db.exec("PRAGMA foreign_keys = ON;");
-  db.exec("PRAGMA journal_mode = WAL;");
-  db.exec(readFileSync(resolve(here, "schema.sql"), "utf8"));
-  ensureEntryArchiveColumns(db);
-  return db;
+  sqlite = new DatabaseSync(path);
+  sqlite.exec("PRAGMA foreign_keys = ON;");
+  sqlite.exec("PRAGMA journal_mode = WAL;");
+  sqlite.exec(readFileSync(resolve(here, "schema.sql"), "utf8"));
+  ensureEntryArchiveColumns(sqlite);
+  return sqlite;
 }
 
 function ensureEntryArchiveColumns(database: DatabaseSync) {
@@ -32,6 +61,22 @@ function ensureEntryArchiveColumns(database: DatabaseSync) {
   database.exec(
     "CREATE INDEX IF NOT EXISTS entries_user_live ON entries(user_id, occurred_at DESC) WHERE archived_at IS NULL",
   );
+}
+
+export function initJournal(): JournalBackend {
+  const backend = journalBackend();
+  if (backend === "supabase") {
+    getSupabase();
+    return backend;
+  }
+  const hosted = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME);
+  if ((hosted || process.env.NODE_ENV === "production") && process.env.PT_ALLOW_SQLITE !== "1") {
+    throw new Error(
+      "Production journal requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (set PT_ALLOW_SQLITE=1 to force SQLite)",
+    );
+  }
+  getDb();
+  return backend;
 }
 
 export function nowIso(): string {
@@ -65,6 +110,16 @@ export function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export function jsonText(value: unknown, fallback = "{}"): string {
+  if (value == null) return fallback;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
   } catch {
     return fallback;
   }

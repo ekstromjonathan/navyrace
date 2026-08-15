@@ -1,6 +1,21 @@
 # lodd.ai PT — iMessage personal trainer
 
-Journal + Linq webhook. The Vite app is unchanged. V1 is one allowlisted phone, inbound-first, SQLite locally.
+Journal + Linq webhook. The Vite app is unchanged. V1 is one allowlisted phone, inbound-first.
+
+## Storage
+
+Production journal is **Supabase Postgres** (`pt` schema). Set:
+
+```bash
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...   # service_role — never ship to the browser
+```
+
+Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0006_pt_entry_archive.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas.
+
+Without those env vars the process falls back to local SQLite (`PT_DB_PATH`) so unit tests stay offline.
+
+User rows store `chat_id` + `phone_e164`. Tracks, entries, notes, `message_log`, and reminders all reference `users.id`.
 
 ## Model
 
@@ -33,7 +48,7 @@ After a `main` deploy, `GET https://lodd.ai/health` must return JSON (`ok: true`
 linq webhooks create --url https://lodd.ai/webhook --events message.received
 ```
 
-Set these in the Railway service variables (not in git): `LINQ_API_TOKEN`, `OPENROUTER_API_KEY`. Attach a volume if you want the SQLite journal to survive redeploys (`RAILWAY_VOLUME_MOUNT_PATH` is picked up automatically).
+Set these in the Railway service variables (not in git): `LINQ_API_TOKEN`, `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. A Railway volume is optional now (only needed if you still run without Supabase).
 
 ## Run locally
 

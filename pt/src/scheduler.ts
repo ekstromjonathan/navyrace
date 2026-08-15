@@ -9,12 +9,12 @@ import type { ReminderRow, UserRow } from "./types.ts";
 const CATCHUP_MINUTES = 180;
 const TICK_MS = 30_000;
 
-export function reminderBody(user: UserRow): string {
+export async function reminderBody(user: UserRow): Promise<string> {
   const raw = journal.factsOf(user).uiLang;
   const lang = isLang(raw) ? raw : isLang(user.locale) ? user.locale : "nb";
-  const training = journal.activeTraining(user.id);
+  const training = await journal.activeTraining(user.id);
   if (!training) return copy.reminderPingNoPlan(lang);
-  const next = journal.nextSession(user.id, training);
+  const next = await journal.nextSession(user.id, training);
   if (!next) return copy.reminderPingDone(lang, training.name);
   const load = next.load != null ? `${next.load}${next.session.unit ? ` ${next.session.unit}` : ""}` : "";
   const line =
@@ -24,7 +24,7 @@ export function reminderBody(user: UserRow): string {
   return copy.reminderPingToday(lang, line);
 }
 
-export function isReminderDue(reminder: ReminderRow, user: UserRow, now: Date): boolean {
+export async function isReminderDue(reminder: ReminderRow, user: UserRow, now: Date): Promise<boolean> {
   if (!reminder.enabled) return false;
   if (user.health_status === "OPTED_OUT" || user.health_status === "CRITICAL") return false;
   const local = localParts(user.tz, now);
@@ -33,7 +33,7 @@ export function isReminderDue(reminder: ReminderRow, user: UserRow, now: Date): 
   const current = local.hour * 60 + local.minute;
   if (current < scheduled) return false;
   if (current - scheduled > CATCHUP_MINUTES) return false;
-  if (journal.trainedOnDay(user.id, local.date, user.tz)) return false;
+  if (await journal.trainedOnDay(user.id, local.date, user.tz)) return false;
   return true;
 }
 
@@ -42,14 +42,14 @@ export async function fireDueReminders(
   send: (chatId: string, body: string, userId: string) => Promise<void> = sendReminder,
 ): Promise<number> {
   let sent = 0;
-  for (const reminder of journal.listEnabledReminders()) {
-    const user = journal.getUser(reminder.user_id);
+  for (const reminder of await journal.listEnabledReminders()) {
+    const user = await journal.getUser(reminder.user_id);
     if (!user) continue;
-    if (!isReminderDue(reminder, user, now)) continue;
-    const body = reminderBody(user);
+    if (!(await isReminderDue(reminder, user, now))) continue;
+    const body = await reminderBody(user);
     try {
       await send(user.chat_id, body, user.id);
-      journal.markReminderFired(reminder.id, localParts(user.tz, now).date);
+      await journal.markReminderFired(reminder.id, localParts(user.tz, now).date);
       sent += 1;
     } catch (err) {
       console.error("reminder send failed", reminder.id, err);
@@ -62,7 +62,7 @@ async function sendReminder(chatId: string, body: string, userId: string): Promi
   const clipped = body.trim().slice(0, 1200);
   if (!clipped) return;
   await linq.sendText(chatId, clipped);
-  journal.logMessage(userId, "pt", clipped);
+  await journal.logMessage(userId, "pt", clipped);
 }
 
 let ticking = false;
