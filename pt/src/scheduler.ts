@@ -28,6 +28,7 @@ export async function isReminderDue(reminder: ReminderRow, user: UserRow, now: D
   if (!reminder.enabled) return false;
   if (user.health_status === "OPTED_OUT" || user.health_status === "CRITICAL") return false;
   const local = localParts(user.tz, now);
+  if (reminder.once_on && reminder.once_on !== local.date) return false;
   if (reminder.last_fired_on === local.date) return false;
   const scheduled = reminder.hour * 60 + reminder.minute;
   const current = local.hour * 60 + local.minute;

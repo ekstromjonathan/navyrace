@@ -70,7 +70,8 @@ function asReminder(row: Record<string, unknown>): ReminderRow {
     hour: Number(row.hour),
     minute: Number(row.minute ?? 0),
     enabled: row.enabled === true || row.enabled === 1 || row.enabled === "1" ? 1 : 0,
-    last_fired_on: row.last_fired_on == null ? null : String(row.last_fired_on),
+    last_fired_on: row.last_fired_on == null ? null : String(row.last_fired_on).slice(0, 10),
+    once_on: row.once_on == null ? null : String(row.once_on).slice(0, 10),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -781,6 +782,7 @@ export async function snapshot(user: UserRow) {
         kind: r.kind,
         hour: r.hour,
         minute: r.minute,
+        onceOn: r.once_on,
         lastFiredOn: r.last_fired_on,
       })),
   };
@@ -795,9 +797,11 @@ export async function upsertReminder(
   kind: ReminderKind,
   hour: number,
   minute: number,
+  opts?: { onceOn?: string | null },
 ): Promise<ReminderRow> {
   const h = Math.min(23, Math.max(0, Math.round(hour)));
   const m = Math.min(59, Math.max(0, Math.round(minute)));
+  const onceOn = opts?.onceOn === undefined ? null : opts.onceOn;
   const sb = getSupabase();
   const { data: existing, error: findErr } = await sb
     .from("reminders")
@@ -810,7 +814,7 @@ export async function upsertReminder(
   if (existing) {
     const { data, error } = await sb
       .from("reminders")
-      .update({ hour: h, minute: m, enabled: true, updated_at: ts })
+      .update({ hour: h, minute: m, enabled: true, once_on: onceOn, updated_at: ts })
       .eq("id", (existing as { id: string }).id)
       .select("*")
       .single();
@@ -827,6 +831,7 @@ export async function upsertReminder(
       hour: h,
       minute: m,
       enabled: true,
+      once_on: onceOn,
       created_at: ts,
       updated_at: ts,
     })
@@ -876,10 +881,10 @@ export async function disableReminder(
 }
 
 export async function markReminderFired(id: string, day: string): Promise<void> {
-  const { error } = await getSupabase()
-    .from("reminders")
-    .update({ last_fired_on: day, updated_at: nowIso() })
-    .eq("id", id);
+  const existing = await getReminder(id);
+  const patch: Record<string, unknown> = { last_fired_on: day, updated_at: nowIso() };
+  if (existing?.once_on) patch.enabled = false;
+  const { error } = await getSupabase().from("reminders").update(patch).eq("id", id);
   throwIf(error);
 }
 

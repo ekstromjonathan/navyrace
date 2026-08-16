@@ -22,6 +22,12 @@ export type Pending =
       trackId: string;
       summary: string;
       askedAt: string;
+    }
+  | {
+      type: "reminder_scope";
+      hour: number;
+      minute: number;
+      askedAt: string;
     };
 
 export type UserFacts = {
@@ -99,6 +105,8 @@ export type ReminderRow = {
   minute: number;
   enabled: number;
   last_fired_on: string | null;
+  /** Local YYYY-MM-DD for one-shot; null = daily. */
+  once_on: string | null;
   created_at: string;
   updated_at: string;
 };
