@@ -90,22 +90,47 @@ describe("parser", () => {
     if (set.kind === "reminder_set") {
       assert.equal(set.hour, 8);
       assert.equal(set.minute, 0);
+      assert.equal(set.scope, "daily");
     }
     const half = parseMessage("minn meg kl 7.30");
     assert.equal(half.kind, "reminder_set");
     if (half.kind === "reminder_set") {
       assert.equal(half.hour, 7);
       assert.equal(half.minute, 30);
+      assert.equal(half.scope, "daily");
+    }
+    const tonight = parseMessage("Kan du minne meg på å trene kl 19 i kveld");
+    assert.equal(tonight.kind, "reminder_set");
+    if (tonight.kind === "reminder_set") {
+      assert.equal(tonight.hour, 19);
+      assert.equal(tonight.scope, "once");
+    }
+    const once = parseMessage("Minn meg bare i dag kl 19");
+    assert.equal(once.kind, "reminder_set");
+    if (once.kind === "reminder_set") {
+      assert.equal(once.hour, 19);
+      assert.equal(once.scope, "once");
     }
     const def = parseMessage("minn meg på å trene");
     assert.equal(def.kind, "reminder_set");
     if (def.kind === "reminder_set") {
       assert.equal(def.hour, 8);
       assert.equal(def.minute, 0);
+      assert.equal(def.scope, "daily");
     }
     assert.equal(parseMessage("remind me to train at 8").kind, "reminder_set");
     assert.equal(parseMessage("stop reminding me").kind, "reminder_cancel");
     assert.equal(parseMessage("Hva har du logget til nå?").kind, "unknown");
+  });
+
+  it("parses reminder scope replies", async () => {
+    const { isReminderDailyReply, isReminderOnceReply } = await import("../src/gates.ts");
+    assert.equal(isReminderDailyReply("hver dag"), true);
+    assert.equal(isReminderDailyReply("gjentagende"), true);
+    assert.equal(isReminderOnceReply("bare i dag"), true);
+    assert.equal(isReminderOnceReply("i kveld"), true);
+    assert.equal(isReminderOnceReply("engang"), true);
+    assert.equal(isReminderDailyReply("bare i dag"), false);
   });
 });
 

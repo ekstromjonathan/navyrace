@@ -11,6 +11,13 @@ export const ARCHIVE_PHRASE = /^(arkiver og lag nytt|archive and start new)$/i;
 const ACTIVATE_CANCEL =
   /^(nei|no|nope|avbryt|ikke nå|ikke enda|vent|cancel|never ?mind|drop it|ikke lås)$/i;
 
+const REMINDER_DAILY =
+  /^(hver dag|daglig|gjentagende|permanent|daily|every day|recurring)(\s+.*)?$/i;
+const REMINDER_ONCE =
+  /^(bare i dag|bare i kveld|kun i dag|kun i kveld|i dag|i kveld|engang|engangs|once|only today|only tonight|just today|just tonight|just once|today|tonight)(\s+.*)?$/i;
+const REMINDER_SCOPE_CANCEL =
+  /^(nei|no|nope|avbryt|glem det|ikke|cancel|never ?mind|drop it)$/i;
+
 export function isActivatePhrase(body: string): boolean {
   const t = body.trim();
   if (!t || t.length > 160) return false;
@@ -30,4 +37,22 @@ export function isActivateCancel(body: string): boolean {
 
 export function isArchivePhrase(body: string): boolean {
   return ARCHIVE_PHRASE.test(body.trim());
+}
+
+export function isReminderDailyReply(body: string): boolean {
+  const t = body.trim();
+  if (!t || t.length > 120) return false;
+  if (REMINDER_DAILY.test(t)) return true;
+  return /\b(hver dag|daglig|gjentagende|every day|daily|recurring)\b/i.test(t);
+}
+
+export function isReminderOnceReply(body: string): boolean {
+  const t = body.trim();
+  if (!t || t.length > 120) return false;
+  if (REMINDER_ONCE.test(t)) return true;
+  return /\b(bare i dag|bare i kveld|kun i dag|engang|only today|just (today|once)|one[- ]?shot)\b/i.test(t);
+}
+
+export function isReminderScopeCancel(body: string): boolean {
+  return REMINDER_SCOPE_CANCEL.test(body.trim());
 }

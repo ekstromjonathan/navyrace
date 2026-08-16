@@ -48,4 +48,19 @@ describe("scheduler", () => {
     });
     assert.equal(n, 0);
   });
+
+  it("fires a one-shot reminder only on once_on day then disables", async () => {
+    const onceUser = await journal.upsertUser("chat-once-sched", "+4740343298");
+    const once = await journal.upsertReminder(onceUser.id, "train", 8, 0, { onceOn: "2026-08-15" });
+    assert.equal(await isReminderDue(once, onceUser, at805), true);
+    const wrongDay = await journal.upsertReminder(onceUser.id, "train", 8, 0, { onceOn: "2026-08-16" });
+    assert.equal(await isReminderDue(wrongDay, onceUser, at805), false);
+
+    const onDay = await journal.upsertReminder(onceUser.id, "train", 8, 0, { onceOn: "2026-08-15" });
+    const n = await fireDueReminders(at805, async () => {});
+    assert.ok(n >= 1);
+    const after = await journal.getReminder(onDay.id);
+    assert.equal(after?.enabled, 0);
+    assert.equal(after?.last_fired_on, "2026-08-15");
+  });
 });

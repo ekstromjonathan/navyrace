@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.ts";
+import { resolveOnceOn } from "./db.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
 import type { Lang } from "./locale.ts";
@@ -159,18 +160,23 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "set_reminder",
     description:
-      "Sett daglig treningspåminnelse (brukerens tidssone). Default kl 08:00. Kall bare når brukeren ber om å bli minnet.",
+      "Sett treningspåminnelse (brukerens tidssone). Default kl 08:00. scope=once for i kveld/i dag/tonight; scope=daily for hver dag eller når uvisst. Ingen ekstra bekreftelse — bare sett og bekreft kort. Kall når brukeren ber om å bli minnet.",
     input_schema: {
       type: "object",
       properties: {
         hour: { type: "number", description: "0–23, default 8" },
         minute: { type: "number", description: "0–59, default 0" },
+        scope: {
+          type: "string",
+          enum: ["daily", "once"],
+          description: "daily = recurring, once = one-shot today/tonight",
+        },
       },
     },
   },
   {
     name: "cancel_reminder",
-    description: "Skru av daglig treningspåminnelse.",
+    description: "Skru av treningspåminnelse (daglig eller engangs).",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
 ];
@@ -223,7 +229,7 @@ Language: Reply only in ${language}. The user started in this language. Never sw
 - Sound like a friend who knows training. Short ack, then move forward. No effects, no spam, no links unless asked.
 - You are not a doctor. On pain: log it, ease load, refer out if it lasts.
 - Don't invent history. Don't delete active programs — request_archive. Don't hard-delete logs — archive_entry.
-- Reminders only via set_reminder when they ask. One short ping; skip if a session is already logged.
+- Reminders via set_reminder when they ask. Infer once (i kveld/i dag) vs daily — no confirmation gate. One short ping; skip if a session is already logged. One-shot disables after firing.
 ${onboard}`.trim();
 }
 
@@ -471,13 +477,26 @@ async function runTool(
     case "set_reminder": {
       const hour = input.hour == null ? 8 : Number(input.hour);
       const minute = input.minute == null ? 0 : Number(input.minute);
-      const rec = await journal.upsertReminder(user.id, "train", hour, minute);
+      const scope = String(input.scope || "") === "once" ? "once" : "daily";
+      if (scope === "once") {
+        const onceOn = resolveOnceOn(user.tz, hour, minute);
+        const rec = await journal.upsertReminder(user.id, "train", hour, minute, { onceOn });
+        return JSON.stringify({
+          ok: true,
+          hour: rec.hour,
+          minute: rec.minute,
+          onceOn,
+          tz: user.tz,
+          confirm: copy.reminderConfirmOnce(lang, rec.hour, rec.minute, onceOn, user.tz),
+        });
+      }
+      const rec = await journal.upsertReminder(user.id, "train", hour, minute, { onceOn: null });
       return JSON.stringify({
         ok: true,
         hour: rec.hour,
         minute: rec.minute,
         tz: user.tz,
-        confirm: lang === "en" ? `daily at ${journal.hhmm(rec.hour, rec.minute)} (${user.tz})` : `daglig kl ${journal.hhmm(rec.hour, rec.minute)} (${user.tz})`,
+        confirm: copy.reminderConfirm(lang, rec.hour, rec.minute, user.tz),
       });
     }
     case "cancel_reminder": {

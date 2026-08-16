@@ -1,13 +1,14 @@
 import { env, isAllowlisted } from "./env.ts";
 import { parseMessage } from "./parser.ts";
 import { isOptOut } from "./optout.ts";
-import { isActivatePhrase, isActivateCancel, isArchivePhrase } from "./gates.ts";
+import { isActivatePhrase, isActivateCancel, isArchivePhrase, isReminderDailyReply, isReminderOnceReply, isReminderScopeCancel } from "./gates.ts";
 import { runAgent } from "./agent.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
 import * as linq from "./linq.ts";
 import { normalizeEvent } from "./webhook.ts";
 import { detectLang, isLang, type Lang } from "./locale.ts";
+import { resolveOnceOn } from "./db.ts";
 import type { Inbound, UserRow } from "./types.ts";
 
 async function lockLang(user: UserRow, body: string): Promise<{ user: UserRow; lang: Lang; onboarding: boolean }> {
@@ -102,6 +103,27 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
     return copy.savedField(lang, pending.field);
   }
 
+  if (pending.type === "reminder_scope") {
+    // Legacy pending from older ask-flow: soft resolve, no magic phrase.
+    if (isReminderScopeCancel(body)) {
+      await journal.setPending(user.id, null);
+      return copy.reminderScopeCancelled(lang);
+    }
+    if (isReminderDailyReply(body)) {
+      await journal.upsertReminder(user.id, "train", pending.hour, pending.minute, { onceOn: null });
+      await journal.setPending(user.id, null);
+      return copy.reminderConfirm(lang, pending.hour, pending.minute, user.tz);
+    }
+    if (isReminderOnceReply(body) || isActivatePhrase(body)) {
+      const onceOn = resolveOnceOn(user.tz, pending.hour, pending.minute);
+      await journal.upsertReminder(user.id, "train", pending.hour, pending.minute, { onceOn });
+      await journal.setPending(user.id, null);
+      return copy.reminderConfirmOnce(lang, pending.hour, pending.minute, onceOn, user.tz);
+    }
+    await journal.setPending(user.id, null);
+    return null;
+  }
+
   return null;
 }
 
@@ -137,7 +159,12 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
   if (parsed.kind === "today") return formatToday(user, lang);
 
   if (parsed.kind === "reminder_set") {
-    await journal.upsertReminder(user.id, "train", parsed.hour, parsed.minute);
+    if (parsed.scope === "once") {
+      const onceOn = resolveOnceOn(user.tz, parsed.hour, parsed.minute);
+      await journal.upsertReminder(user.id, "train", parsed.hour, parsed.minute, { onceOn });
+      return copy.reminderConfirmOnce(lang, parsed.hour, parsed.minute, onceOn, user.tz);
+    }
+    await journal.upsertReminder(user.id, "train", parsed.hour, parsed.minute, { onceOn: null });
     return copy.reminderConfirm(lang, parsed.hour, parsed.minute, user.tz);
   }
 

@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS reminders (
   minute INTEGER NOT NULL DEFAULT 0,
   enabled INTEGER NOT NULL DEFAULT 1,
   last_fired_on TEXT,
+  once_on TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id),

@@ -256,8 +256,9 @@ export async function upsertReminder(
   kind: ReminderKind,
   hour: number,
   minute: number,
+  opts?: { onceOn?: string | null },
 ): Promise<ReminderRow> {
-  return asAsync(api().upsertReminder(userId, kind, hour, minute));
+  return asAsync(api().upsertReminder(userId, kind, hour, minute, opts));
 }
 
 export async function getReminder(id: string): Promise<ReminderRow | undefined> {
