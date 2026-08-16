@@ -104,6 +104,7 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
   }
 
   if (pending.type === "reminder_scope") {
+    // Legacy pending from older ask-flow: soft resolve, no magic phrase.
     if (isReminderScopeCancel(body)) {
       await journal.setPending(user.id, null);
       return copy.reminderScopeCancelled(lang);
@@ -113,14 +114,14 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
       await journal.setPending(user.id, null);
       return copy.reminderConfirm(lang, pending.hour, pending.minute, user.tz);
     }
-    if (isReminderOnceReply(body)) {
+    if (isReminderOnceReply(body) || isActivatePhrase(body)) {
       const onceOn = resolveOnceOn(user.tz, pending.hour, pending.minute);
       await journal.upsertReminder(user.id, "train", pending.hour, pending.minute, { onceOn });
       await journal.setPending(user.id, null);
       return copy.reminderConfirmOnce(lang, pending.hour, pending.minute, onceOn, user.tz);
     }
-    // Keep asking until they pick a scope (don't clear pending).
-    return copy.reminderScopeAsk(lang, pending.hour, pending.minute);
+    await journal.setPending(user.id, null);
+    return null;
   }
 
   return null;
@@ -158,15 +159,6 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
   if (parsed.kind === "today") return formatToday(user, lang);
 
   if (parsed.kind === "reminder_set") {
-    if (parsed.scope === "ask") {
-      await journal.setPending(user.id, {
-        type: "reminder_scope",
-        hour: parsed.hour,
-        minute: parsed.minute,
-        askedAt: new Date().toISOString(),
-      });
-      return copy.reminderScopeAsk(lang, parsed.hour, parsed.minute);
-    }
     if (parsed.scope === "once") {
       const onceOn = resolveOnceOn(user.tz, parsed.hour, parsed.minute);
       await journal.upsertReminder(user.id, "train", parsed.hour, parsed.minute, { onceOn });

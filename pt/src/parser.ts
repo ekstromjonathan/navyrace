@@ -13,7 +13,7 @@ export type HeuristicIntent =
   | { kind: "today"; confident: true }
   | { kind: "activate"; confident: true }
   | { kind: "archive"; confident: true }
-  | { kind: "reminder_set"; confident: true; hour: number; minute: number; scope: "daily" | "once" | "ask" }
+  | { kind: "reminder_set"; confident: true; hour: number; minute: number; scope: "daily" | "once" }
   | { kind: "reminder_cancel"; confident: true }
   | { kind: "archive_entry"; confident: true; slug?: string; trackKind?: "training" }
   | { kind: "unknown"; confident: false };
@@ -186,8 +186,8 @@ export function parseClock(text: string): { hour: number; minute: number; explic
   return { hour: 8, minute: 0, explicit: false };
 }
 
-/** Explicit daily vs one-shot; otherwise ask the user. */
-export function detectReminderScope(text: string): "daily" | "once" | "ask" {
+/** Infer daily vs one-shot from wording — no confirmation gate. */
+export function detectReminderScope(text: string): "daily" | "once" {
   const t = text.toLowerCase();
   if (
     /\b(hver dag|daglig|every day|daily|hver morgen|recurring|gjentagende|permanent)\b/i.test(t)
@@ -195,13 +195,14 @@ export function detectReminderScope(text: string): "daily" | "once" | "ask" {
     return "daily";
   }
   if (
-    /\b(bare i dag|bare i kveld|kun i dag|kun i kveld|engang|engangs|one[- ]?shot|only (today|tonight)|just (today|tonight|once)|this (evening|one time))\b/i.test(
+    /\b(i kveld|i dag|tonight|today|this evening|bare i dag|bare i kveld|kun i dag|kun i kveld|engang|engangs|one[- ]?shot|only (today|tonight)|just (today|tonight|once))\b/i.test(
       t,
     )
   ) {
     return "once";
   }
-  return "ask";
+  // Bare «minn meg kl 8» → daily (previous default).
+  return "daily";
 }
 
 function parseArchiveEntry(text: string): Extract<HeuristicIntent, { kind: "archive_entry" }> | null {

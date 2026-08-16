@@ -160,7 +160,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "set_reminder",
     description:
-      "Sett treningspåminnelse (brukerens tidssone). Default kl 08:00. Hvis de ikke sa «hver dag» eller «bare i dag», spør først (request_reminder_scope) — ikke anta. Kall bare når brukeren ber om å bli minnet.",
+      "Sett treningspåminnelse (brukerens tidssone). Default kl 08:00. scope=once for i kveld/i dag/tonight; scope=daily for hver dag eller når uvisst. Ingen ekstra bekreftelse — bare sett og bekreft kort. Kall når brukeren ber om å bli minnet.",
     input_schema: {
       type: "object",
       properties: {
@@ -168,23 +168,10 @@ const TOOLS: Anthropic.Messages.Tool[] = [
         minute: { type: "number", description: "0–59, default 0" },
         scope: {
           type: "string",
-          enum: ["daily", "once", "ask"],
-          description: "daily = recurring, once = one-shot today/tonight, ask = let the PT ask",
+          enum: ["daily", "once"],
+          description: "daily = recurring, once = one-shot today/tonight",
         },
       },
-    },
-  },
-  {
-    name: "request_reminder_scope",
-    description:
-      "Spør om påminnelsen skal være hver dag eller bare i dag/i kveld. Bruk når tid er kjent men scope ikke er sagt.",
-    input_schema: {
-      type: "object",
-      properties: {
-        hour: { type: "number" },
-        minute: { type: "number" },
-      },
-      required: ["hour"],
     },
   },
   {
@@ -242,7 +229,7 @@ Language: Reply only in ${language}. The user started in this language. Never sw
 - Sound like a friend who knows training. Short ack, then move forward. No effects, no spam, no links unless asked.
 - You are not a doctor. On pain: log it, ease load, refer out if it lasts.
 - Don't invent history. Don't delete active programs — request_archive. Don't hard-delete logs — archive_entry.
-- Reminders via set_reminder / request_reminder_scope when they ask. If they didn't say daily vs once, ask. One short ping; skip if a session is already logged. One-shot disables after firing.
+- Reminders via set_reminder when they ask. Infer once (i kveld/i dag) vs daily — no confirmation gate. One short ping; skip if a session is already logged. One-shot disables after firing.
 ${onboard}`.trim();
 }
 
@@ -490,21 +477,7 @@ async function runTool(
     case "set_reminder": {
       const hour = input.hour == null ? 8 : Number(input.hour);
       const minute = input.minute == null ? 0 : Number(input.minute);
-      const scopeRaw = input.scope ? String(input.scope) : "ask";
-      const scope = scopeRaw === "daily" || scopeRaw === "once" ? scopeRaw : "ask";
-      if (scope === "ask") {
-        await journal.setPending(user.id, {
-          type: "reminder_scope",
-          hour,
-          minute,
-          askedAt: new Date().toISOString(),
-        });
-        return JSON.stringify({
-          ok: true,
-          pending: "reminder_scope",
-          confirm: copy.reminderScopeAsk(lang, hour, minute),
-        });
-      }
+      const scope = String(input.scope || "") === "once" ? "once" : "daily";
       if (scope === "once") {
         const onceOn = resolveOnceOn(user.tz, hour, minute);
         const rec = await journal.upsertReminder(user.id, "train", hour, minute, { onceOn });
@@ -524,20 +497,6 @@ async function runTool(
         minute: rec.minute,
         tz: user.tz,
         confirm: copy.reminderConfirm(lang, rec.hour, rec.minute, user.tz),
-      });
-    }
-    case "request_reminder_scope": {
-      const hour = input.hour == null ? 8 : Number(input.hour);
-      const minute = input.minute == null ? 0 : Number(input.minute);
-      await journal.setPending(user.id, {
-        type: "reminder_scope",
-        hour,
-        minute,
-        askedAt: new Date().toISOString(),
-      });
-      return JSON.stringify({
-        ok: true,
-        confirm: copy.reminderScopeAsk(lang, hour, minute),
       });
     }
     case "cancel_reminder": {

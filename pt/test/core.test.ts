@@ -97,13 +97,13 @@ describe("parser", () => {
     if (half.kind === "reminder_set") {
       assert.equal(half.hour, 7);
       assert.equal(half.minute, 30);
-      assert.equal(half.scope, "ask");
+      assert.equal(half.scope, "daily");
     }
     const tonight = parseMessage("Kan du minne meg på å trene kl 19 i kveld");
     assert.equal(tonight.kind, "reminder_set");
     if (tonight.kind === "reminder_set") {
       assert.equal(tonight.hour, 19);
-      assert.equal(tonight.scope, "ask");
+      assert.equal(tonight.scope, "once");
     }
     const once = parseMessage("Minn meg bare i dag kl 19");
     assert.equal(once.kind, "reminder_set");
@@ -116,7 +116,7 @@ describe("parser", () => {
     if (def.kind === "reminder_set") {
       assert.equal(def.hour, 8);
       assert.equal(def.minute, 0);
-      assert.equal(def.scope, "ask");
+      assert.equal(def.scope, "daily");
     }
     assert.equal(parseMessage("remind me to train at 8").kind, "reminder_set");
     assert.equal(parseMessage("stop reminding me").kind, "reminder_cancel");
