@@ -120,6 +120,7 @@ describe("journal", () => {
     const rec = await journal.upsertReminder(user.id, "train", 8, 0);
     assert.equal(rec.hour, 8);
     assert.equal(rec.enabled, 1);
+    assert.equal(rec.once_on, null);
     const again = await journal.upsertReminder(user.id, "train", 7, 30);
     assert.equal(again.id, rec.id);
     assert.equal(again.hour, 7);
@@ -128,6 +129,17 @@ describe("journal", () => {
     await journal.disableReminder(user.id, "train");
     assert.equal((await journal.listReminders(user.id))[0]?.enabled, 0);
     assert.equal((await journal.snapshot(user)).reminders.length, 0);
+  });
+
+  it("stores a one-shot reminder and disables after fire", async () => {
+    const user = await journal.upsertUser("chat-once-journal", "+4740343299");
+    const rec = await journal.upsertReminder(user.id, "train", 19, 0, { onceOn: "2026-08-16" });
+    assert.equal(rec.once_on, "2026-08-16");
+    assert.equal(rec.enabled, 1);
+    await journal.markReminderFired(rec.id, "2026-08-16");
+    const after = await journal.getReminder(rec.id);
+    assert.equal(after?.last_fired_on, "2026-08-16");
+    assert.equal(after?.enabled, 0);
   });
 
   it("treats a new user with no entries as a fresh start", async () => {

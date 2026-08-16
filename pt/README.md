@@ -34,9 +34,10 @@ A rolling `message_log` keeps the last ~50 turns per user (bodies truncated to 5
 
 ## Reminders
 
-If you ask the PT to remind you (e.g. «minn meg på å trene kl 8»), it stores a daily ping in `reminders` and the process sends one iMessage at that local time (`Europe/Oslo`).
+If you ask the PT to remind you (e.g. «minn meg på å trene kl 8» or «kl 19 i kveld»), it asks whether that should be **every day** or **just once**, then stores the ping. The process sends one iMessage at that local time (`Europe/Oslo`).
 
-- Skips the day if you already logged a training entry, or if you opted out.
+- Daily: skips the day if you already logged a training entry, or if you opted out.
+- One-shot (`once_on`): fires on that local calendar day only, then turns itself off.
 - Catch-up window is 3 hours (process down at 08:00 can still ping at 10:00, not at 22:00).
 - «slutt å minne meg» turns it off.
 - Only fires while `npm start` is running.
@@ -82,7 +83,8 @@ Text `+14044465379` from the allowlisted number.
 | Activate a draft program | Soft confirm: `ja` / `ok` / `kjør` / `run it` (also works as a direct command when a draft exists) |
 | Archive the active program | Exact: `arkiver og lag nytt` / `archive and start new` |
 | Archive one log | `slett siste` / `fjern loggen` / `delete the last log` (no extra confirm) |
-| Daily training reminder | `minn meg på å trene kl 8` / `remind me to train at 8` |
+| Daily training reminder | `minn meg på å trene kl 8` / `remind me to train at 8` — then answer hver dag / bare i dag |
+| One-shot reminder | `…kl 19 i kveld` + «bare i dag», or say «bare i dag» / «engang» up front |
 | Cancel reminder | `slutt å minne meg` / `stop reminding me` |
 
 Locking a program is ordinary assent. Only archiving the whole program uses a strict phrase. Nothing is hard-deleted.

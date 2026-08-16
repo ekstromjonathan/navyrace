@@ -592,6 +592,7 @@ export function snapshot(user: UserRow) {
       kind: r.kind,
       hour: r.hour,
       minute: r.minute,
+      onceOn: r.once_on,
       lastFiredOn: r.last_fired_on,
     })),
   };
@@ -601,16 +602,24 @@ export function hhmm(hour: number, minute: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-export function upsertReminder(userId: string, kind: ReminderKind, hour: number, minute: number): ReminderRow {
+export function upsertReminder(
+  userId: string,
+  kind: ReminderKind,
+  hour: number,
+  minute: number,
+  opts?: { onceOn?: string | null },
+): ReminderRow {
   const h = Math.min(23, Math.max(0, Math.round(hour)));
   const m = Math.min(59, Math.max(0, Math.round(minute)));
+  const onceOn = opts?.onceOn === undefined ? null : opts.onceOn;
   const existing = row<ReminderRow>("SELECT * FROM reminders WHERE user_id = ? AND kind = ?", userId, kind);
   const ts = nowIso();
   if (existing) {
     run(
-      "UPDATE reminders SET hour = ?, minute = ?, enabled = 1, updated_at = ? WHERE id = ?",
+      "UPDATE reminders SET hour = ?, minute = ?, enabled = 1, once_on = ?, updated_at = ? WHERE id = ?",
       h,
       m,
+      onceOn,
       ts,
       existing.id,
     );
@@ -618,13 +627,14 @@ export function upsertReminder(userId: string, kind: ReminderKind, hour: number,
   }
   const id = randomUUID();
   run(
-    `INSERT INTO reminders (id, user_id, kind, hour, minute, enabled, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    `INSERT INTO reminders (id, user_id, kind, hour, minute, enabled, once_on, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`,
     id,
     userId,
     kind,
     h,
     m,
+    onceOn,
     ts,
     ts,
   );
@@ -647,6 +657,16 @@ export function disableReminder(userId: string, kind: ReminderKind = "train"): R
 }
 
 export function markReminderFired(id: string, day: string): void {
+  const existing = getReminder(id);
+  if (existing?.once_on) {
+    run(
+      "UPDATE reminders SET last_fired_on = ?, enabled = 0, updated_at = ? WHERE id = ?",
+      day,
+      nowIso(),
+      id,
+    );
+    return;
+  }
   run("UPDATE reminders SET last_fired_on = ?, updated_at = ? WHERE id = ?", day, nowIso(), id);
 }
 

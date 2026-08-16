@@ -15,6 +15,24 @@ export function reminderConfirm(lang: Lang, hour: number, minute: number, tz: st
   return `Ok — daglig treningspåminnelse kl ${hhmm(hour, minute)} (${tz}). Jeg hopper over dagen hvis du allerede har logget økt. Si «slutt å minne meg» for å skru av.`;
 }
 
+export function reminderConfirmOnce(lang: Lang, hour: number, minute: number, onceOn: string, tz: string): string {
+  if (lang === "en") {
+    return `Ok — one reminder on ${onceOn} at ${hhmm(hour, minute)} (${tz}). Say “stop reminding me” to cancel.`;
+  }
+  return `Ok — én påminnelse ${onceOn} kl ${hhmm(hour, minute)} (${tz}). Si «slutt å minne meg» for å avbryte.`;
+}
+
+export function reminderScopeAsk(lang: Lang, hour: number, minute: number): string {
+  if (lang === "en") {
+    return `Got it — ${hhmm(hour, minute)}. Should that be every day, or just once (today/tonight)?`;
+  }
+  return `Skjønner — kl ${hhmm(hour, minute)}. Skal det være hver dag, eller bare i dag/i kveld?`;
+}
+
+export function reminderScopeCancelled(lang: Lang): string {
+  return lang === "en" ? "Ok, no reminder set." : "Ok, ingen påminnelse satt.";
+}
+
 export function reminderCancel(lang: Lang, had: boolean): string {
   if (lang === "en") {
     return had ? "Ok, no more training reminders." : "You don't have a reminder to turn off.";

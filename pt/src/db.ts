@@ -46,6 +46,7 @@ export function getDb(): DatabaseSync {
   sqlite.exec("PRAGMA journal_mode = WAL;");
   sqlite.exec(readFileSync(resolve(here, "schema.sql"), "utf8"));
   ensureEntryArchiveColumns(sqlite);
+  ensureReminderOnceColumn(sqlite);
   return sqlite;
 }
 
@@ -61,6 +62,13 @@ function ensureEntryArchiveColumns(database: DatabaseSync) {
   database.exec(
     "CREATE INDEX IF NOT EXISTS entries_user_live ON entries(user_id, occurred_at DESC) WHERE archived_at IS NULL",
   );
+}
+
+function ensureReminderOnceColumn(database: DatabaseSync) {
+  const cols = database.prepare("PRAGMA table_info(reminders)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "once_on")) {
+    database.exec("ALTER TABLE reminders ADD COLUMN once_on TEXT");
+  }
 }
 
 export function initJournal(): JournalBackend {
@@ -104,6 +112,31 @@ export function localParts(tz = env.tz, at: Date | string = new Date()): { date:
 
 export function todayInTz(tz = env.tz, at: Date | string = new Date()): string {
   return localParts(tz, at).date;
+}
+
+/** Add calendar days to a YYYY-MM-DD string (UTC noon arithmetic — safe for date-only). */
+export function addLocalDays(dateYmd: string, days: number): string {
+  const [y, m, d] = dateYmd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Local date for a one-shot reminder. If the clock already passed the catch-up
+ * window today, schedule for tomorrow instead.
+ */
+export function resolveOnceOn(
+  tz: string,
+  hour: number,
+  minute: number,
+  now: Date = new Date(),
+  catchupMinutes = 180,
+): string {
+  const local = localParts(tz, now);
+  const scheduled = hour * 60 + minute;
+  const current = local.hour * 60 + local.minute;
+  if (current - scheduled > catchupMinutes) return addLocalDays(local.date, 1);
+  return local.date;
 }
 
 export function parseJson<T>(raw: string | null | undefined, fallback: T): T {
