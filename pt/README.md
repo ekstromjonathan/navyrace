@@ -14,7 +14,7 @@ SUPABASE_SECRET_KEY=sb_secret_...   # Settings → API Keys → Secret keys (nev
 
 Supabase renamed keys: new projects show **Secret keys** (`sb_secret_…`) instead of a `service_role` JWT. Same privileges (bypasses RLS). Find them under [Settings → API Keys](https://supabase.com/dashboard/project/_/settings/api-keys) — use the **API Keys** tab (create if needed), or **Legacy API Keys** for the old JWT.
 
-Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0006_pt_entry_archive.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
+Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0007_pt_reminder_once.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
 
 Without those env vars the process falls back to local SQLite (`PT_DB_PATH`) so unit tests stay offline.
 
@@ -88,6 +88,17 @@ Text `+14044465379` from the allowlisted number.
 | Cancel reminder | `slutt å minne meg` / `stop reminding me` |
 
 Locking a program is ordinary assent. Only archiving the whole program uses a strict phrase. Nothing is hard-deleted.
+
+## Product patterns (future changes)
+
+These are the choices from recent PT work (#16–#19). Prefer them unless the product owner overrides.
+
+1. **Confirmation ladder** — Destructive → strict phrase. Lock/activate → soft `ja`/`ok`/`kjør`. Set reminder / log / similar → immediate action + short confirm. Never invent an ask-gate for non-destructive flows.
+2. **Pending is sticky for soft confirms** — Clarifying questions (“more details?”) must not clear `activate_confirm`. Soft cancel only on clear nei/avbryt.
+3. **Infer from wording** — e.g. `i kveld`/`i dag` → one-shot reminder; `hver dag` or bare `minn meg kl 8` → daily. Prefer inference over a second turn.
+4. **Journal over chat dump** — Persist facts/notes/entries; use `message_log` + `recall_chat` for short follow-ups. LLM coach may fail: degrade to journal answers (`today`/program) with clearer provider errors when possible.
+5. **Delivery debugging** — Check `/health`, `pt.webhook_events`, `pt.message_log` before assuming Linq is broken. `agentError` copy means the model path failed after inbound was accepted.
+6. **Tone** — Short iMessage replies, one next action, assume training will happen; no mid-chat re-intros or re-asks for fields already in facts.
 
 ## iMessage rules baked in
 

@@ -14,6 +14,15 @@ cd pt && npm install && npm test && npm start   # http://localhost:8787/webhook
 
 Local forward: `linq webhooks listen --forward-to http://localhost:8787/webhook`. Production webhook: `https://lodd.ai/webhook`. See `pt/README.md`.
 
+**Product patterns (keep for future PT work):**
+
+1. **Confirmation ladder** — Only *destructive* actions use a strict exact phrase (archive whole program: `arkiver og lag nytt`). Locking a draft = soft assent (`ja` / `ok` / `kjør`). Setting reminders, logging, and similar = do it immediately and confirm briefly — **no ask-gate**. Follow-up questions must not cancel a pending soft confirm.
+2. **Infer, don’t interrogate** — Prefer natural-language cues (`i kveld` → one-shot reminder, `hver dag` → daily) over extra “is this X or Y?” turns.
+3. **Journal is truth** — Facts/tracks/entries/notes are durable; `message_log` is short working memory. When OpenRouter fails, still answer from the journal (e.g. today’s session) instead of only an error string.
+4. **Diagnose delivery carefully** — Inbound in `pt.webhook_events` / `message_log` means Linq→webhook worked; generic *«fikk ikke laget et skikkelig svar»* is usually LLM/OpenRouter, not “messages not arriving”.
+5. **iMessage constraints** — One reply per inbound, short copy, inbound-first; unsolicited outbound only for user-requested reminders. Nothing is hard-deleted (archive logs / archive tracks).
+6. **Speed + memory** — Persist `set_fact` as they talk; don’t re-introduce or re-ask answered fields; assume they will train and lead with today’s session when a plan is active.
+
 ### Services / commands
 
 The Vite frontend is the original app. All commands are the standard scripts in `package.json`:
