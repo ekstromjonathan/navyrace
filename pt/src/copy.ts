@@ -198,17 +198,46 @@ export function agentStopped(lang: Lang): string {
 export function agentError(lang: Lang, err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   console.error("agent failed", msg);
-  if (/deprecated|not_found_error/i.test(msg)) {
+  if (/deprecated|not_found_error|404.*model|model.*(not found|unavailable)/i.test(msg)) {
     return lang === "en"
       ? "I heard you, but the model name is invalid on OpenRouter. Fix PT_MODEL."
       : "Jeg hørte deg, men modellnavnet er ugyldig hos OpenRouter. Bytt PT_MODEL i pt/.env.";
   }
-  if (/credit balance|too low|purchase credits/i.test(msg)) {
+  if (/401|unauthorized|invalid.?api.?key|authentication_error|no cookie auth/i.test(msg)) {
     return lang === "en"
-      ? "I heard you, but the LLM account is out of credit. Set OPENROUTER_API_KEY, or log something simple."
-      : "Jeg hørte deg, men LLM-kontoen er tom for kreditt. Sett OPENROUTER_API_KEY i pt/.env, eller bruk en enkel logg: «mediterte i 30 sekunder».";
+      ? "I heard you, but the LLM key was rejected. Check OPENROUTER_API_KEY on the host."
+      : "Jeg hørte deg, men LLM-nøkkelen ble avvist. Sjekk OPENROUTER_API_KEY på hosten.";
+  }
+  if (/402|credit balance|too low|purchase credits|insufficient.?credits/i.test(msg)) {
+    return lang === "en"
+      ? "I heard you, but the LLM account is out of credit. Top up OpenRouter, or log something simple."
+      : "Jeg hørte deg, men LLM-kontoen er tom for kreditt. Fyll på OpenRouter, eller bruk en enkel logg: «mediterte i 30 sekunder».";
+  }
+  if (/429|rate.?limit|too many requests/i.test(msg)) {
+    return lang === "en"
+      ? "I heard you, but the model is rate-limited. Try again in a minute, or say “today”."
+      : "Jeg hørte deg, men modellen er rate-begrenset. Prøv igjen om litt, eller skriv «i dag».";
+  }
+  if (/5\d\d|timeout|timed out|ECONNRESET|fetch failed|network/i.test(msg)) {
+    return lang === "en"
+      ? "I heard you, but the model connection hiccuped. Try again, or ask “today”."
+      : "Jeg hørte deg, men modell-tilkoblingen hakket. Prøv igjen, eller spør «i dag».";
   }
   return lang === "en"
-    ? "I heard you, but couldn't put together a proper reply. Try a short log, or try again in a bit."
-    : "Jeg hørte deg, men fikk ikke laget et skikkelig svar. Prøv en kort logg, eller prøv igjen om litt.";
+    ? "I heard you, but couldn't put together a proper reply. Try a short log, or ask “today”."
+    : "Jeg hørte deg, men fikk ikke laget et skikkelig svar. Prøv en kort logg, eller spør «i dag».";
+}
+
+/** True when the coach reply is a known LLM-failure fallback (not a real answer). */
+export function isAgentFailureReply(text: string): boolean {
+  const t = text.trim();
+  return (
+    /modellnavnet er ugyldig|model name is invalid/i.test(t) ||
+    /LLM-nøkkelen ble avvist|LLM key was rejected/i.test(t) ||
+    /tom for kreditt|out of credit/i.test(t) ||
+    /rate-begrenset|rate-limited/i.test(t) ||
+    /modell-tilkoblingen hakket|model connection hiccuped/i.test(t) ||
+    /fikk ikke laget et skikkelig svar|couldn't put together a proper reply/i.test(t) ||
+    /trenger OPENROUTER_API_KEY|need OPENROUTER_API_KEY/i.test(t)
+  );
 }

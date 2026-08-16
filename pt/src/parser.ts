@@ -68,7 +68,9 @@ export function parseMessage(body: string): HeuristicIntent {
 
   if (
     /^(hva (trener|gjør) jeg( i dag)?|i dag\??|neste økt)$/i.test(lower) ||
-    /^(what am i training( today)?|today'?s (workout|session)|next session)$/i.test(lower)
+    /^(what am i training( today)?|today'?s (workout|session)|next session)$/i.test(lower) ||
+    /^(hvilket program( går vi for)?|hva er programmet|mitt program|hvilken plan|hva har vi)\??$/i.test(lower) ||
+    /^(which program|what'?s (my|the) program|my program)\??$/i.test(lower)
   ) {
     return { kind: "today", confident: true };
   }
