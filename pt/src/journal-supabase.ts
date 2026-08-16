@@ -424,6 +424,25 @@ export async function logEntry(input: {
   return { id, duplicate: false };
 }
 
+export async function patchEntry(
+  entryId: string,
+  patch: { quality?: string | null; note?: string | null },
+): Promise<boolean> {
+  const updates: Record<string, unknown> = {};
+  if ("quality" in patch) updates.quality = patch.quality ?? null;
+  if ("note" in patch) updates.note = patch.note ?? null;
+  if (!Object.keys(updates).length) return false;
+  const { data, error } = await getSupabase()
+    .from("entries")
+    .update(updates)
+    .eq("id", entryId)
+    .is("archived_at", null)
+    .select("id")
+    .maybeSingle();
+  throwIf(error);
+  return Boolean(data?.id);
+}
+
 type EntryLookup = {
   id: string;
   user_id: string;

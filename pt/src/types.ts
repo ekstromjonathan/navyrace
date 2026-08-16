@@ -28,6 +28,20 @@ export type Pending =
       hour: number;
       minute: number;
       askedAt: string;
+    }
+  | {
+      /** Ask which calendar day a free-form session log belongs to. */
+      type: "log_day";
+      note: string;
+      quality: string | null;
+      claimsPlanned: boolean;
+      askedAt: string;
+    }
+  | {
+      /** After logging a session without effort — wait for lett/passe/brutalt. */
+      type: "rpe_followup";
+      entryId: string;
+      askedAt: string;
     };
 
 export type UserFacts = {

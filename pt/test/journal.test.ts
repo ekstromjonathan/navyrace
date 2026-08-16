@@ -216,8 +216,27 @@ describe("journal", () => {
       source: "heuristic",
     });
     assert.equal((await journal.nextSession(u.id, (await journal.getTrack(training.id))!))?.session.id, "w1d2");
-    const sessionLog = await journal.archiveEntry({ userId: u.id, trackKind: "training" });
-    assert.equal(sessionLog?.session_ref, "w1d1");
+
+    const extra = await journal.logEntry({
+      trackId: training.id,
+      userId: u.id,
+      note: "20 min kettlebell + stretch",
+      sessionRef: "extra:2026-08-16",
+      source: "heuristic",
+      occurredAt: "2026-08-16T18:00:00.000Z",
+    });
+    assert.equal(extra.duplicate, false);
+    assert.equal((await journal.nextSession(u.id, (await journal.getTrack(training.id))!))?.session.id, "w1d2");
+    assert.equal(await journal.trainedOnDay(u.id, "2026-08-16", "Europe/Oslo"), true);
+    assert.equal(await journal.patchEntry(extra.id, { quality: "lett" }), true);
+    const patched = (await journal.recentEntries(u.id, 4)).find((e) => e.id === extra.id);
+    assert.equal(patched?.quality, "lett");
+
+    const sessionLog = await journal.archiveEntry({ userId: u.id, entryId: extra.id, reason: "user_requested" });
+    assert.equal(sessionLog?.session_ref, "extra:2026-08-16");
+    assert.equal((await journal.nextSession(u.id, (await journal.getTrack(training.id))!))?.session.id, "w1d2");
+    const plannedBack = await journal.archiveEntry({ userId: u.id, trackKind: "training" });
+    assert.equal(plannedBack?.session_ref, "w1d1");
     assert.equal((await journal.nextSession(u.id, (await journal.getTrack(training.id))!))?.session.id, "w1d1");
     assert.equal(await journal.archiveEntry({ userId: u.id, entryId: "missing" }), null);
   });

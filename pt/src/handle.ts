@@ -1,14 +1,22 @@
 import { env, isAllowlisted } from "./env.ts";
 import { parseMessage } from "./parser.ts";
 import { isOptOut } from "./optout.ts";
-import { isActivatePhrase, isActivateCancel, isArchivePhrase, isReminderDailyReply, isReminderOnceReply, isReminderScopeCancel } from "./gates.ts";
+import {
+  isActivatePhrase,
+  isActivateCancel,
+  isArchivePhrase,
+  isReminderDailyReply,
+  isReminderOnceReply,
+  isReminderScopeCancel,
+  parseLogDayReply,
+} from "./gates.ts";
 import { runAgent } from "./agent.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
 import * as linq from "./linq.ts";
 import { normalizeEvent } from "./webhook.ts";
 import { detectLang, isLang, type Lang } from "./locale.ts";
-import { resolveOnceOn } from "./db.ts";
+import { addLocalDays, dayAnchorIso, resolveOnceOn, todayInTz } from "./db.ts";
 import type { Inbound, UserRow } from "./types.ts";
 
 async function lockLang(user: UserRow, body: string): Promise<{ user: UserRow; lang: Lang; onboarding: boolean }> {
@@ -58,6 +66,72 @@ async function maybeCard(user: UserRow, chatId: string) {
   } catch {
     /* share is best-effort; card may be unconfigured */
   }
+}
+
+function dayLabel(lang: Lang, day: "today" | "yesterday"): string {
+  if (lang === "en") return day === "today" ? "today" : "yesterday";
+  return day === "today" ? "i dag" : "i går";
+}
+
+function shortSessionTitle(note: string): string {
+  const one = note.replace(/\s+/g, " ").trim();
+  return one.length <= 72 ? one : `${one.slice(0, 69)}…`;
+}
+
+async function commitSessionLog(
+  user: UserRow,
+  lang: Lang,
+  opts: {
+    day: "today" | "yesterday";
+    note: string;
+    quality: string | null;
+    claimsPlanned: boolean;
+    messageId?: string;
+  },
+): Promise<string> {
+  const training = await journal.activeTraining(user.id);
+  if (!training) return copy.sessionNoPlan(lang);
+
+  const today = todayInTz(user.tz);
+  const dayYmd = opts.day === "today" ? today : addLocalDays(today, -1);
+  const next = await journal.nextSession(user.id, training);
+  const planned = Boolean(opts.claimsPlanned && next);
+  const sessionRef = planned
+    ? next!.session.id
+    : opts.claimsPlanned
+      ? null
+      : `extra:${dayYmd}`;
+  const title = planned ? next!.session.title : shortSessionTitle(opts.note);
+
+  const result = await journal.logEntry({
+    trackId: training.id,
+    userId: user.id,
+    quality: opts.quality,
+    note: opts.note,
+    sessionRef,
+    source: "heuristic",
+    linqMessageId: opts.messageId ?? null,
+    occurredAt: dayAnchorIso(dayYmd),
+  });
+  if (result.duplicate) return copy.duplicateLog(lang);
+
+  const askRpe = !opts.quality;
+  if (askRpe && result.id) {
+    await journal.setPending(user.id, {
+      type: "rpe_followup",
+      entryId: result.id,
+      askedAt: new Date().toISOString(),
+    });
+  } else {
+    await journal.setPending(user.id, null);
+  }
+
+  return copy.sessionLogged(lang, {
+    title,
+    dayLabel: dayLabel(lang, opts.day),
+    planned,
+    askRpe,
+  });
 }
 
 async function handlePending(user: UserRow, lang: Lang, body: string): Promise<string | null> {
@@ -122,6 +196,42 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
     }
     await journal.setPending(user.id, null);
     return null;
+  }
+
+  if (pending.type === "log_day") {
+    if (isReminderScopeCancel(body) || isActivateCancel(body)) {
+      await journal.setPending(user.id, null);
+      return copy.sessionDayCancelled(lang);
+    }
+    const day = parseLogDayReply(body);
+    if (!day) return copy.sessionDayAsk(lang);
+    return commitSessionLog(user, lang, {
+      day,
+      note: pending.note,
+      quality: pending.quality,
+      claimsPlanned: pending.claimsPlanned,
+    });
+  }
+
+  if (pending.type === "rpe_followup") {
+    const parsed = parseMessage(body);
+    if (parsed.kind === "rpe") {
+      await journal.patchEntry(pending.entryId, { quality: parsed.quality });
+      await journal.setPending(user.id, null);
+      return copy.rpeLogged(lang, parsed.quality);
+    }
+    if (isReminderScopeCancel(body) || isActivateCancel(body)) {
+      await journal.setPending(user.id, null);
+      return copy.sessionDayCancelled(lang);
+    }
+    // Another clear intent → clear sticky RPE wait and let heuristics/agent handle.
+    if (parsed.confident) {
+      await journal.setPending(user.id, null);
+      return null;
+    }
+    return lang === "en"
+      ? "Still need how hard it felt: easy / about right / brutal."
+      : "Trenger fortsatt innsats: lett / passe / brutalt.";
   }
 
   return null;
@@ -215,10 +325,50 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
     return copy.entryArchived(lang, rec.name);
   }
 
+  if (parsed.kind === "session_log") {
+    if (!parsed.day) {
+      await journal.setPending(user.id, {
+        type: "log_day",
+        note: parsed.note,
+        quality: parsed.quality,
+        claimsPlanned: parsed.claimsPlanned,
+        askedAt: new Date().toISOString(),
+      });
+      return copy.sessionDayAsk(lang);
+    }
+    return commitSessionLog(user, lang, {
+      day: parsed.day,
+      note: parsed.note,
+      quality: parsed.quality,
+      claimsPlanned: parsed.claimsPlanned,
+      messageId: inbound.messageId,
+    });
+  }
+
   if (parsed.kind === "rpe") {
     const training = await journal.activeTraining(user.id);
     if (!training) return copy.noRpePlan(lang);
+
+    // Prefer attaching effort to a recent open training log (no quality yet).
+    const recent = await journal.recentEntries(user.id, 8);
+    const open = recent.find((e) => {
+      if (String(e.kind) !== "training") return false;
+      if (e.quality != null && String(e.quality).length > 0) return false;
+      const when = String(e.occurred_at ?? "");
+      if (!when) return false;
+      const ageMs = Date.now() - new Date(when).getTime();
+      return ageMs >= 0 && ageMs < 12 * 60 * 60 * 1000;
+    });
+    if (open?.id) {
+      await journal.patchEntry(String(open.id), { quality: parsed.quality });
+      await journal.setPending(user.id, null);
+      return copy.rpeLogged(lang, parsed.quality);
+    }
+
     const next = await journal.nextSession(user.id, training);
+    if (!next && parsed.quality !== "hoppet") {
+      return copy.rpeNeedSession(lang);
+    }
     await journal.logEntry({
       trackId: training.id,
       userId: user.id,
@@ -290,6 +440,10 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
     const pendingReply = await handlePending(current, lang, inbound.body);
     if (pendingReply) {
       await reply(inbound.chatId, pendingReply, { replyTo: inbound.messageId, userId: current.id });
+      const pendingParsed = parseMessage(inbound.body);
+      if (pendingParsed.kind === "rpe" && pendingParsed.quality !== "hoppet") {
+        await linq.reactLove(inbound.messageId);
+      }
       await maybeCard(current, inbound.chatId);
       return;
     }
@@ -310,9 +464,10 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
     let text = await withTyping(inbound.chatId, () =>
       runAgent(current, inbound.body, inbound.messageId, { lang, onboarding }),
     );
-    /* If OpenRouter hiccups, still answer program/today from the journal. */
+    /* If OpenRouter hiccups: prefer session-log heuristic over dumping “today”. */
     if (copy.isAgentFailureReply(text) && !onboarding) {
-      text = await formatToday(current, lang);
+      const again = await applyHeuristic(current, lang, inbound);
+      text = again ?? (await formatToday(current, lang));
     }
     await reply(inbound.chatId, text, { replyTo: inbound.messageId, userId: current.id });
     await maybeCard(current, inbound.chatId);

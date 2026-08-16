@@ -9,6 +9,16 @@ export type HeuristicIntent =
       quantity: { value: number; unit: string } | null;
       note?: string;
     }
+  | {
+      kind: "session_log";
+      confident: true;
+      /** null → PT must ask which day */
+      day: "today" | "yesterday" | null;
+      quality: "lett" | "passe" | "brutalt" | "hoppet" | null;
+      note: string;
+      /** User claimed today's/planned session (even if content differs). */
+      claimsPlanned: boolean;
+    }
   | { kind: "rpe"; confident: true; quality: "lett" | "passe" | "brutalt" | "hoppet" }
   | { kind: "today"; confident: true }
   | { kind: "activate"; confident: true }
@@ -167,7 +177,72 @@ export function parseMessage(body: string): HeuristicIntent {
     };
   }
 
+  const session = parseSessionLog(text);
+  if (session) return session;
+
   return { kind: "unknown", confident: false };
+}
+
+function parseSessionQuality(lower: string): "lett" | "passe" | "brutalt" | "hoppet" | null {
+  if (/\b(hoppet(\s+over)?|skipped)\b/i.test(lower)) return "hoppet";
+  if (/\bbrutalt\b|\bbrutal\b/i.test(lower)) return "brutalt";
+  if (/\blett\b|\beasy\b/i.test(lower)) return "lett";
+  if (/\bpasse\b|\babout right\b/i.test(lower)) return "passe";
+  return null;
+}
+
+function parseSessionDay(lower: string): "today" | "yesterday" | null {
+  if (/\b(i\s*går|i\s*gaar|yesterday)\b/i.test(lower)) return "yesterday";
+  if (
+    /\b(i\s*dag|today|tonight|i\s*kveld|nå|naa|nettopp|dagens|this morning|i\s*morges|i\s*formiddag|i\s*ettermiddag)\b/i.test(
+      lower,
+    )
+  ) {
+    return "today";
+  }
+  return null;
+}
+
+/** Free-form training session — even when it doesn't match the prescribed plan. */
+export function parseSessionLog(text: string): Extract<HeuristicIntent, { kind: "session_log" }> | null {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 500) return null;
+  const lower = trimmed.toLowerCase();
+
+  // Don't steal habit/recovery lines that already matched above; those return earlier.
+  if (/^(lett|passe|brutalt|hoppet|easy|ok|okay|brutal|skipped)$/i.test(trimmed)) return null;
+
+  const claimsPlanned =
+    /\b(dagens\s+økt|dagens\s+okt|today'?s\s+(workout|session)|planlagte?\s+økt|denne\s+økt(a|en)?)\b/i.test(
+      lower,
+    );
+
+  const didSession =
+    /\b(gjorde|gjort|ferdig(\s+med)?|fullført|trente|har\s+trent|tok\s+en\s+økt|tok\s+økt)\b/i.test(lower) ||
+    /\b(did|finished|completed|trained|worked\s+out)\b/i.test(lower);
+  const logVerb =
+    /\b(logg(?:er|et|a)?|logger\s+nå|logged|logging)\b/i.test(lower) &&
+    /\b(økt|okt|trening|workout|session|kettlebell|styrke|løp|lop|yoga|klatring|padling|svøm|swim|kb)\b/i.test(
+      lower,
+    );
+  const bareDone =
+    /^(ferdig|done|ferdig\s+nå|done\s+now|økt\s+ferdig|session\s+done)([.!]*)?$/i.test(trimmed);
+
+  if (!didSession && !logVerb && !bareDone && !claimsPlanned) return null;
+
+  // “hva logget du” / questions — not a log.
+  if (/^(hva|what|hvordan|how)\b/i.test(lower) || /\?\s*$/.test(trimmed)) return null;
+
+  const day = parseSessionDay(lower);
+  const quality = parseSessionQuality(lower);
+  return {
+    kind: "session_log",
+    confident: true,
+    day,
+    quality,
+    note: trimmed.slice(0, 400),
+    claimsPlanned: claimsPlanned || bareDone,
+  };
 }
 
 export function parseClock(text: string): { hour: number; minute: number; explicit: boolean } {

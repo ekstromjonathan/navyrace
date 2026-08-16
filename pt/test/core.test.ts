@@ -84,6 +84,30 @@ describe("parser", () => {
     assert.equal(parseMessage("det var brutalt i går og kneet hovnet").kind, "unknown");
   });
 
+  it("parses free-form session logs even when they diverge from the plan", () => {
+    const custom = parseMessage(
+      "Gjorde dagens økt nå. Logger nå 20 min kettlebell, og stretching. 3x 10 øvelser.",
+    );
+    assert.equal(custom.kind, "session_log");
+    if (custom.kind === "session_log") {
+      assert.equal(custom.day, "today");
+      assert.equal(custom.claimsPlanned, true);
+      assert.match(custom.note, /kettlebell/i);
+    }
+    const extra = parseMessage("Trente 20 min yoga i går");
+    assert.equal(extra.kind, "session_log");
+    if (extra.kind === "session_log") {
+      assert.equal(extra.day, "yesterday");
+      assert.equal(extra.claimsPlanned, false);
+    }
+    const unclear = parseMessage("Trente kettlebell og stretching");
+    assert.equal(unclear.kind, "session_log");
+    if (unclear.kind === "session_log") {
+      assert.equal(unclear.day, null);
+    }
+    assert.equal(parseMessage("Hva logget du?").kind, "unknown");
+  });
+
   it("parses daily training reminders", () => {
     const set = parseMessage("Kan du minne meg på å trene hver dag kl 8");
     assert.equal(set.kind, "reminder_set");

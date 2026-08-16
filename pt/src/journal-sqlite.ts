@@ -299,6 +299,29 @@ export function logEntry(input: {
   }
 }
 
+export function patchEntry(
+  entryId: string,
+  patch: { quality?: string | null; note?: string | null },
+): boolean {
+  const sets: string[] = [];
+  const args: SqlValue[] = [];
+  if ("quality" in patch) {
+    sets.push("quality = ?");
+    args.push(patch.quality ?? null);
+  }
+  if ("note" in patch) {
+    sets.push("note = ?");
+    args.push(patch.note ?? null);
+  }
+  if (!sets.length) return false;
+  args.push(entryId);
+  const info = run(
+    `UPDATE entries SET ${sets.join(", ")} WHERE id = ? AND archived_at IS NULL`,
+    ...args,
+  );
+  return Number(info.changes) > 0;
+}
+
 export type ArchivedEntry = {
   id: string;
   slug: string;
