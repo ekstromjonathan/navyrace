@@ -37,6 +37,9 @@ describe("parser", () => {
   it("parses rpe and today", () => {
     assert.equal(parseMessage("brutalt").kind, "rpe");
     assert.equal(parseMessage("hva trener jeg i dag").kind, "today");
+    assert.equal(parseMessage("Hvilket program går vi for?").kind, "today");
+    assert.equal(parseMessage("hva er programmet").kind, "today");
+    assert.equal(parseMessage("what's my program").kind, "today");
     assert.equal(parseMessage("kjør programmet").kind, "activate");
     assert.equal(parseMessage("run the program").kind, "activate");
     assert.equal(parseMessage("kjør").kind, "activate");
@@ -47,6 +50,14 @@ describe("parser", () => {
     assert.equal(parseMessage("archive and start new").kind, "archive");
     assert.equal(parseMessage("what am i training today").kind, "today");
     assert.equal(parseMessage("easy").kind, "rpe");
+    assert.equal(parseMessage("Hva har du?").kind, "unknown");
+  });
+
+  it("detects LLM failure fallback copy", async () => {
+    const { isAgentFailureReply, agentError } = await import("../src/copy.ts");
+    assert.equal(isAgentFailureReply(agentError("nb", new Error("429 rate limit"))), true);
+    assert.equal(isAgentFailureReply(agentError("nb", new Error("401 unauthorized"))), true);
+    assert.equal(isAgentFailureReply("I dag: Styrke for hele kroppen"), false);
   });
 
   it("archives a single log instead of treating delete as a hard remove", () => {

@@ -489,6 +489,26 @@ async function runTool(
   }
 }
 
+function isTransientLlmError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const status = (err as { status?: number } | null)?.status;
+  if (status === 429 || (typeof status === "number" && status >= 500)) return true;
+  return /429|rate.?limit|5\d\d|timeout|timed out|ECONNRESET|fetch failed|overloaded/i.test(msg);
+}
+
+async function createWithRetry(
+  client: Anthropic,
+  params: Anthropic.Messages.MessageCreateParamsNonStreaming,
+): Promise<Anthropic.Messages.Message> {
+  try {
+    return await client.messages.create(params);
+  } catch (err) {
+    if (!isTransientLlmError(err)) throw err;
+    await new Promise((r) => setTimeout(r, 600));
+    return await client.messages.create(params);
+  }
+}
+
 export async function runAgent(
   user: UserRow,
   body: string,
@@ -516,7 +536,7 @@ export async function runAgent(
     ];
 
     for (let i = 0; i < 6; i++) {
-      const res = await client.messages.create({
+      const res = await createWithRetry(client, {
         model: env.model,
         max_tokens: 900,
         system: systemPrompt(opts.lang, { onboarding: opts.onboarding, firstContact }),

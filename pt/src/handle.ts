@@ -280,9 +280,13 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       }
     }
 
-    const text = await withTyping(inbound.chatId, () =>
+    let text = await withTyping(inbound.chatId, () =>
       runAgent(current, inbound.body, inbound.messageId, { lang, onboarding }),
     );
+    /* If OpenRouter hiccups, still answer program/today from the journal. */
+    if (copy.isAgentFailureReply(text) && !onboarding) {
+      text = await formatToday(current, lang);
+    }
     await reply(inbound.chatId, text, { replyTo: inbound.messageId, userId: current.id });
     await maybeCard(current, inbound.chatId);
   } catch (err) {
