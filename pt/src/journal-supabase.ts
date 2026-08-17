@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { getSupabase, jsonText, nowIso, parseJson, todayInTz } from "./db.ts";
+import {
+  applyLoadAdapt,
+  buildDayView,
+  snapshotToday,
+  stampPlanOnActivate,
+  startedOnOf,
+  type DayView,
+} from "./calendar.ts";
 import type {
   ChatTurn,
   InviteRow,
@@ -369,9 +377,14 @@ export async function activateTrack(trackId: string): Promise<TrackRow> {
       throw new Error("active training exists — archive it first");
     }
   }
+  const user = await getUser(track.user_id);
+  const tz = user?.tz || "Europe/Oslo";
+  const stamped = stampPlanOnActivate(planOf(track), todayInTz(tz));
+  const patch: Record<string, unknown> = { status: "active", updated_at: nowIso() };
+  if (stamped) patch.plan = stamped;
   const { data, error } = await getSupabase()
     .from("tracks")
-    .update({ status: "active", updated_at: nowIso() })
+    .update(patch)
     .eq("id", trackId)
     .select("*")
     .single();
@@ -733,7 +746,21 @@ export async function lastRpeForLoadKey(userId: string, loadKey: string): Promis
   return data?.quality ? String(data.quality) : null;
 }
 
-const RPE_MULT: Record<string, number> = { lett: 1.08, passe: 1, brutalt: 0.9 };
+async function doneSessionRefs(trackId: string): Promise<Set<string>> {
+  const { data, error } = await getSupabase()
+    .from("entries")
+    .select("session_ref, quality")
+    .eq("track_id", trackId)
+    .is("archived_at", null)
+    .not("session_ref", "is", null);
+  throwIf(error);
+  return new Set(
+    (data ?? [])
+      .filter((r) => String((r as { quality: string | null }).quality ?? "") !== "hoppet")
+      .map((r) => (r as { session_ref: string | null }).session_ref)
+      .filter((v): v is string => Boolean(v)),
+  );
+}
 
 export async function nextSession(
   userId: string,
@@ -741,42 +768,36 @@ export async function nextSession(
 ): Promise<{ session: PlanSession; load: number | null; adapt: "lett" | "brutalt" | null } | null> {
   const plan = planOf(track);
   if (!plan?.sessions?.length) return null;
-  const { data, error } = await getSupabase()
-    .from("entries")
-    .select("session_ref")
-    .eq("track_id", track.id)
-    .is("archived_at", null)
-    .not("session_ref", "is", null)
-    .neq("quality", "hoppet");
-  throwIf(error);
-  const done = new Set(
-    (data ?? [])
-      .map((r) => (r as { session_ref: string | null }).session_ref)
-      .filter((v): v is string => Boolean(v)),
-  );
+  const done = await doneSessionRefs(track.id);
   const session = plan.sessions.find((s) => !done.has(s.id)) ?? null;
   if (!session) return null;
-  let load = session.load ?? null;
-  let adapt: "lett" | "brutalt" | null = null;
-  if (load != null && session.loadKey) {
-    const prev = await lastRpeForLoadKey(userId, session.loadKey);
-    const m = prev ? RPE_MULT[prev] : null;
-    if (m && m !== 1) {
-      const unit = session.unit === "km" ? Math.round(load * m * 2) / 2 : Math.round(load * m);
-      if (unit !== load) {
-        load = unit;
-        adapt = prev === "lett" ? "lett" : "brutalt";
-      }
-    }
+  const prev = session.loadKey ? await lastRpeForLoadKey(userId, session.loadKey) : null;
+  const adapted = applyLoadAdapt(session, prev);
+  return { session, load: adapted.load, adapt: adapted.adapt };
+}
+
+export async function todayView(user: UserRow, at?: string): Promise<DayView> {
+  const training = await activeTraining(user.id);
+  if (!training) return { kind: "none" };
+  const plan = planOf(training);
+  if (!plan?.sessions?.length) return { kind: "none" };
+  const today = at ?? todayInTz(user.tz);
+  const startedOn = startedOnOf(training, plan, user.tz);
+  const done = await doneSessionRefs(training.id);
+  const view = buildDayView(plan, done, today, startedOn);
+  if (view.kind === "session" && view.session.loadKey) {
+    const prev = await lastRpeForLoadKey(user.id, view.session.loadKey);
+    const adapted = applyLoadAdapt(view.session, prev);
+    return { ...view, load: adapted.load, adapt: adapted.adapt };
   }
-  return { session, load, adapt };
+  return view;
 }
 
 export async function snapshot(user: UserRow) {
   const tracks = (await listTracks(user.id)).filter((t) => t.status !== "archived");
   const training = await activeTraining(user.id);
   const draft = await draftTraining(user.id);
-  const today = training ? await nextSession(user.id, training) : null;
+  const view = await todayView(user);
   const trackStats = await Promise.all(
     tracks.map(async (t) => ({
       id: t.id,
@@ -797,17 +818,7 @@ export async function snapshot(user: UserRow) {
       ? { id: training.id, name: training.name, version: training.version }
       : null,
     draftTraining: draft ? { id: draft.id, name: draft.name, version: draft.version } : null,
-    today: today
-      ? {
-          id: today.session.id,
-          title: today.session.title,
-          load: today.load,
-          unit: today.session.unit,
-          items: (today.session.items ?? []).slice(0, 6),
-          est: today.session.est,
-          adapt: today.adapt,
-        }
-      : null,
+    today: snapshotToday(view),
     recentEntries: await recentEntries(user.id, 8),
     recentNotes: await recentNotes(user.id, 8),
     recentChat: await recentChat(user.id, 24),

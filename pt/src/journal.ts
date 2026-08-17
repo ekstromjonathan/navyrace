@@ -257,6 +257,10 @@ export async function nextSession(
   return asAsync(api().nextSession(userId, track));
 }
 
+export async function todayView(user: UserRow, at?: string) {
+  return asAsync(api().todayView(user, at));
+}
+
 export async function snapshot(user: UserRow) {
   const snap = await asAsync(api().snapshot(user));
   const facts = factsOf(user);

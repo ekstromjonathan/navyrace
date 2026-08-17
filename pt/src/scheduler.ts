@@ -15,15 +15,13 @@ export async function reminderBody(user: UserRow, reminder: ReminderRow): Promis
   if (reminder.url) return copy.reminderPingVideo(lang, reminder.url);
   const training = await journal.activeTraining(user.id);
   if (!training) return copy.reminderPingNoPlan(lang);
-  const next = await journal.nextSession(user.id, training);
-  if (!next) return copy.reminderPingDone(lang, training.name);
-  const load = next.load != null ? `${next.load}${next.session.unit ? ` ${next.session.unit}` : ""}` : "";
-  const line =
-    lang === "en"
-      ? `Today: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
-      : lang === "sv"
-        ? `Idag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
-        : `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`;
+  const view = await journal.todayView(user);
+  if (view.kind === "complete") return copy.reminderPingDone(lang, training.name);
+  if (view.kind === "rest" || view.kind === "logged") {
+    return copy.reminderPingRest(lang, copy.restDayTips(lang, view.weekday));
+  }
+  if (view.kind !== "session") return copy.reminderPingNoPlan(lang);
+  const line = copy.sessionHeading(lang, view.session, view.load);
   return copy.reminderPingToday(lang, line);
 }
 

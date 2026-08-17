@@ -507,6 +507,14 @@ button,input{font:inherit;color:inherit}
   padding:7px 10px;border-radius:8px;cursor:pointer}
 .toast .tundo:active{transform:scale(.95)}
 
+.confetti{position:fixed;inset:0;pointer-events:none;z-index:70;overflow:hidden}
+.confetti i{position:absolute;top:38%;left:50%;width:7px;height:11px;border-radius:1px;
+  animation:confetti-fly .95s cubic-bezier(.22,1,.36,1) forwards}
+@keyframes confetti-fly{
+  0%{transform:translate(-50%,0) rotate(0deg);opacity:1}
+  100%{transform:translate(calc(-50% + var(--dx)), 210px) rotate(var(--rot));opacity:0}
+}
+
 @keyframes up{from{transform:translateY(22px);opacity:0}to{transform:translateY(0);opacity:1}}
 .fade{animation:fu .5s cubic-bezier(.2,.8,.2,1) both}
 @keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -1039,6 +1047,36 @@ function SyncSheet({ user, sync, onClose }) {
   );
 }
 
+const CONFETTI_COLORS = ["#FF5436", "#5FD08A", "#E8B23A", "#ECE8E0"];
+
+function ConfettiBurst({ token }) {
+  if (!token) return null;
+  const bits = Array.from({ length: 22 }, (_, i) => ({
+    id: i,
+    dx: `${((i * 37) % 180) - 90}px`,
+    rot: `${(i * 47) % 360}deg`,
+    left: `${18 + ((i * 13) % 64)}%`,
+    delay: `${(i % 8) * 0.03}s`,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+  }));
+  return (
+    <div className="confetti" aria-hidden="true">
+      {bits.map((b) => (
+        <i
+          key={`${token}-${b.id}`}
+          style={{
+            left: b.left,
+            background: b.color,
+            animationDelay: b.delay,
+            "--dx": b.dx,
+            "--rot": b.rot,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [gate, setGate] = useState("boot"); // boot | restoring | coach | app
@@ -1050,6 +1088,8 @@ export default function App() {
   const [viewWeek, setViewWeek] = useState(1);
   const [tab, setTab] = useState("train");
   const [toast, setToast] = useState(null);
+  const [confetti, setConfetti] = useState(0);
+  const confettiTimer = useRef(null);
   const toastTimer = useRef(null);
   const lastAction = useRef(null);
   const [user, setUser] = useState(null);
@@ -1303,13 +1343,10 @@ export default function App() {
     const newIndex = index + 1;
     setSheet(false);
     persistProgress(newIndex, newLogs);
-    const next = sessions[newIndex];
-    let msg = "Økt logget.";
-    if (next && next.load != null) {
-      const na = adapt(next, newIndex, newLogs, sessions);
-      msg = na.note ? na.note : "Neste økt: planen holder.";
-    }
-    showToast(msg, RPE[rpeKey].color, true);
+    setConfetti(Date.now());
+    clearTimeout(confettiTimer.current);
+    confettiTimer.current = setTimeout(() => setConfetti(0), 1100);
+    showToast("Økt i boks — bra jobba.", RPE[rpeKey].color, true);
   }
 
   function skipSession() {
@@ -1570,7 +1607,7 @@ export default function App() {
         )}
         {todayIsRest && !finished && (
           <div className="cal-note">
-            I dag er hviledag ({daysPerWeek} dager/uke). Neste økt: {session ? `${DAYS[session.day]} · ${session.title}` : "—"}.
+            I dag er hviledag. En tur, skikkelig mat og søvn gir mer enn å ta igjen med en hard økt.
           </div>
         )}
 
@@ -1616,18 +1653,9 @@ export default function App() {
               </div>
             </div>
             <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.5, marginTop: 14 }}>
-              Du trener {daysPerWeek} dager i uka — {DAYS[todayD]} er ikke en av dem.
-              {session ? ` Neste økt er ${DAYS[session.day]}: ${session.title}.` : ""}
+              Du trener {daysPerWeek} dager i uka — {DAYS[todayD]} er restitusjon.
+              Gå en tur, spis skikkelig og sov. Ikke ta igjen med en ekstra hard økt.
             </p>
-            {session && (
-              <button
-                className="skipbtn"
-                style={{ marginTop: 16, width: "100%" }}
-                onClick={() => setPreview(session)}
-              >
-                Se neste økt likevel
-              </button>
-            )}
           </div>
         ) : (
           <>
@@ -1842,6 +1870,7 @@ export default function App() {
       })()}
 
       {/* toast */}
+      {confetti > 0 && <ConfettiBurst token={confetti} />}
       {toast && (
         <div className="toast">
           <div className="ti" style={{ background: "rgba(236,232,224,.06)" }}>

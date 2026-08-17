@@ -23,6 +23,7 @@ export type HeuristicIntent =
     }
   | { kind: "rpe"; confident: true; quality: "lett" | "passe" | "brutalt" | "hoppet" }
   | { kind: "today"; confident: true }
+  | { kind: "greeting"; confident: true }
   | { kind: "activate"; confident: true }
   | { kind: "archive"; confident: true }
   | { kind: "reminder_set"; confident: true; hour: number; minute: number; scope: "daily" | "once"; url: string | null }
@@ -106,6 +107,10 @@ export function parseMessage(body: string): HeuristicIntent {
     /^(which program|what'?s (my|the) program|my program)\??$/i.test(lower)
   ) {
     return { kind: "today", confident: true };
+  }
+
+  if (isBareGreeting(text)) {
+    return { kind: "greeting", confident: true };
   }
 
   if (/^(lett|passe|brutalt|hoppet|easy|ok|okay|brutal|skipped|lätt|lagom|hoppade)$/i.test(lower) || /^hoppet over$/i.test(lower) || /^skip(ped)?$/i.test(lower) || /^hoppade över$/i.test(lower)) {
@@ -195,6 +200,15 @@ export function parseMessage(body: string): HeuristicIntent {
   if (session) return session;
 
   return { kind: "unknown", confident: false };
+}
+
+/** hei / hallo / hey with nothing else — keep a dialogue, don't dump the workout. */
+export function isBareGreeting(text: string): boolean {
+  const t = text.trim().replace(/^[!?.\s]+|[!?.\s]+$/g, "");
+  if (!t || t.length > 40) return false;
+  return /^(?:hei|heia|heisann|hallo|hallois|hey+|hi+|yo|tja|tjena|hej|god\s*(?:morgen|morgon|formiddag|kveld|kväll|natt)|morning|evening|sup)(?:\s+(?:hei|heia|heisann|hallo|hey|hi|hej))*$/i.test(
+    t,
+  );
 }
 
 function parseSessionQuality(lower: string): "lett" | "passe" | "brutalt" | "hoppet" | null {

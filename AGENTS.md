@@ -22,6 +22,7 @@ Local forward: `linq webhooks listen --forward-to http://localhost:8787/webhook`
 4. **Diagnose delivery carefully** — Inbound in `pt.webhook_events` / `message_log` means Linq→webhook worked; generic *«fikk ikke laget et skikkelig svar»* is usually LLM/OpenRouter, not “messages not arriving”.
 5. **iMessage constraints** — One reply per inbound, short copy, inbound-first for coaching. Unsolicited outbound: user-requested reminders, and one owner ping when a new number asks in. Nothing is hard-deleted (archive logs / archive tracks). Unknown senders get no reply until the owner admits them (`ja`).
 6. **Speed + memory** — Persist `set_fact` as they talk; don’t re-introduce or re-ask answered fields; assume they will train and lead with today’s session when a plan is active.
+7. **Sessions belong to weekdays** — A Monday session stays Monday. Rest days get recovery tips, not the next training session. Bare `hei` keeps a short dialogue with a hint of the next step (not the full workout dump). Completed sessions are celebrated (iMessage confetti).
 
 ### Services / commands
 

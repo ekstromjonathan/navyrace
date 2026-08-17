@@ -1,4 +1,6 @@
 import type { Lang } from "./locale.ts";
+import type { DayView } from "./calendar.ts";
+import type { PlanSession } from "./types.ts";
 
 function hhmm(hour: number, minute: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
@@ -8,6 +10,122 @@ function pick(lang: Lang, en: string, nb: string, sv: string): string {
   if (lang === "en") return en;
   if (lang === "sv") return sv;
   return nb;
+}
+
+const WEEKDAYS = {
+  en: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+  nb: ["mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag", "søndag"],
+  sv: ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"],
+} as const;
+
+export function weekdayName(lang: Lang, day: number): string {
+  const list = WEEKDAYS[lang] ?? WEEKDAYS.nb;
+  return list[Math.max(0, Math.min(6, day))] ?? list[0];
+}
+
+export function restDayTips(lang: Lang, weekday: number): string {
+  const name = weekdayName(lang, weekday);
+  const rotate = weekday % 3;
+  if (rotate === 1) {
+    return pick(
+      lang,
+      `${name} is a rest day. Easy walk if you want to move, eat well, sleep. Don't "make up" a hard session.`,
+      `${name} er hviledag. Gå en tur hvis du vil røre deg, spis skikkelig, sov. Ikke ta igjen med en hard økt.`,
+      `${name} är vilodag. Gå en promenad om du vill röra på dig, ät ordentligt, sov. Ta inte igen med ett hårt pass.`,
+    );
+  }
+  if (rotate === 2) {
+    return pick(
+      lang,
+      `${name} is rest. Light mobility if something's stiff — food and water do more than another workout today.`,
+      `${name} er hvile. Lett mobilitet hvis noe er stivt — mat og vann gir mer enn en ekstra økt i dag.`,
+      `${name} är vila. Lätt mobilitet om något är stelt — mat och vatten ger mer än ett extra pass idag.`,
+    );
+  }
+  return pick(
+    lang,
+    `${name} is a rest day. A 20–40 min walk, a proper meal, and sleep — that's the work today.`,
+    `${name} er hviledag. En tur på 20–40 min, skikkelig mat og søvn — det er jobben i dag.`,
+    `${name} är vilodag. En promenad på 20–40 min, ordentlig mat och sömn — det är jobbet idag.`,
+  );
+}
+
+export function sessionHeading(
+  lang: Lang,
+  session: PlanSession,
+  load: number | null,
+): string {
+  const dose = load != null ? `${load}${session.unit ? ` ${session.unit}` : ""}` : "";
+  const est = session.est ? ` · ${session.est}` : "";
+  const extra = dose ? ` (${dose})` : "";
+  return pick(
+    lang,
+    `Today: ${session.title}${extra}${est}`,
+    `I dag: ${session.title}${extra}${est}`,
+    `Idag: ${session.title}${extra}${est}`,
+  );
+}
+
+export function greetingReply(
+  lang: Lang,
+  view: DayView,
+  opts: { missingForPlan?: string[]; draftName?: string | null } = {},
+): string {
+  if (view.kind === "rest") {
+    const hi = pick(lang, "Hey.", "Hei.", "Hej.");
+    return `${hi} ${restDayTips(lang, view.weekday)}`;
+  }
+  if (view.kind === "logged") {
+    return pick(
+      lang,
+      `Hey. Today's session (“${view.session.title}”) is already in the log — enjoy the rest of the day.`,
+      `Hei. Dagens økt («${view.session.title}») er allerede i boks — kos deg med resten av dagen.`,
+      `Hej. Dagens pass («${view.session.title}») är redan i loggen — njut av resten av dagen.`,
+    );
+  }
+  if (view.kind === "complete") {
+    return pick(
+      lang,
+      "Hey. This block is logged out. Want a new one, or pull an archive?",
+      "Hei. Blokka er ferdig ut. Vil du ha en ny, eller hente et arkiv?",
+      "Hej. Blocket är slutloggat. Vill du ha ett nytt, eller hämta ett arkiv?",
+    );
+  }
+  if (view.kind === "session") {
+    return pick(
+      lang,
+      `Hey. ${view.session.title} is on the plan today when you're ready — ask if you want the details.`,
+      `Hei. ${view.session.title} står på planen i dag når du er klar — spør hvis du vil ha detaljene.`,
+      `Hej. ${view.session.title} står på planen idag när du är redo — fråga om du vill ha detaljerna.`,
+    );
+  }
+  if (opts.draftName) {
+    return pick(
+      lang,
+      `Hey. You've got a draft (“${opts.draftName}”). Say yes / ok / run it to lock it, or tell me what to change.`,
+      `Hei. Du har et utkast («${opts.draftName}»). Si ja / ok / kjør for å låse, eller fortell hva som skal endres.`,
+      `Hej. Du har ett utkast («${opts.draftName}»). Säg ja / ok / kör för att låsa, eller berätta vad som ska ändras.`,
+    );
+  }
+  const missing = opts.missingForPlan ?? [];
+  if (missing.length) {
+    const field = missing[0];
+    const ask =
+      field === "goal"
+        ? pick(lang, "What are you training toward?", "Hva trener du mot?", "Vad tränar du mot?")
+        : field === "level"
+          ? pick(lang, "What's your training experience like?", "Hvordan er erfaringsnivået ditt?", "Hur ser träningsvanan ut?")
+          : field === "daysPerWeek"
+            ? pick(lang, "How many days a week can you train?", "Hvor mange dager i uka kan du trene?", "Hur många dagar i veckan kan du träna?")
+            : pick(lang, "What gear do you have?", "Hva har du av utstyr?", "Vilken utrustning har du?");
+    return pick(lang, `Hey. ${ask}`, `Hei. ${ask}`, `Hej. ${ask}`);
+  }
+  return pick(
+    lang,
+    "Hey. Tell me what you want to keep on top of — I'll take it from there.",
+    "Hei. Fortell hva du vil holde styr på — så tar vi det derfra.",
+    "Hej. Berätta vad du vill hålla koll på — så tar vi det därifrån.",
+  );
 }
 
 export function optOutReply(lang: Lang): string {
@@ -69,6 +187,15 @@ export function reminderConfirmOnceWithUrl(
     `Ok — one reminder on ${onceOn} at ${t} (${tz}) with your link:\n${url}\nSay “stop reminding me” to cancel.`,
     `Ok — én påminnelse ${onceOn} kl ${t} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å avbryte.`,
     `Ok — en påminnelse ${onceOn} kl ${t} (${tz}) med länken:\n${url}\nSäg «sluta påminna mig» för att avbryta.`,
+  );
+}
+
+export function videoLinkAsk(lang: Lang): string {
+  return pick(
+    lang,
+    "Got the link. What time should I ping you?",
+    "Har lenken. Når skal jeg minne deg?",
+    "Har länken. När ska jag påminna dig?",
   );
 }
 
@@ -212,15 +339,15 @@ export function sessionLogged(
   const where = opts.planned
     ? pick(
         lang,
-        `Logged against “${opts.title}” (${opts.dayLabel}).`,
-        `Logget mot «${opts.title}» (${opts.dayLabel}).`,
-        `Loggat mot «${opts.title}» (${opts.dayLabel}).`,
+        `“${opts.title}” is in the log (${opts.dayLabel}) — nice one.`,
+        `«${opts.title}» i boks (${opts.dayLabel}) — bra jobba.`,
+        `«${opts.title}» i loggen (${opts.dayLabel}) — snyggt.`,
       )
     : pick(
         lang,
-        `Logged extra session “${opts.title}” (${opts.dayLabel}) — plan stays as-is.`,
-        `Logget ekstraøkt «${opts.title}» (${opts.dayLabel}) — planen står.`,
-        `Loggat extrapass «${opts.title}» (${opts.dayLabel}) — planen står.`,
+        `Logged extra session “${opts.title}” (${opts.dayLabel}) — plan stays as-is. Nice.`,
+        `Ekstraøkt «${opts.title}» logget (${opts.dayLabel}) — planen står. Bra jobba.`,
+        `Extrapass «${opts.title}» loggat (${opts.dayLabel}) — planen står. Snyggt.`,
       );
   if (!opts.askRpe) return where;
   const ask = pick(
@@ -334,9 +461,9 @@ export function archivePrompt(lang: Lang, name: string, entryCount: number, note
 export function activated(lang: Lang): string {
   return pick(
     lang,
-    "Program is locked. Here's today's session — say easy / about right / brutal when you're done so I can tune the next one.",
-    "Programmet er låst. Her er dagens økt — si lett / passe / brutalt når du er ferdig, så justerer jeg neste.",
-    "Programmet är låst. Här är dagens pass — säg lätt / lagom / brutalt när du är klar, så justerar jag nästa.",
+    "Program is locked.",
+    "Programmet er låst.",
+    "Programmet är låst.",
   );
 }
 
@@ -397,6 +524,15 @@ export function todayDone(lang: Lang, name: string): string {
   );
 }
 
+export function todayLogged(lang: Lang, title: string): string {
+  return pick(
+    lang,
+    `Today's session (“${title}”) is already logged. Rest, eat, sleep — ping me if something's tight.`,
+    `Dagens økt («${title}») er allerede i boks. Hvil, spis, sov — si ifra hvis noe strammer.`,
+    `Dagens pass («${title}») är redan loggat. Vila, ät, sov — säg till om något stramar.`,
+  );
+}
+
 export function todayFooter(lang: Lang): string {
   return pick(
     lang,
@@ -428,6 +564,15 @@ export function reminderPingDone(lang: Lang, name: string): string {
     `Reminder — “${name}” is logged out. Want a new block?`,
     `Påminnelse — «${name}» er ferdig ut. Vil du ha en ny blokk?`,
     `Påminnelse — «${name}» är slutloggat. Vill du ha ett nytt block?`,
+  );
+}
+
+export function reminderPingRest(lang: Lang, tips: string): string {
+  return pick(
+    lang,
+    [`Rest day.`, tips].join("\n"),
+    [`Hviledag.`, tips].join("\n"),
+    [`Vilodag.`, tips].join("\n"),
   );
 }
 
