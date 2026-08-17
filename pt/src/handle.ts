@@ -185,6 +185,7 @@ async function handleUnknownSender(inbound: Inbound): Promise<void> {
 
 function dayLabel(lang: Lang, day: "today" | "yesterday"): string {
   if (lang === "en") return day === "today" ? "today" : "yesterday";
+  if (lang === "sv") return day === "today" ? "idag" : "igår";
   return day === "today" ? "i dag" : "i går";
 }
 
@@ -359,7 +360,9 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
     }
     return lang === "en"
       ? "Still need how hard it felt: easy / about right / brutal."
-      : "Trenger fortsatt innsats: lett / passe / brutalt.";
+      : lang === "sv"
+        ? "Behöver fortfarande insats: lätt / lagom / brutalt."
+        : "Trenger fortsatt innsats: lett / passe / brutalt.";
   }
 
   return null;
@@ -379,7 +382,9 @@ async function formatToday(user: UserRow, lang: Lang): Promise<string> {
   const heading =
     lang === "en"
       ? `Today: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
-      : `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`;
+      : lang === "sv"
+        ? `Idag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
+        : `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`;
   return [
     heading,
     ...items,

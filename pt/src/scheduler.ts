@@ -21,7 +21,9 @@ export async function reminderBody(user: UserRow, reminder: ReminderRow): Promis
   const line =
     lang === "en"
       ? `Today: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
-      : `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`;
+      : lang === "sv"
+        ? `Idag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
+        : `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`;
   return copy.reminderPingToday(lang, line);
 }
 

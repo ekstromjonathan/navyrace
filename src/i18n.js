@@ -24,6 +24,31 @@ const dictionaries = {
     termsDelete: "Ask in the thread, and we delete your name and number.",
     smsBody: "Hi, my name is {name}. I'd like to join.",
   },
+  sv: {
+    signupTitle: "Din  iMessage-coach",
+    signupLead: "Du skriver. Coachen svarar.",
+    name: "Namn",
+    phone: "Telefon",
+    send: "Skicka  iMessage",
+    tryApp: "Prova appen istället",
+    back: "← Tillbaka",
+    consent: "Genom att skicka godkänner du att bli kontaktad.",
+    terms: "Villkor",
+    language: "Språk",
+    missing: "Fyll i namn och nummer.",
+    opening: "Öppnar Meddelanden…",
+    termsPageTitle: "Villkor · lodd.ai",
+    termsTitle: "Villkor",
+    termsKicker: "lodd.ai · 15 augusti 2026",
+    termsIntro: "Du skickar namn och nummer så att vi kan skriva till dig om lodd.ai.",
+    termsUseTitle: "Vad vi använder",
+    termsUse: "Bara för att höra av oss. Vi säljer det inte, och använder det inte till reklam.",
+    termsContactTitle: "Kontakt",
+    termsContact: "Vi skriver på  iMessage eller SMS. Svara stopp, så slutar vi.",
+    termsDeleteTitle: "Radera",
+    termsDelete: "Säg till i tråden, så raderar vi namn och nummer.",
+    smsBody: "Hej, jag heter {name}. Jag vill vara med.",
+  },
   no: {
     signupTitle: "Din  iMessage coach",
     signupLead: "Du skriver. Coachen svarer.",
@@ -63,15 +88,19 @@ function fromCountry() {
       if (!region && typeof loc.maximize === "function") {
         region = loc.maximize().region;
       }
+      if (language === "sv" || region === "SE") return "sv";
       if (language === "nb" || language === "nn" || language === "no" || region === "NO") {
         return "no";
       }
     } catch {
+      if (/^(sv)([-_]|$)/i.test(tag) || /[-_]SE$/i.test(tag)) return "sv";
       if (/^(nb|nn|no)([-_]|$)/i.test(tag) || /[-_]NO$/i.test(tag)) return "no";
     }
   }
   try {
-    if (Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Oslo") return "no";
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz === "Europe/Stockholm") return "sv";
+    if (tz === "Europe/Oslo") return "no";
   } catch {
     /* ignore */
   }
@@ -81,7 +110,7 @@ function fromCountry() {
 function stored() {
   try {
     const value = localStorage.getItem(KEY);
-    if (value === "no" || value === "en") return value;
+    if (value === "no" || value === "en" || value === "sv") return value;
   } catch {
     /* private mode */
   }
@@ -95,7 +124,7 @@ export function t(key) {
 }
 
 export function applyI18n() {
-  document.documentElement.lang = lang === "no" ? "nb" : "en";
+  document.documentElement.lang = lang === "no" ? "nb" : lang;
   for (const el of document.querySelectorAll("[data-i18n]")) {
     const value = t(el.dataset.i18n);
     if (value) el.textContent = value;
@@ -109,7 +138,7 @@ export function applyI18n() {
 }
 
 export function setLang(next) {
-  lang = next === "no" ? "no" : "en";
+  lang = next === "no" || next === "sv" ? next : "en";
   try {
     localStorage.setItem(KEY, lang);
   } catch {

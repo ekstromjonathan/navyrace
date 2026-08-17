@@ -151,7 +151,7 @@ describe("parser", () => {
     const { extractApplicantName, isInviteYes, isInviteNo } = await import("../src/invite.ts");
     assert.equal(extractApplicantName("Hei, jeg heter Inger"), "Inger");
     assert.equal(extractApplicantName("Hei, jeg heter Inger Ekstrøm. Jeg vil være med."), "Inger Ekstrøm");
-    assert.equal(extractApplicantName("Hi, my name is Inger. I'd like to join."), "Inger");
+    assert.equal(extractApplicantName("Hej, jag heter Inger. Jag vill vara med."), "Inger");
     assert.equal(extractApplicantName("lodd.ai signup\nNavn: Inger\nTelefon: +4711111111"), "Inger");
     assert.equal(extractApplicantName("Hei, kan jeg være med?"), null);
     assert.equal(isInviteYes("Ja"), true);
@@ -214,7 +214,8 @@ describe("gates", () => {
   it("accepts soft assent to lock a draft, keeps archive exact", () => {
     assert.equal(isActivatePhrase("kjør programmet"), true);
     assert.equal(isActivatePhrase("run the program"), true);
-    assert.equal(isActivatePhrase("kjør"), true);
+    assert.equal(isActivatePhrase("kör"), true);
+    assert.equal(isArchivePhrase("arkivera och gör nytt"), true);
     assert.equal(isActivatePhrase("ja"), true);
     assert.equal(isActivatePhrase("ok"), true);
     assert.equal(isActivatePhrase("Vi kan begynne"), true);
@@ -254,6 +255,7 @@ describe("locale", () => {
   it("detects the language the user starts with", () => {
     assert.equal(detectLang("Er vi på?"), "nb");
     assert.equal(detectLang("Hei, kan du minne meg på å trene"), "nb");
+    assert.equal(detectLang("Hej, jag heter Inger. Jag vill vara med."), "sv");
     assert.equal(detectLang("Are we on?"), "en");
     assert.equal(detectLang("Hi, remind me to train at 8"), "en");
   });

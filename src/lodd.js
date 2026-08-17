@@ -27,6 +27,8 @@ function normalizePhone(raw) {
   if (digits.startsWith("+")) return digits;
   if (digits.startsWith("00")) return `+${digits.slice(2)}`;
   if (digits.startsWith("47") && digits.length >= 10) return `+${digits}`;
+  if (digits.startsWith("46") && digits.length >= 10) return `+${digits}`;
+  if (digits.startsWith("07") && digits.length === 10) return `+46${digits.slice(1)}`;
   if (digits.length === 8) return `+47${digits}`;
   return digits;
 }

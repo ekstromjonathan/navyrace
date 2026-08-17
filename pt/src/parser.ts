@@ -66,20 +66,20 @@ export function parseMessage(body: string): HeuristicIntent {
   const archiveEntry = parseArchiveEntry(text);
   if (archiveEntry) return archiveEntry;
 
-  if (/\b(slutt å minne|ikke minn meg|avbryt påminnelse|skru av påminnelse|stop reminding|don't remind)\b/i.test(lower)) {
+  if (/\b(slutt å minne|ikke minn meg|avbryt påminnelse|skru av påminnelse|stop reminding|don't remind|sluta påminna|sluta minna)\b/i.test(lower)) {
     return { kind: "reminder_cancel", confident: true };
   }
 
   const url = extractUrl(text);
   const hasReminderIntent =
-    /\b(minn meg|minne meg|påminn meg)\b/i.test(lower) ||
+    /\b(minn meg|minne meg|påminn meg|påminn mig|påminn mej)\b/i.test(lower) ||
     (/\bpåminnelse\b/i.test(lower) &&
-      /\b(kl|hver dag|trene|trening|i kveld|i dag|video|se|watch)\b/i.test(lower)) ||
+      /\b(kl|hver dag|varje dag|trene|träna|trening|träning|i kveld|i kväll|ikväll|i dag|idag|video|se|watch)\b/i.test(lower)) ||
     /\bremind me\b/i.test(lower) ||
     (/\breminder\b/i.test(lower) &&
       /\b(train|training|daily|every day|tonight|today|video|watch)\b/i.test(lower)) ||
     (url != null &&
-      /\b(se (denne )?video(en)?|gå gjennom|watch (this )?video|videoen|denne lenken|this link)\b/i.test(lower));
+      /\b(se (denne )?video(en)?|gå gjennom|watch (this )?video|videoen|denne lenken|this link|titta på)\b/i.test(lower));
 
   if (hasReminderIntent) {
     const clock = parseClock(lower);
@@ -87,7 +87,7 @@ export function parseMessage(body: string): HeuristicIntent {
     let hour = clock.hour;
     let minute = clock.minute;
     // “i kveld” / tonight without an explicit clock → early evening default.
-    if (!clock.explicit && (scope === "once" || /\b(i kveld|tonight|this evening)\b/i.test(lower))) {
+    if (!clock.explicit && (scope === "once" || /\b(i kveld|i kväll|ikväll|tonight|this evening)\b/i.test(lower))) {
       hour = 18;
       minute = 0;
     }
@@ -100,6 +100,7 @@ export function parseMessage(body: string): HeuristicIntent {
 
   if (
     /^(hva (trener|gjør) jeg( i dag)?|i dag\??|neste økt)$/i.test(lower) ||
+    /^(vad (tränar|gör) jag( idag)?|idag\??|nästa pass)$/i.test(lower) ||
     /^(what am i training( today)?|today'?s (workout|session)|next session)$/i.test(lower) ||
     /^(hvilket program( går vi for)?|hva er programmet|mitt program|hvilken plan|hva har vi)\??$/i.test(lower) ||
     /^(which program|what'?s (my|the) program|my program)\??$/i.test(lower)
@@ -107,10 +108,10 @@ export function parseMessage(body: string): HeuristicIntent {
     return { kind: "today", confident: true };
   }
 
-  if (/^(lett|passe|brutalt|hoppet|easy|ok|okay|brutal|skipped)$/i.test(lower) || /^hoppet over$/i.test(lower) || /^skip(ped)?$/i.test(lower)) {
+  if (/^(lett|passe|brutalt|hoppet|easy|ok|okay|brutal|skipped|lätt|lagom|hoppade)$/i.test(lower) || /^hoppet over$/i.test(lower) || /^skip(ped)?$/i.test(lower) || /^hoppade över$/i.test(lower)) {
     let quality: "lett" | "passe" | "brutalt" | "hoppet";
-    if (lower.startsWith("hoppet") || lower.startsWith("skip")) quality = "hoppet";
-    else if (lower === "easy" || lower === "lett") quality = "lett";
+    if (lower.startsWith("hoppet") || lower.startsWith("hoppade") || lower.startsWith("skip")) quality = "hoppet";
+    else if (lower === "easy" || lower === "lett" || lower === "lätt") quality = "lett";
     else if (lower === "brutal" || lower === "brutalt") quality = "brutalt";
     else quality = "passe";
     return { kind: "rpe", confident: true, quality };
@@ -197,17 +198,17 @@ export function parseMessage(body: string): HeuristicIntent {
 }
 
 function parseSessionQuality(lower: string): "lett" | "passe" | "brutalt" | "hoppet" | null {
-  if (/\b(hoppet(\s+over)?|skipped)\b/i.test(lower)) return "hoppet";
+  if (/\b(hoppet(\s+over)?|hoppade(\s+över)?|skipped)\b/i.test(lower)) return "hoppet";
   if (/\bbrutalt\b|\bbrutal\b/i.test(lower)) return "brutalt";
-  if (/\blett\b|\beasy\b/i.test(lower)) return "lett";
-  if (/\bpasse\b|\babout right\b/i.test(lower)) return "passe";
+  if (/\blett\b|\blätt\b|\beasy\b/i.test(lower)) return "lett";
+  if (/\bpasse\b|\blagom\b|\babout right\b/i.test(lower)) return "passe";
   return null;
 }
 
 function parseSessionDay(lower: string): "today" | "yesterday" | null {
-  if (/\b(i\s*går|i\s*gaar|yesterday)\b/i.test(lower)) return "yesterday";
+  if (/\b(i\s*går|i\s*gaar|igår|i\s*går|yesterday)\b/i.test(lower)) return "yesterday";
   if (
-    /\b(i\s*dag|today|tonight|i\s*kveld|nå|naa|nettopp|dagens|this morning|i\s*morges|i\s*formiddag|i\s*ettermiddag)\b/i.test(
+    /\b(i\s*dag|idag|today|tonight|i\s*kveld|i\s*kväll|ikväll|nå|naa|nettopp|dagens|this morning|i\s*morges|i\s*formiddag|i\s*ettermiddag)\b/i.test(
       lower,
     )
   ) {
@@ -226,12 +227,13 @@ export function parseSessionLog(text: string): Extract<HeuristicIntent, { kind: 
   if (/^(lett|passe|brutalt|hoppet|easy|ok|okay|brutal|skipped)$/i.test(trimmed)) return null;
 
   const claimsPlanned =
-    /\b(dagens\s+økt|dagens\s+okt|today'?s\s+(workout|session)|planlagte?\s+økt|denne\s+økt(a|en)?)\b/i.test(
+    /\b(dagens\s+økt|dagens\s+okt|dagens\s+pass|today'?s\s+(workout|session)|planlagte?\s+økt|denne\s+økt(a|en)?)\b/i.test(
       lower,
     );
 
   const didSession =
     /\b(gjorde|gjort|ferdig(\s+med)?|fullført|trente|har\s+trent|tok\s+en\s+økt|tok\s+økt)\b/i.test(lower) ||
+    /\b(tränade|har\s+tränat|tog\s+ett\s+pass|gjorde\s+pass|klart)\b/i.test(lower) ||
     /\b(did|finished|completed|trained|worked\s+out)\b/i.test(lower);
   const logVerb =
     /\b(logg(?:er|et|a)?|logger\s+nå|logged|logging)\b/i.test(lower) &&
@@ -262,6 +264,7 @@ export function parseClock(text: string): { hour: number; minute: number; explic
   const m =
     text.match(/\bkl\.?\s*(\d{1,2})(?:[:.](\d{2}))?\b/i) ||
     text.match(/\bklokken\s*(\d{1,2})(?:[:.](\d{2}))?\b/i) ||
+    text.match(/\bklockan\s*(\d{1,2})(?:[:.](\d{2}))?\b/i) ||
     text.match(/\bat\s*(\d{1,2})(?:[:.](\d{2}))?\b/i) ||
     text.match(/\b(\d{1,2})[:.](\d{2})\b/);
   if (m) {
@@ -278,12 +281,12 @@ export function parseClock(text: string): { hour: number; minute: number; explic
 export function detectReminderScope(text: string): "daily" | "once" {
   const t = text.toLowerCase();
   if (
-    /\b(hver dag|daglig|every day|daily|hver morgen|recurring|gjentagende|permanent)\b/i.test(t)
+    /\b(hver dag|daglig|every day|daily|hver morgen|recurring|gjentagende|permanent|varje dag|dagligen)\b/i.test(t)
   ) {
     return "daily";
   }
   if (
-    /\b(i kveld|i dag|tonight|today|this evening|bare i dag|bare i kveld|kun i dag|kun i kveld|engang|engangs|one[- ]?shot|only (today|tonight)|just (today|tonight|once))\b/i.test(
+    /\b(i kveld|i kväll|ikväll|i dag|idag|tonight|today|this evening|bare i dag|bare i kveld|kun i dag|kun i kveld|engang|engangs|one[- ]?shot|only (today|tonight)|just (today|tonight|once)|bara idag|bara ikväll)\b/i.test(
       t,
     )
   ) {

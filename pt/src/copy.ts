@@ -4,22 +4,39 @@ function hhmm(hour: number, minute: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+function pick(lang: Lang, en: string, nb: string, sv: string): string {
+  if (lang === "en") return en;
+  if (lang === "sv") return sv;
+  return nb;
+}
+
 export function optOutReply(lang: Lang): string {
-  return lang === "en" ? "Ok, I'll stay quiet. Write when you want to pick it up." : "Ok, jeg er stille. Skriv når du vil igjen.";
+  return pick(
+    lang,
+    "Ok, I'll stay quiet. Write when you want to pick it up.",
+    "Ok, jeg er stille. Skriv når du vil igjen.",
+    "Ok, jag är tyst. Skriv när du vill igen.",
+  );
 }
 
 export function reminderConfirm(lang: Lang, hour: number, minute: number, tz: string): string {
-  if (lang === "en") {
-    return `Ok — daily training reminder at ${hhmm(hour, minute)} (${tz}). I'll skip the day if you already logged a session. Say “stop reminding me” to turn it off.`;
-  }
-  return `Ok — daglig treningspåminnelse kl ${hhmm(hour, minute)} (${tz}). Jeg hopper over dagen hvis du allerede har logget økt. Si «slutt å minne meg» for å skru av.`;
+  const t = hhmm(hour, minute);
+  return pick(
+    lang,
+    `Ok — daily training reminder at ${t} (${tz}). I'll skip the day if you already logged a session. Say “stop reminding me” to turn it off.`,
+    `Ok — daglig treningspåminnelse kl ${t} (${tz}). Jeg hopper over dagen hvis du allerede har logget økt. Si «slutt å minne meg» for å skru av.`,
+    `Ok — daglig träningspåminnelse kl ${t} (${tz}). Jag hoppar över dagen om du redan har loggat pass. Säg «sluta påminna mig» för att stänga av.`,
+  );
 }
 
 export function reminderConfirmOnce(lang: Lang, hour: number, minute: number, onceOn: string, tz: string): string {
-  if (lang === "en") {
-    return `Ok — one reminder on ${onceOn} at ${hhmm(hour, minute)} (${tz}). Say “stop reminding me” to cancel.`;
-  }
-  return `Ok — én påminnelse ${onceOn} kl ${hhmm(hour, minute)} (${tz}). Si «slutt å minne meg» for å avbryte.`;
+  const t = hhmm(hour, minute);
+  return pick(
+    lang,
+    `Ok — one reminder on ${onceOn} at ${t} (${tz}). Say “stop reminding me” to cancel.`,
+    `Ok — én påminnelse ${onceOn} kl ${t} (${tz}). Si «slutt å minne meg» for å avbryte.`,
+    `Ok — en påminnelse ${onceOn} kl ${t} (${tz}). Säg «sluta påminna mig» för att avbryta.`,
+  );
 }
 
 export function reminderConfirmWithUrl(
@@ -29,10 +46,13 @@ export function reminderConfirmWithUrl(
   tz: string,
   url: string,
 ): string {
-  if (lang === "en") {
-    return `Ok — daily reminder at ${hhmm(hour, minute)} (${tz}) with your link:\n${url}\nSay “stop reminding me” to turn it off.`;
-  }
-  return `Ok — daglig påminnelse kl ${hhmm(hour, minute)} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å skru av.`;
+  const t = hhmm(hour, minute);
+  return pick(
+    lang,
+    `Ok — daily reminder at ${t} (${tz}) with your link:\n${url}\nSay “stop reminding me” to turn it off.`,
+    `Ok — daglig påminnelse kl ${t} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å skru av.`,
+    `Ok — daglig påminnelse kl ${t} (${tz}) med länken:\n${url}\nSäg «sluta påminna mig» för att stänga av.`,
+  );
 }
 
 export function reminderConfirmOnceWithUrl(
@@ -43,321 +63,473 @@ export function reminderConfirmOnceWithUrl(
   tz: string,
   url: string,
 ): string {
-  if (lang === "en") {
-    return `Ok — one reminder on ${onceOn} at ${hhmm(hour, minute)} (${tz}) with your link:\n${url}\nSay “stop reminding me” to cancel.`;
-  }
-  return `Ok — én påminnelse ${onceOn} kl ${hhmm(hour, minute)} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å avbryte.`;
+  const t = hhmm(hour, minute);
+  return pick(
+    lang,
+    `Ok — one reminder on ${onceOn} at ${t} (${tz}) with your link:\n${url}\nSay “stop reminding me” to cancel.`,
+    `Ok — én påminnelse ${onceOn} kl ${t} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å avbryte.`,
+    `Ok — en påminnelse ${onceOn} kl ${t} (${tz}) med länken:\n${url}\nSäg «sluta påminna mig» för att avbryta.`,
+  );
 }
 
 export function inviteAsk(lang: Lang, name: string | null, phone: string): string {
   const who = name?.trim() || phone;
-  if (lang === "en") {
-    return `${who} wants in. Should I let them in?`;
-  }
   if (name?.trim()) {
-    return `${name.trim()} vil være med. Skal jeg slippe henne inn?`;
+    return pick(
+      lang,
+      `${who} wants in. Should I let them in?`,
+      `${who} vil være med. Skal jeg slippe henne inn?`,
+      `${who} vill vara med. Ska jag släppa in henne?`,
+    );
   }
-  return `${phone} vil være med. Skal jeg slippe inn?`;
+  return pick(
+    lang,
+    `${phone} wants in. Should I let them in?`,
+    `${phone} vil være med. Skal jeg slippe inn?`,
+    `${phone} vill vara med. Ska jag släppa in?`,
+  );
 }
 
 export function inviteApproved(lang: Lang, name: string | null, phone: string): string {
   const who = name?.trim() || phone;
-  return lang === "en"
-    ? `Ok — ${who} is in. I'll start onboarding.`
-    : `Ok — ${who} er inne. Jeg tar onboarding.`;
+  return pick(
+    lang,
+    `Ok — ${who} is in. I'll start onboarding.`,
+    `Ok — ${who} er inne. Jeg tar onboarding.`,
+    `Ok — ${who} är inne. Jag tar onboarding.`,
+  );
 }
 
 export function inviteDenied(lang: Lang, name: string | null, phone: string): string {
   const who = name?.trim() || phone;
-  return lang === "en" ? `Ok, ${who} is not getting in.` : `Ok, ${who} kommer ikke inn.`;
+  return pick(
+    lang,
+    `Ok, ${who} is not getting in.`,
+    `Ok, ${who} kommer ikke inn.`,
+    `Ok, ${who} kommer inte in.`,
+  );
 }
 
 export function inviteWelcome(lang: Lang, name: string | null, coach: string): string {
-  const hello = name?.trim() ? (lang === "en" ? `Hi ${name.trim()}` : `Hei ${name.trim()}`) : lang === "en" ? "Hi" : "Hei";
-  return lang === "en"
-    ? `${hello}. I'm ${coach}, your iMessage PT. What do you want from training?`
-    : `${hello}. Jeg er ${coach}, PT over iMessage. Hva vil du ha ut av treningen?`;
+  const hello = name?.trim()
+    ? pick(lang, `Hi ${name.trim()}`, `Hei ${name.trim()}`, `Hej ${name.trim()}`)
+    : pick(lang, "Hi", "Hei", "Hej");
+  return pick(
+    lang,
+    `${hello}. I'm ${coach}, your iMessage PT. What do you want from training?`,
+    `${hello}. Jeg er ${coach}, PT over iMessage. Hva vil du ha ut av treningen?`,
+    `${hello}. Jag är ${coach}, PT över iMessage. Vad vill du ha ut av träningen?`,
+  );
 }
 
 export function reminderScopeAsk(lang: Lang, hour: number, minute: number): string {
-  if (lang === "en") {
-    return `Got it — ${hhmm(hour, minute)}. Should that be every day, or just once (today/tonight)?`;
-  }
-  return `Skjønner — kl ${hhmm(hour, minute)}. Skal det være hver dag, eller bare i dag/i kveld?`;
+  const t = hhmm(hour, minute);
+  return pick(
+    lang,
+    `Got it — ${t}. Should that be every day, or just once (today/tonight)?`,
+    `Skjønner — kl ${t}. Skal det være hver dag, eller bare i dag/i kveld?`,
+    `Uppfattat — kl ${t}. Ska det vara varje dag, eller bara idag/ikväll?`,
+  );
 }
 
 export function reminderScopeCancelled(lang: Lang): string {
-  return lang === "en" ? "Ok, no reminder set." : "Ok, ingen påminnelse satt.";
+  return pick(lang, "Ok, no reminder set.", "Ok, ingen påminnelse satt.", "Ok, ingen påminnelse satt.");
 }
 
 export function reminderCancel(lang: Lang, had: boolean): string {
-  if (lang === "en") {
-    return had ? "Ok, no more training reminders." : "You don't have a reminder to turn off.";
+  if (had) {
+    return pick(lang, "Ok, no more training reminders.", "Ok, ingen flere treningspåminnelser.", "Ok, inga fler träningspåminnelser.");
   }
-  return had ? "Ok, ingen flere treningspåminnelser." : "Du har ingen påminnelse å skru av.";
+  return pick(
+    lang,
+    "You don't have a reminder to turn off.",
+    "Du har ingen påminnelse å skru av.",
+    "Du har ingen påminnelse att stänga av.",
+  );
 }
 
 export function noDraft(lang: Lang): string {
-  return lang === "en" ? "There's no draft to lock in." : "Det finnes ikke noe utkast å låse.";
+  return pick(lang, "There's no draft to lock in.", "Det finnes ikke noe utkast å låse.", "Det finns inget utkast att låsa.");
 }
 
 export function noActivePlan(lang: Lang): string {
-  return lang === "en" ? "No active plan to archive." : "Ingen aktiv plan å arkivere.";
+  return pick(lang, "No active plan to archive.", "Ingen aktiv plan å arkivere.", "Ingen aktiv plan att arkivera.");
 }
 
 export function noRpePlan(lang: Lang): string {
-  return lang === "en"
-    ? "No active plan to log how a session felt. Tell me what you did and I'll log it as a track."
-    : "Ingen aktiv plan å logge hvordan en økt føltes på. Si hva du gjorde, så logger jeg det som et spor.";
+  return pick(
+    lang,
+    "No active plan to log how a session felt. Tell me what you did and I'll log it as a track.",
+    "Ingen aktiv plan å logge hvordan en økt føltes på. Si hva du gjorde, så logger jeg det som et spor.",
+    "Ingen aktiv plan att logga hur ett pass kändes. Säg vad du gjorde, så loggar jag det som ett spår.",
+  );
 }
 
 export function rpeLogged(lang: Lang, quality: string): string {
-  if (lang === "en") {
-    if (quality === "hoppet") return "Noted — skipped. It doesn't count toward the dose. Next when you're ready.";
-    if (quality === "brutalt") return "Noted as brutal. I'll ease the next similar session.";
-    if (quality === "lett") return "Noted as easy. I'll bump the next similar session a little.";
-    return "Noted as about right. Holding the plan.";
+  if (quality === "hoppet") {
+    return pick(
+      lang,
+      "Noted — skipped. It doesn't count toward the dose. Next when you're ready.",
+      "Notert — hoppet. Den teller ikke i dosen. Neste når du er klar.",
+      "Noterat — hoppat. Det räknas inte i dosen. Nästa när du är redo.",
+    );
   }
-  if (quality === "hoppet") return "Notert — hoppet. Den teller ikke i dosen. Neste når du er klar.";
-  if (quality === "brutalt") return "Notert som brutalt. Jeg letter neste like økt.";
-  if (quality === "lett") return "Notert som lett. Jeg skrur opp neste like økt litt.";
-  return "Notert som passe. Holder planen.";
+  if (quality === "brutalt") {
+    return pick(
+      lang,
+      "Noted as brutal. I'll ease the next similar session.",
+      "Notert som brutalt. Jeg letter neste like økt.",
+      "Noterat som brutalt. Jag lättar nästa likadana pass.",
+    );
+  }
+  if (quality === "lett") {
+    return pick(
+      lang,
+      "Noted as easy. I'll bump the next similar session a little.",
+      "Notert som lett. Jeg skrur opp neste like økt litt.",
+      "Noterat som lätt. Jag skrur upp nästa likadana pass lite.",
+    );
+  }
+  return pick(
+    lang,
+    "Noted as about right. Holding the plan.",
+    "Notert som passe. Holder planen.",
+    "Noterat som lagom. Håller planen.",
+  );
 }
 
 export function sessionLogged(
   lang: Lang,
   opts: { title: string; dayLabel: string; planned: boolean; askRpe: boolean },
 ): string {
-  if (lang === "en") {
-    const where = opts.planned
-      ? `Logged against “${opts.title}” (${opts.dayLabel}).`
-      : `Logged extra session “${opts.title}” (${opts.dayLabel}) — plan stays as-is.`;
-    return opts.askRpe ? `${where}\nHow hard was it? (easy / about right / brutal)` : where;
-  }
   const where = opts.planned
-    ? `Logget mot «${opts.title}» (${opts.dayLabel}).`
-    : `Logget ekstraøkt «${opts.title}» (${opts.dayLabel}) — planen står.`;
-  return opts.askRpe ? `${where}\nHvor hardt var det? (lett / passe / brutalt)` : where;
+    ? pick(
+        lang,
+        `Logged against “${opts.title}” (${opts.dayLabel}).`,
+        `Logget mot «${opts.title}» (${opts.dayLabel}).`,
+        `Loggat mot «${opts.title}» (${opts.dayLabel}).`,
+      )
+    : pick(
+        lang,
+        `Logged extra session “${opts.title}” (${opts.dayLabel}) — plan stays as-is.`,
+        `Logget ekstraøkt «${opts.title}» (${opts.dayLabel}) — planen står.`,
+        `Loggat extrapass «${opts.title}» (${opts.dayLabel}) — planen står.`,
+      );
+  if (!opts.askRpe) return where;
+  const ask = pick(
+    lang,
+    "How hard was it? (easy / about right / brutal)",
+    "Hvor hardt var det? (lett / passe / brutalt)",
+    "Hur hårt var det? (lätt / lagom / brutalt)",
+  );
+  return `${where}\n${ask}`;
 }
 
 export function sessionDayAsk(lang: Lang): string {
-  return lang === "en"
-    ? "Got it — which day should I log that on? Today or yesterday?"
-    : "Skjønner — hvilken dag skal jeg logge det på? I dag eller i går?";
+  return pick(
+    lang,
+    "Got it — which day should I log that on? Today or yesterday?",
+    "Skjønner — hvilken dag skal jeg logge det på? I dag eller i går?",
+    "Uppfattat — vilken dag ska jag logga det på? Idag eller igår?",
+  );
 }
 
 export function sessionDayCancelled(lang: Lang): string {
-  return lang === "en" ? "Ok, nothing logged." : "Ok, ingenting logget.";
+  return pick(lang, "Ok, nothing logged.", "Ok, ingenting logget.", "Ok, ingenting loggat.");
 }
 
 export function sessionNoPlan(lang: Lang): string {
-  return lang === "en"
-    ? "No active program yet — I'll still note what you did once we lock a plan. Want to lock the draft?"
-    : "Ingen aktivt program ennå — jeg noterer det når vi har låst et opplegg. Vil du låse utkastet?";
+  return pick(
+    lang,
+    "No active program yet — I'll still note what you did once we lock a plan. Want to lock the draft?",
+    "Ingen aktivt program ennå — jeg noterer det når vi har låst et opplegg. Vil du låse utkastet?",
+    "Inget aktivt program än — jag noterar det när vi har låst ett upplägg. Vill du låsa utkastet?",
+  );
 }
 
 export function rpeNeedSession(lang: Lang): string {
-  return lang === "en"
-    ? "Tell me what you did first (even if it wasn't the planned session), then easy / about right / brutal."
-    : "Si først hva du gjorde (selv om det ikke var den planlagte økta), så lett / passe / brutalt.";
+  return pick(
+    lang,
+    "Tell me what you did first (even if it wasn't the planned session), then easy / about right / brutal.",
+    "Si først hva du gjorde (selv om det ikke var den planlagte økta), så lett / passe / brutalt.",
+    "Säg först vad du gjorde (även om det inte var det planerade passet), sen lätt / lagom / brutalt.",
+  );
 }
 
 export function loggedItem(lang: Lang, name: string, qty: string, n: number): string {
-  if (lang === "en") return `Logged ${name.toLowerCase()}${qty}. ${n} on that track.`;
-  return `Logget ${name.toLowerCase()}${qty}. ${n} på det sporet.`;
+  return pick(
+    lang,
+    `Logged ${name.toLowerCase()}${qty}. ${n} on that track.`,
+    `Logget ${name.toLowerCase()}${qty}. ${n} på det sporet.`,
+    `Loggat ${name.toLowerCase()}${qty}. ${n} på det spåret.`,
+  );
 }
 
 export function duplicateLog(lang: Lang): string {
-  return lang === "en" ? "I already had that one." : "Den hadde jeg allerede.";
+  return pick(lang, "I already had that one.", "Den hadde jeg allerede.", "Den hade jag redan.");
 }
 
 export function entryArchived(lang: Lang, name: string): string {
-  if (lang === "en") {
-    return `Archived — “${name}” is out of the live log. It sits as a snapshot.`;
-  }
-  return `Arkivert — «${name}» er tatt ut av den levende loggen. Den ligger som snapshot.`;
+  return pick(
+    lang,
+    `Archived — “${name}” is out of the live log. It sits as a snapshot.`,
+    `Arkivert — «${name}» er tatt ut av den levende loggen. Den ligger som snapshot.`,
+    `Arkiverad — «${name}» är tagen ur den levande loggen. Den ligger som snapshot.`,
+  );
 }
 
 export function noEntryToArchive(lang: Lang): string {
-  return lang === "en" ? "No log to archive." : "Fant ingen logg å arkivere.";
+  return pick(lang, "No log to archive.", "Fant ingen logg å arkivere.", "Hittade ingen logg att arkivera.");
 }
 
 export function activatePrompt(lang: Lang, name: string, sessionCount: number): string {
-  if (lang === "en") {
-    return [
+  return pick(
+    lang,
+    [
       `Draft “${name}” — ${sessionCount} sessions.`,
       "It adapts from how each session felt (easy / about right / brutal).",
       "Say yes / ok / run it when you want to lock it and start.",
-    ].join("\n");
-  }
-  return [
-    `Utkast «${name}» — ${sessionCount} økter.`,
-    "Det tilpasses etter hvordan hver økt føles (lett / passe / brutalt).",
-    "Si ja / ok / kjør når du vil låse og starte.",
-  ].join("\n");
+    ].join("\n"),
+    [
+      `Utkast «${name}» — ${sessionCount} økter.`,
+      "Det tilpasses etter hvordan hver økt føles (lett / passe / brutalt).",
+      "Si ja / ok / kjør når du vil låse og starte.",
+    ].join("\n"),
+    [
+      `Utkast «${name}» — ${sessionCount} pass.`,
+      "Det anpassas efter hur varje pass känns (lätt / lagom / brutalt).",
+      "Säg ja / ok / kör när du vill låsa och starta.",
+    ].join("\n"),
+  );
 }
 
 export function archivePrompt(lang: Lang, name: string, entryCount: number, noteCount: number): string {
-  if (lang === "en") {
-    return [
+  return pick(
+    lang,
+    [
       `“${name}” is active — ${entryCount} logs and ${noteCount} notes.`,
       "Nothing is deleted. It archives as a snapshot you can pull later.",
       'Write exactly “archive and start new” if you want that. Anything else cancels.',
-    ].join("\n");
-  }
-  return [
-    `«${name}» er aktivt — ${entryCount} logger og ${noteCount} notater.`,
-    "Det slettes ikke. Det arkiveres som snapshot du kan hente senere.",
-    'Skriv nøyaktig «arkiver og lag nytt» hvis du vil det. Alt annet avbryter.',
-  ].join("\n");
+    ].join("\n"),
+    [
+      `«${name}» er aktivt — ${entryCount} logger og ${noteCount} notater.`,
+      "Det slettes ikke. Det arkiveres som snapshot du kan hente senere.",
+      'Skriv nøyaktig «arkiver og lag nytt» hvis du vil det. Alt annet avbryter.',
+    ].join("\n"),
+    [
+      `«${name}» är aktivt — ${entryCount} loggar och ${noteCount} anteckningar.`,
+      "Det raderas inte. Det arkiveras som snapshot du kan hämta senare.",
+      'Skriv exakt «arkivera och gör nytt» om du vill det. Allt annat avbryter.',
+    ].join("\n"),
+  );
 }
 
 export function activated(lang: Lang): string {
-  return lang === "en"
-    ? "Program is locked. Here's today's session — say easy / about right / brutal when you're done so I can tune the next one."
-    : "Programmet er låst. Her er dagens økt — si lett / passe / brutalt når du er ferdig, så justerer jeg neste.";
+  return pick(
+    lang,
+    "Program is locked. Here's today's session — say easy / about right / brutal when you're done so I can tune the next one.",
+    "Programmet er låst. Her er dagens økt — si lett / passe / brutalt når du er ferdig, så justerer jeg neste.",
+    "Programmet är låst. Här är dagens pass — säg lätt / lagom / brutalt när du är klar, så justerar jag nästa.",
+  );
 }
 
 export function activateFailed(lang: Lang, detail: string): string {
-  return detail || (lang === "en" ? "Couldn't activate." : "Klarte ikke å aktivere.");
+  return detail || pick(lang, "Couldn't activate.", "Klarte ikke å aktivere.", "Kunde inte aktivera.");
 }
 
 export function activateCancelled(lang: Lang): string {
-  return lang === "en"
-    ? "Cancelled — the program is still a draft."
-    : "Avbrutt — programmet ligger fortsatt som utkast.";
+  return pick(
+    lang,
+    "Cancelled — the program is still a draft.",
+    "Avbrutt — programmet ligger fortsatt som utkast.",
+    "Avbrutet — programmet ligger kvar som utkast.",
+  );
 }
 
 export function archived(lang: Lang): string {
-  return lang === "en"
-    ? "Archived. It sits as a snapshot. Tell me what the new setup should aim at."
-    : "Arkivert. Det ligger som snapshot. Fortell hva det nye opplegget skal styre mot.";
+  return pick(
+    lang,
+    "Archived. It sits as a snapshot. Tell me what the new setup should aim at.",
+    "Arkivert. Det ligger som snapshot. Fortell hva det nye opplegget skal styre mot.",
+    "Arkiverat. Det ligger som snapshot. Berätta vad det nya upplägget ska styra mot.",
+  );
 }
 
 export function archiveCancelled(lang: Lang): string {
-  return lang === "en" ? "Cancelled — nothing was archived." : "Avbrutt — ingenting ble arkivert.";
+  return pick(lang, "Cancelled — nothing was archived.", "Avbrutt — ingenting ble arkivert.", "Avbrutet — ingenting arkiverades.");
 }
 
 export function savedField(lang: Lang, field: string): string {
-  return lang === "en" ? `Saved ${field}.` : `Lagret ${field}.`;
+  return pick(lang, `Saved ${field}.`, `Lagret ${field}.`, `Sparat ${field}.`);
 }
 
 export function todayNoPlan(lang: Lang): string {
-  return lang === "en"
-    ? "No active plan yet. Tell me goal, training experience, days per week and gear — I'll draft a week you confirm, and we'll tune it from how sessions feel."
-    : "Ingen aktiv plan ennå. Fortell mål, erfaring, dager i uka og utstyr — så lager jeg et utkast du bekrefter, og vi justerer etter hvordan øktene føles.";
+  return pick(
+    lang,
+    "No active plan yet. Tell me goal, training experience, days per week and gear — I'll draft a week you confirm, and we'll tune it from how sessions feel.",
+    "Ingen aktiv plan ennå. Fortell mål, erfaring, dager i uka og utstyr — så lager jeg et utkast du bekrefter, og vi justerer etter hvordan øktene føles.",
+    "Ingen aktiv plan än. Berätta mål, erfarenhet, dagar i veckan och utrustning — så gör jag ett utkast du bekräftar, och vi justerar efter hur passen känns.",
+  );
 }
 
 export function todayDraft(lang: Lang, name: string): string {
-  return lang === "en"
-    ? `You have a draft (“${name}”). Say yes / ok / run it to lock it, or tell me what to change.`
-    : `Du har et utkast («${name}»). Si ja / ok / kjør for å låse, eller fortell hva som skal endres.`;
+  return pick(
+    lang,
+    `You have a draft (“${name}”). Say yes / ok / run it to lock it, or tell me what to change.`,
+    `Du har et utkast («${name}»). Si ja / ok / kjør for å låse, eller fortell hva som skal endres.`,
+    `Du har ett utkast («${name}»). Säg ja / ok / kör för att låsa, eller berätta vad som ska ändras.`,
+  );
 }
 
 export function todayDone(lang: Lang, name: string): string {
-  return lang === "en"
-    ? `“${name}” is logged out. Want a new block, or pull an archive?`
-    : `«${name}» er ferdig ut logg-messig. Vil du ha en ny blokk, eller hente et arkiv?`;
+  return pick(
+    lang,
+    `“${name}” is logged out. Want a new block, or pull an archive?`,
+    `«${name}» er ferdig ut logg-messig. Vil du ha en ny blokk, eller hente et arkiv?`,
+    `«${name}» är slutloggat. Vill du ha ett nytt block, eller hämta ett arkiv?`,
+  );
 }
 
 export function todayFooter(lang: Lang): string {
-  return lang === "en"
-    ? "When you're done: how hard was it, and how did it feel? (easy / about right / brutal)"
-    : "Når du er ferdig: hvor hardt var det, og hvordan føltes det? (lett / passe / brutalt)";
+  return pick(
+    lang,
+    "When you're done: how hard was it, and how did it feel? (easy / about right / brutal)",
+    "Når du er ferdig: hvor hardt var det, og hvordan føltes det? (lett / passe / brutalt)",
+    "När du är klar: hur hårt var det, och hur kändes det? (lätt / lagom / brutalt)",
+  );
 }
 
 export function adaptNote(lang: Lang, prev: string): string {
-  if (lang === "en") {
-    return prev === "lett" ? "Last one felt easy — nudging up a bit." : "Last one was hard — easing off a bit.";
+  if (prev === "lett") {
+    return pick(lang, "Last one felt easy — nudging up a bit.", "Forrige føltes lett — skrur opp litt.", "Förra kändes lätt — skruvar upp lite.");
   }
-  return prev === "lett" ? "Forrige føltes lett — skrur opp litt." : "Forrige var hard — letter litt.";
+  return pick(lang, "Last one was hard — easing off a bit.", "Forrige var hard — letter litt.", "Förra var hård — lättar lite.");
 }
 
 export function reminderPingNoPlan(lang: Lang): string {
-  return lang === "en"
-    ? "Training day. Tell me goal, experience, days and gear — I'll put a week together."
-    : "Treningsdag. Fortell mål, erfaring, dager og utstyr — så setter jeg sammen ei uke.";
+  return pick(
+    lang,
+    "Training day. Tell me goal, experience, days and gear — I'll put a week together.",
+    "Treningsdag. Fortell mål, erfaring, dager og utstyr — så setter jeg sammen ei uke.",
+    "Träningsdag. Berätta mål, erfarenhet, dagar och utrustning — så sätter jag ihop en vecka.",
+  );
 }
 
 export function reminderPingDone(lang: Lang, name: string): string {
-  return lang === "en"
-    ? `Reminder — “${name}” is logged out. Want a new block?`
-    : `Påminnelse — «${name}» er ferdig ut. Vil du ha en ny blokk?`;
+  return pick(
+    lang,
+    `Reminder — “${name}” is logged out. Want a new block?`,
+    `Påminnelse — «${name}» er ferdig ut. Vil du ha en ny blokk?`,
+    `Påminnelse — «${name}» är slutloggat. Vill du ha ett nytt block?`,
+  );
 }
 
 export function reminderPingToday(lang: Lang, line: string): string {
-  if (lang === "en") {
-    return [`Training today.`, line, "Say easy / about right / brutal when you're done."].join("\n");
-  }
-  return [`Trening i dag.`, line, "Si lett / passe / brutalt når du er ferdig."].join("\n");
+  return pick(
+    lang,
+    [`Training today.`, line, "Say easy / about right / brutal when you're done."].join("\n"),
+    [`Trening i dag.`, line, "Si lett / passe / brutalt når du er ferdig."].join("\n"),
+    [`Träning idag.`, line, "Säg lätt / lagom / brutalt när du är klar."].join("\n"),
+  );
 }
 
 export function reminderPingVideo(lang: Lang, url: string): string {
-  if (lang === "en") {
-    return [`Reminder — time to watch this:`, url].join("\n");
-  }
-  return [`Påminnelse — tid for å se dette:`, url].join("\n");
+  return pick(
+    lang,
+    [`Reminder — time to watch this:`, url].join("\n"),
+    [`Påminnelse — tid for å se dette:`, url].join("\n"),
+    [`Påminnelse — dags att se det här:`, url].join("\n"),
+  );
 }
 
 export function handlerError(lang: Lang): string {
-  return lang === "en"
-    ? "I heard you, but something broke on my side. Try again, or say e.g. “meditated for 30 seconds”."
-    : "Jeg hørte deg, men noe røk på min side. Prøv igjen, eller si f.eks. «mediterte i 30 sekunder».";
+  return pick(
+    lang,
+    'I heard you, but something broke on my side. Try again, or say e.g. “meditated for 30 seconds”.',
+    "Jeg hørte deg, men noe røk på min side. Prøv igjen, eller si f.eks. «mediterte i 30 sekunder».",
+    "Jag hörde dig, men något gick sönder på min sida. Försök igen, eller säg t.ex. «mediterade i 30 sekunder».",
+  );
 }
 
 export function noLlm(lang: Lang): string {
-  return lang === "en"
-    ? "I can log simple things (water, cold plunge, meditation, easy/ok/brutal), but I need OPENROUTER_API_KEY to talk freely."
-    : "Jeg kan logge enkle ting (vann, kaldt bad, meditasjon, lett/passe/brutalt), men trenger OPENROUTER_API_KEY (eller Anthropic) for å svare fritt.";
+  return pick(
+    lang,
+    "I can log simple things (water, cold plunge, meditation, easy/ok/brutal), but I need OPENROUTER_API_KEY to talk freely.",
+    "Jeg kan logge enkle ting (vann, kaldt bad, meditasjon, lett/passe/brutalt), men trenger OPENROUTER_API_KEY (eller Anthropic) for å svare fritt.",
+    "Jag kan logga enkla saker (vatten, kallt bad, meditation, lätt/lagom/brutalt), men behöver OPENROUTER_API_KEY (eller Anthropic) för att svara fritt.",
+  );
 }
 
 export function agentStopped(lang: Lang): string {
-  return lang === "en" ? "I had to stop — send one thing at a time." : "Jeg måtte stoppe — send gjerne én ting om gangen.";
+  return pick(
+    lang,
+    "I had to stop — send one thing at a time.",
+    "Jeg måtte stoppe — send gjerne én ting om gangen.",
+    "Jag var tvungen att stanna — skicka gärna en sak i taget.",
+  );
 }
 
 export function agentError(lang: Lang, err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   console.error("agent failed", msg);
   if (/deprecated|not_found_error|404.*model|model.*(not found|unavailable)/i.test(msg)) {
-    return lang === "en"
-      ? "I heard you, but the model name is invalid on OpenRouter. Fix PT_MODEL."
-      : "Jeg hørte deg, men modellnavnet er ugyldig hos OpenRouter. Bytt PT_MODEL i pt/.env.";
+    return pick(
+      lang,
+      "I heard you, but the model name is invalid on OpenRouter. Fix PT_MODEL.",
+      "Jeg hørte deg, men modellnavnet er ugyldig hos OpenRouter. Bytt PT_MODEL i pt/.env.",
+      "Jag hörde dig, men modellnamnet är ogiltigt hos OpenRouter. Byt PT_MODEL i pt/.env.",
+    );
   }
   if (/401|unauthorized|invalid.?api.?key|authentication_error|no cookie auth/i.test(msg)) {
-    return lang === "en"
-      ? "I heard you, but the LLM key was rejected. Check OPENROUTER_API_KEY on the host."
-      : "Jeg hørte deg, men LLM-nøkkelen ble avvist. Sjekk OPENROUTER_API_KEY på hosten.";
+    return pick(
+      lang,
+      "I heard you, but the LLM key was rejected. Check OPENROUTER_API_KEY on the host.",
+      "Jeg hørte deg, men LLM-nøkkelen ble avvist. Sjekk OPENROUTER_API_KEY på hosten.",
+      "Jag hörde dig, men LLM-nyckeln avvisades. Kolla OPENROUTER_API_KEY på hosten.",
+    );
   }
   if (/402|credit balance|too low|purchase credits|insufficient.?credits/i.test(msg)) {
-    return lang === "en"
-      ? "I heard you, but the LLM account is out of credit. Top up OpenRouter, or log something simple."
-      : "Jeg hørte deg, men LLM-kontoen er tom for kreditt. Fyll på OpenRouter, eller bruk en enkel logg: «mediterte i 30 sekunder».";
+    return pick(
+      lang,
+      "I heard you, but the LLM account is out of credit. Top up OpenRouter, or log something simple.",
+      "Jeg hørte deg, men LLM-kontoen er tom for kreditt. Fyll på OpenRouter, eller bruk en enkel logg: «mediterte i 30 sekunder».",
+      "Jag hörde dig, men LLM-kontot är tomt på kredit. Fyll på OpenRouter, eller använd en enkel logg: «mediterade i 30 sekunder».",
+    );
   }
   if (/429|rate.?limit|too many requests/i.test(msg)) {
-    return lang === "en"
-      ? "I heard you, but the model is rate-limited. Try again in a minute, or say “today”."
-      : "Jeg hørte deg, men modellen er rate-begrenset. Prøv igjen om litt, eller skriv «i dag».";
+    return pick(
+      lang,
+      "I heard you, but the model is rate-limited. Try again in a minute, or say “today”.",
+      "Jeg hørte deg, men modellen er rate-begrenset. Prøv igjen om litt, eller skriv «i dag».",
+      "Jag hörde dig, men modellen är rate-begränsad. Försök igen om en stund, eller skriv «idag».",
+    );
   }
   if (/5\d\d|timeout|timed out|ECONNRESET|fetch failed|network/i.test(msg)) {
-    return lang === "en"
-      ? "I heard you, but the model connection hiccuped. Try again, or ask “today”."
-      : "Jeg hørte deg, men modell-tilkoblingen hakket. Prøv igjen, eller spør «i dag».";
+    return pick(
+      lang,
+      "I heard you, but the model connection hiccuped. Try again, or ask “today”.",
+      "Jeg hørte deg, men modell-tilkoblingen hakket. Prøv igjen, eller spør «i dag».",
+      "Jag hörde dig, men modellanslutningen hakade. Försök igen, eller fråga «idag».",
+    );
   }
-  return lang === "en"
-    ? "I heard you, but couldn't put together a proper reply. Try a short log, or ask “today”."
-    : "Jeg hørte deg, men fikk ikke laget et skikkelig svar. Prøv en kort logg, eller spør «i dag».";
+  return pick(
+    lang,
+    "I heard you, but couldn't put together a proper reply. Try a short log, or ask “today”.",
+    "Jeg hørte deg, men fikk ikke laget et skikkelig svar. Prøv en kort logg, eller spør «i dag».",
+    "Jag hörde dig, men fick inte till ett ordentligt svar. Prova en kort logg, eller fråga «idag».",
+  );
 }
 
 /** True when the coach reply is a known LLM-failure fallback (not a real answer). */
 export function isAgentFailureReply(text: string): boolean {
   const t = text.trim();
   return (
-    /modellnavnet er ugyldig|model name is invalid/i.test(t) ||
-    /LLM-nøkkelen ble avvist|LLM key was rejected/i.test(t) ||
-    /tom for kreditt|out of credit/i.test(t) ||
-    /rate-begrenset|rate-limited/i.test(t) ||
-    /modell-tilkoblingen hakket|model connection hiccuped/i.test(t) ||
-    /fikk ikke laget et skikkelig svar|couldn't put together a proper reply/i.test(t) ||
-    /trenger OPENROUTER_API_KEY|need OPENROUTER_API_KEY/i.test(t)
+    /modellnavnet er ugyldig|model name is invalid|modellnamnet är ogiltigt/i.test(t) ||
+    /LLM-nøkkelen ble avvist|LLM key was rejected|LLM-nyckeln avvisades/i.test(t) ||
+    /tom for kreditt|out of credit|tomt på kredit/i.test(t) ||
+    /rate-begrenset|rate-limited|rate-begränsad/i.test(t) ||
+    /modell-tilkoblingen hakket|model connection hiccuped|modellanslutningen hakade/i.test(t) ||
+    /fikk ikke laget et skikkelig svar|couldn't put together a proper reply|fick inte till ett ordentligt svar/i.test(t) ||
+    /trenger OPENROUTER_API_KEY|need OPENROUTER_API_KEY|behöver OPENROUTER_API_KEY/i.test(t)
   );
 }

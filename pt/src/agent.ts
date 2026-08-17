@@ -191,23 +191,29 @@ const TOOLS: Anthropic.Messages.Tool[] = [
 ];
 
 function systemPrompt(lang: Lang, opts: { onboarding: boolean; firstContact: boolean }): string {
-  const language = lang === "en" ? "English" : "Norwegian (bokmål)";
+  const language = lang === "en" ? "English" : lang === "sv" ? "Swedish" : "Norwegian (bokmål)";
   const confirm =
     lang === "en"
       ? 'Lock a draft with a normal yes/ok/run it. Archive still needs exactly “archive and start new”.'
-      : 'Lås et utkast med vanlig ja/ok/kjør. Arkivering krever fortsatt nøyaktig «arkiver og lag nytt».';
+      : lang === "sv"
+        ? 'Lås ett utkast med vanligt ja/ok/kör. Arkivering kräver fortfarande exakt «arkivera och gör nytt».'
+        : 'Lås et utkast med vanlig ja/ok/kjør. Arkivering krever fortsatt nøyaktig «arkiver og lag nytt».';
 
   let onboard = "";
   if (opts.firstContact) {
     onboard =
       lang === "en"
         ? `First message ever. One short intro as ${env.coachName}, their iMessage PT — then ask what they want from training. Do not dump features.`
-        : `Første melding noensinne. Én kort intro som ${env.coachName}, PT over iMessage — så spør hva de vil ha ut av treningen. Ikke dump funksjoner.`;
+        : lang === "sv"
+          ? `Första meddelandet någonsin. En kort intro som ${env.coachName}, PT över iMessage — sen fråga vad de vill ha ut av träningen. Inte dumpa funktioner.`
+          : `Første melding noensinne. Én kort intro som ${env.coachName}, PT over iMessage — så spør hva de vil ha ut av treningen. Ikke dump funksjoner.`;
   } else if (opts.onboarding) {
     onboard =
       lang === "en"
         ? `No locked program yet. Do NOT re-introduce yourself. Move fast to a draft: persist answers with set_fact immediately. Need goal (or identity), experience (level), daysPerWeek, equipment. identity/why are bonuses — if the goal already covers who they want to be / why, extract and save, don't ask again. When readyForPlan / missingForPlan is empty (or they ask for a program and you have enough), call propose_plan and present week 1.`
-        : `Ingen låst program ennå. IKKE presenter deg på nytt. Gå raskt mot utkast: lagre svar med set_fact med en gang. Trenger goal (eller identity), erfaring (level), daysPerWeek, equipment. identity/why er bonus — hvis målet allerede dekker hvem de vil bli / hvorfor, trekk ut og lagre, ikke spør om igjen. Når readyForPlan / missingForPlan er tom (eller de ber om program og du har nok), kall propose_plan og presentér uke 1.`;
+        : lang === "sv"
+          ? `Inget låst program än. Presentera dig INTE på nytt. Gå snabbt mot utkast: spara svar med set_fact med en gång. Behöver goal (eller identity), erfarenhet (level), daysPerWeek, equipment. identity/why är bonus — om målet redan täcker vem de vill bli / varför, dra ut och spara, fråga inte igen. När readyForPlan / missingForPlan är tom (eller de ber om program och du har nog), kalla propose_plan och presentera vecka 1.`
+          : `Ingen låst program ennå. IKKE presenter deg på nytt. Gå raskt mot utkast: lagre svar med set_fact med en gang. Trenger goal (eller identity), erfaring (level), daysPerWeek, equipment. identity/why er bonus — hvis målet allerede dekker hvem de vil bli / hvorfor, trekk ut og lagre, ikke spør om igjen. Når readyForPlan / missingForPlan er tom (eller de ber om program og du har nok), kall propose_plan og presentér uke 1.`;
   }
 
   return `You are ${env.coachName}, a personal trainer over iMessage.
@@ -337,7 +343,9 @@ async function runTool(
           ask:
             lang === "en"
               ? "Which day should I log that on — today or yesterday?"
-              : "Hvilken dag skal jeg logge det på — i dag eller i går?",
+              : lang === "sv"
+                ? "Vilken dag ska jag logga det på — idag eller igår?"
+                : "Hvilken dag skal jeg logge det på — i dag eller i går?",
         });
       }
       const result = await journal.logEntry({
@@ -446,7 +454,9 @@ async function runTool(
         adaptHint:
           lang === "en"
             ? "Present week 1 with short details, say it adapts from how sessions feel, and that yes/ok/run it locks it."
-            : "Presentér uke 1 med korte detaljer, si at det tilpasses etter følelse, og at ja/ok/kjør låser.",
+            : lang === "sv"
+              ? "Presentera vecka 1 med korta detaljer, säg att det anpassas efter känsla, och att ja/ok/kör låser."
+              : "Presentér uke 1 med korte detaljer, si at det tilpasses etter følelse, og at ja/ok/kjør låser.",
         writer: env.smartModel || env.model,
       });
     }

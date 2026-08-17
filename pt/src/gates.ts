@@ -1,15 +1,15 @@
 /** Soft confirm to lock a draft — normal chat assent, not a destructive gate. */
 export const ACTIVATE_PHRASE =
-  /^(ja|jepp|yes|yep|ok|okay|sure|kjør|kjør det|kjør programmet|kjør opplegget|låse?|låses?|run|run it|run the program|lock|lock it|lock the program|godkjenn|sett i gang|begynn|start|start da|start nå|la oss (kjøre|starte|begynne)|let'?s (go|start|run( it)?))$/i;
+  /^(ja|jepp|yes|yep|ok|okay|sure|kjør|kjør det|kjør programmet|kjør opplegget|kör|kör det|kör programmet|låse?|låses?|run|run it|run the program|lock|lock it|lock the program|godkjenn|sett i gang|begynn|start|start da|start nå|la oss (kjøre|starte|begynne)|let'?s (go|start|run( it)?))$/i;
 
 /** Longer affirmations that clearly mean “lock it / start training”. */
 const ACTIVATE_INTENT =
   /\b(kjør( programmet| opplegget| det)?|låse? (det|programmet)|run the program|lock (it|the program)|sett i gang|la oss (kjøre|starte|begynne)|vi kan begynne|klar til å (kjøre|starte)|ready to (go|start|run))\b/i;
 
-export const ARCHIVE_PHRASE = /^(arkiver og lag nytt|archive and start new)$/i;
+export const ARCHIVE_PHRASE = /^(arkiver og lag nytt|archive and start new|arkivera och gör nytt)$/i;
 
 const ACTIVATE_CANCEL =
-  /^(nei|no|nope|avbryt|ikke nå|ikke enda|vent|cancel|never ?mind|drop it|ikke lås)$/i;
+  /^(nei|nej|no|nope|avbryt|ikke nå|ikke enda|vent|cancel|never ?mind|drop it|ikke lås)$/i;
 
 const REMINDER_DAILY =
   /^(hver dag|daglig|gjentagende|permanent|daily|every day|recurring)(\s+.*)?$/i;
@@ -61,9 +61,9 @@ export function isReminderScopeCancel(body: string): boolean {
 export function parseLogDayReply(body: string): "today" | "yesterday" | null {
   const t = body.trim().toLowerCase();
   if (!t || t.length > 80) return null;
-  if (/^(i\s*dag|today|nå|naa|nettopp)(\s*[.!]*)?$/i.test(t)) return "today";
-  if (/^(i\s*går|i\s*gaar|yesterday)(\s*[.!]*)?$/i.test(t)) return "yesterday";
-  if (/\b(i\s*går|i\s*gaar|yesterday)\b/i.test(t) && !/\b(i\s*dag|today)\b/i.test(t)) return "yesterday";
-  if (/\b(i\s*dag|today)\b/i.test(t)) return "today";
+  if (/^(i\s*dag|idag|today|nå|naa|nettopp)(\s*[.!]*)?$/i.test(t)) return "today";
+  if (/^(i\s*går|i\s*gaar|igår|yesterday)(\s*[.!]*)?$/i.test(t)) return "yesterday";
+  if (/\b(i\s*går|i\s*gaar|igår|yesterday)\b/i.test(t) && !/\b(i\s*dag|idag|today)\b/i.test(t)) return "yesterday";
+  if (/\b(i\s*dag|idag|today)\b/i.test(t)) return "today";
   return null;
 }

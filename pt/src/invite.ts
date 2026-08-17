@@ -10,7 +10,7 @@ export function extractApplicantName(body: string): string | null {
   if (labeled) return cleanName(labeled[1]);
 
   const heter = text.match(
-    /\b(?:jeg heter|mitt navn er|eg heiter)\s+([A-Za-zÆØÅæøåÄÖäöÉé]+(?:[ \t]+[A-Za-zÆØÅæøåÄÖäöÉé\-]+){0,3})/i,
+    /\b(?:jeg heter|mitt navn er|eg heiter|jag heter|mitt namn är)\s+([A-Za-zÆØÅæøåÄÖäöÉé]+(?:[ \t]+[A-Za-zÆØÅæøåÄÖäöÉé\-]+){0,3})/i,
   );
   if (heter) return cleanName(heter[1]);
 
@@ -43,5 +43,5 @@ export function isInviteYes(body: string): boolean {
 export function isInviteNo(body: string): boolean {
   const t = body.trim();
   if (!t || t.length > 80) return false;
-  return /^(nei|no|nope|avvis|nei takk|ikke|ikke slipp inn|deny)([.!]*)?$/i.test(t);
+  return /^(nei|nej|no|nope|avvis|nei takk|ikke|ikke slipp inn|deny)([.!]*)?$/i.test(t);
 }
