@@ -111,15 +111,22 @@ export function inviteDenied(lang: Lang, name: string | null, phone: string): st
 }
 
 export function inviteWelcome(lang: Lang, name: string | null, coach: string): string {
-  const hello = name?.trim()
-    ? pick(lang, `Hi ${name.trim()}`, `Hei ${name.trim()}`, `Hej ${name.trim()}`)
+  const who = firstName(name);
+  const hello = who
+    ? pick(lang, `Hi ${who}`, `Hei ${who}`, `Hej ${who}`)
     : pick(lang, "Hi", "Hei", "Hej");
   return pick(
     lang,
-    `${hello} — welcome. I'm ${coach}, your iMessage PT. Save this number; we'll keep training here. What do you want from training?`,
-    `${hello} — velkommen. Jeg er ${coach}, PT over iMessage. Lagre nummeret, så holder vi treningen her. Hva vil du ha ut av treningen?`,
-    `${hello} — välkommen. Jag är ${coach}, PT över iMessage. Spara numret, så håller vi träningen här. Vad vill du ha ut av träningen?`,
+    `${hello}. I'm ${coach} — your PT in iMessage.\n\nI write the plan, remind you, and log what you do. Just text here.\n\nA couple of questions, then you get week 1. What do you want from training?`,
+    `${hello}. Jeg er ${coach} — PT over iMessage.\n\nJeg lager programmet, minner deg, og logger det du gjør. Bare skriv her.\n\nEt par spørsmål, så får du uke 1. Hva vil du ha ut av treningen?`,
+    `${hello}. Jag är ${coach} — PT över iMessage.\n\nJag gör programmet, påminner dig, och loggar det du gör. Skriv bara här.\n\nEtt par frågor, sen får du vecka 1. Vad vill du ha ut av träningen?`,
   );
+}
+
+/** Greeting uses the first given name, not the full legal name. */
+export function firstName(name: string | null | undefined): string | null {
+  const first = name?.trim().split(/\s+/)[0];
+  return first || null;
 }
 
 export function reminderScopeAsk(lang: Lang, hour: number, minute: number): string {

@@ -262,15 +262,24 @@ describe("locale", () => {
 });
 
 describe("invite welcome", () => {
-  it("is our copy, with no Linq page URL", async () => {
-    const { inviteWelcome } = await import("../src/copy.ts");
-    const nb = inviteWelcome("nb", "Inger", "lodd.ai");
-    assert.match(nb, /velkommen/i);
-    assert.match(nb, /lodd\.ai/);
+  it("orients then asks one question, with no Linq page URL", async () => {
+    const { inviteWelcome, firstName } = await import("../src/copy.ts");
+    assert.equal(firstName("Inger Elise Kjøndal Ekström"), "Inger");
+    assert.equal(firstName(null), null);
+    const nb = inviteWelcome("nb", "Inger Elise Kjøndal Ekström", "lodd.ai");
+    assert.match(nb, /^Hei Inger\./);
+    assert.match(nb, /programmet/i);
+    assert.match(nb, /minner/i);
+    assert.match(nb, /logger/i);
+    assert.match(nb, /uke 1/i);
+    assert.match(nb, /Hva vil du ha ut av treningen\?/);
+    assert.equal(nb.includes("velkommen"), false);
+    assert.equal(/lagre nummeret/i.test(nb), false);
     assert.equal(/https?:\/\//i.test(nb), false);
     assert.equal(/linq/i.test(nb), false);
     const en = inviteWelcome("en", "Inger", "lodd.ai");
-    assert.match(en, /welcome/i);
+    assert.match(en, /week 1/i);
+    assert.match(en, /What do you want from training\?/);
     assert.equal(/linqapp\.com/i.test(en), false);
   });
 });
