@@ -136,35 +136,49 @@ body {
   }
 }
 
-.lang {
-  position: fixed;
-  left: max(16px, env(safe-area-inset-left));
-  bottom: max(14px, env(safe-area-inset-bottom));
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 0;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  color: var(--muted);
+.lang-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: stretch;
+  width: 100%;
+  height: 58px;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 16px;
+  background: var(--fill);
 }
 
-.lang button {
+.lang-seg button {
   appearance: none;
   margin: 0;
-  padding: 10px 2px;
+  padding: 0 8px;
   border: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    background-color 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
 }
 
-.lang button[aria-current="true"] {
+.lang-seg button[aria-current="true"] {
+  background: var(--bg);
   color: var(--ink);
-  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(17, 17, 17, 0.08);
+}
+
+.lang-seg button:active {
+  transform: scale(0.98);
 }
 
 .close {
@@ -196,7 +210,7 @@ body {
     background: rgba(17, 17, 17, 0.1);
   }
 
-  .lang button:hover {
+  .lang-seg button:hover {
     color: var(--ink);
   }
 }
@@ -405,7 +419,8 @@ body {
   .btn,
   .close,
   .field-label,
-  .field input {
+  .field input,
+  .lang-seg button {
     transition: none;
   }
 

@@ -24,6 +24,11 @@
       </header>
       <form class="signup-form" id="signup-form">
         <div class="field-block">
+          <div class="lang-seg" role="group" data-i18n-aria="language" aria-label="Language">
+            <button type="button" data-lang="no">NO</button>
+            <button type="button" data-lang="sv">SV</button>
+            <button type="button" data-lang="en">EN</button>
+          </div>
           <label class="field">
             <input
               id="pt-name"
@@ -59,13 +64,6 @@
       </form>
       <a class="btn btn-ghost" href="./app/" data-i18n="tryApp">Try the app instead</a>
     </main>
-    <p class="lang" role="group" data-i18n-aria="language" aria-label="Language">
-      <button type="button" data-lang="no">no</button>
-      <span aria-hidden="true">/</span>
-      <button type="button" data-lang="sv">sv</button>
-      <span aria-hidden="true">/</span>
-      <button type="button" data-lang="en">en</button>
-    </p>
     <script type="module" src="/src/lodd.js"></script>
   </body>
 </html>

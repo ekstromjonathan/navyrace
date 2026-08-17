@@ -147,7 +147,7 @@ export function setLang(next) {
   applyI18n();
 }
 
-document.querySelector(".lang")?.addEventListener("click", (event) => {
+document.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-lang]");
   if (btn) setLang(btn.dataset.lang);
 });
