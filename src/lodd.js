@@ -72,7 +72,5 @@ form?.addEventListener("submit", (event) => {
 
   remember(name, phone);
   setStatus(t("opening"));
-  window.location.href = smsHref(
-    `lodd.ai signup\n${t("smsName")}: ${name}\n${t("smsPhone")}: ${phone}`,
-  );
+  window.location.href = smsHref(t("smsBody").replaceAll("{name}", name));
 });

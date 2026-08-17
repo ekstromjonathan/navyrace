@@ -150,8 +150,9 @@ describe("parser", () => {
   it("extracts waitlist names and owner yes/no", async () => {
     const { extractApplicantName, isInviteYes, isInviteNo } = await import("../src/invite.ts");
     assert.equal(extractApplicantName("Hei, jeg heter Inger"), "Inger");
+    assert.equal(extractApplicantName("Hei, jeg heter Inger Ekstrøm. Jeg vil være med."), "Inger Ekstrøm");
+    assert.equal(extractApplicantName("Hi, my name is Inger. I'd like to join."), "Inger");
     assert.equal(extractApplicantName("lodd.ai signup\nNavn: Inger\nTelefon: +4711111111"), "Inger");
-    assert.equal(extractApplicantName("Hi, my name is Sam"), "Sam");
     assert.equal(extractApplicantName("Hei, kan jeg være med?"), null);
     assert.equal(isInviteYes("Ja"), true);
     assert.equal(isInviteYes("slipp inn"), true);

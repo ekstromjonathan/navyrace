@@ -22,8 +22,7 @@ const dictionaries = {
     termsContact: "We text you on  iMessage or SMS. Reply stop, and we stop.",
     termsDeleteTitle: "Delete",
     termsDelete: "Ask in the thread, and we delete your name and number.",
-    smsName: "Name",
-    smsPhone: "Phone",
+    smsBody: "Hi, my name is {name}. I'd like to join.",
   },
   no: {
     signupTitle: "Din  iMessage coach",
@@ -48,8 +47,7 @@ const dictionaries = {
     termsContact: "Vi skriver på  iMessage eller SMS. Svar stopp, så slutter vi.",
     termsDeleteTitle: "Slett",
     termsDelete: "Si ifra i tråden, så sletter vi navn og nummer.",
-    smsName: "Navn",
-    smsPhone: "Telefon",
+    smsBody: "Hei, jeg heter {name}. Jeg vil være med.",
   },
 };
 

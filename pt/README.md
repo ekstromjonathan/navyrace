@@ -41,7 +41,7 @@ A rolling `message_log` keeps the last ~50 turns per user (bodies truncated to 5
 3. Reply `ja` — she is approved, stored as a member, and the PT texts her the onboarding intro.
 4. `nei` — she stays out, still no reply to her.
 
-Name is inferred from the first message (`jeg heter Inger`, landing `Navn: …`). Otherwise the ask uses the phone number. Further messages from a waiting sender do not ping you again.
+Name is inferred from the first message (`jeg heter Inger`, landing `Hei, jeg heter Inger. Jeg vil være med.`). Otherwise the ask uses the phone number. Further messages from a waiting sender do not ping you again.
 
 ## Reminders
 
