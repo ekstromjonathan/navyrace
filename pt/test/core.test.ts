@@ -274,3 +274,11 @@ describe("invite welcome", () => {
     assert.equal(/linqapp\.com/i.test(en), false);
   });
 });
+
+describe("contact card", () => {
+  it("uses the coach name as the iMessage header label", async () => {
+    const { contactCardFields } = await import("../src/linq.ts");
+    assert.deepEqual(contactCardFields("lodd.ai"), { first_name: "lodd.ai", last_name: "" });
+    assert.equal(/linqapp\.com/i.test(contactCardFields("lodd.ai").first_name), false);
+  });
+});

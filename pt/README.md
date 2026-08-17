@@ -38,7 +38,7 @@ A rolling `message_log` keeps the last ~50 turns per user (bodies truncated to 5
 
 1. Inger texts the PT (`+14044465379`) — silence on her side.
 2. You get: `Inger vil være med. Skal jeg slippe henne inn?`
-3. Reply `ja` — she is approved, stored as a member, and the PT texts her our welcome (no Linq contact card, no linqapp.com).
+3. Reply `ja` — she is approved, stored as a member, and the PT texts her our welcome, then shares the iMessage name + photo (`lodd.ai` and the brand avatar).
 4. `nei` — she stays out, still no reply to her.
 
 Name is inferred from the first message (`jeg heter Inger`, landing `Hei, jeg heter Inger. Jeg vil være med.`). Otherwise the ask uses the phone number. Further messages from a waiting sender do not ping you again.
@@ -116,4 +116,4 @@ These are the choices from recent PT work (#16–#19). Prefer them unless the pr
 
 ## iMessage rules baked in
 
-Opt-out keywords first, one reply per inbound, `chat_id` as user key, webhook HMAC when `LINQ_WEBHOOK_SECRET` is set, dedup on `event_id` + `message.id`. We do **not** call Linq `share_contact_card` — that follow-up is Linq’s own welcome with a linqapp.com page. First outbound to a new member is `inviteWelcome` only. Unsolicited outbound: owner-requested reminders, and one invite ask to the owner when someone new texts in.
+Opt-out keywords first, one reply per inbound, `chat_id` as user key, webhook HMAC when `LINQ_WEBHOOK_SECRET` is set, dedup on `event_id` + `message.id`. After the first outbound in a chat we share Linq’s iMessage contact card (name + photo only — not a linqapp.com page). First outbound to a new member is `inviteWelcome`. Unsolicited outbound: owner-requested reminders, and one invite ask to the owner when someone new texts in.

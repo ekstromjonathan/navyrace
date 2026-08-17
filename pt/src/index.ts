@@ -9,6 +9,7 @@ import { verifySignature } from "./webhook.ts";
 import { handlePayload } from "./handle.ts";
 import { startScheduler } from "./scheduler.ts";
 import * as journal from "./journal.ts";
+import * as linq from "./linq.ts";
 
 const backend = initJournal();
 
@@ -45,6 +46,30 @@ if (!staticRoot && process.env.PT_REQUIRE_SPA === "1") {
 }
 
 const app = new Hono();
+
+function avatarPath(): string | null {
+  const candidates = [
+    join(process.cwd(), "dist/pt-avatar.png"),
+    join(process.cwd(), "../dist/pt-avatar.png"),
+    join(process.cwd(), "../public/pt-avatar.png"),
+    "/srv/pt/dist/pt-avatar.png",
+    "/srv/dist/pt-avatar.png",
+    "/srv/public/pt-avatar.png",
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+app.get("/pt-avatar.png", (c) => {
+  const file = avatarPath();
+  if (!file) return c.notFound();
+  return c.body(readFileSync(file), 200, {
+    "Content-Type": "image/png",
+    "Cache-Control": "public, max-age=86400",
+  });
+});
 
 app.get("/health", async (c) =>
   c.json({
@@ -98,4 +123,7 @@ serve({ fetch: app.fetch, port: env.port, hostname: env.hostname }, (info) => {
     `journal=${backend} model=${env.model} smart=${env.smartModel || "—"} allowlist=${env.allowlist.join(",")} spa=${staticRoot || "off"} linq=${env.hasLinqToken}`,
   );
   startScheduler();
+  if (env.hasLinqToken) {
+    linq.ensureContactCard().catch((err) => console.error("contact card setup failed", err));
+  }
 });

@@ -37,6 +37,11 @@ export const env = {
   hostname: optional("PT_HOST", "0.0.0.0"),
   tz: optional("PT_TZ", "Europe/Oslo"),
   coachName: optional("PT_COACH_NAME", "lodd.ai"),
+  /** Sending line. Used to set iMessage name + photo on that number. */
+  linqFromNumber: optional("LINQ_FROM_NUMBER", "+14044465379"),
+  get contactCardImageUrl() {
+    return optional("LINQ_CONTACT_IMAGE_URL", "https://lodd.ai/pt-avatar.png");
+  },
   /** Prefer SUPABASE_URL; fall back to the Vite public URL when set in the same process. */
   get supabaseUrl() {
     return optional("SUPABASE_URL", optional("VITE_SUPABASE_URL"));

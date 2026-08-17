@@ -70,6 +70,59 @@ export async function reactLove(messageId: string): Promise<void> {
   }).catch(() => {});
 }
 
+export async function shareContactCard(chatId: string): Promise<void> {
+  await linq(`/chats/${chatId}/share_contact_card`, { method: "POST" });
+}
+
+/** iMessage header name. Keep the coach label as a single first name. */
+export function contactCardFields(coachName: string): { first_name: string; last_name: string } {
+  const first_name = coachName.trim() || "lodd.ai";
+  return { first_name, last_name: "" };
+}
+
+function linqCode(err: unknown): number | undefined {
+  if (!err || typeof err !== "object") return undefined;
+  const e = err as { status?: number; body?: { error?: { code?: number } } };
+  return e.body?.error?.code;
+}
+
+function linqStatus(err: unknown): number | undefined {
+  if (!err || typeof err !== "object") return undefined;
+  return (err as { status?: number }).status;
+}
+
+/** Create or update the name + photo on the PT line. Best-effort. */
+export async function ensureContactCard(): Promise<void> {
+  const phone = env.linqFromNumber.trim();
+  if (!phone || !env.hasLinqToken) return;
+  const { first_name, last_name } = contactCardFields(env.coachName);
+  const payload = {
+    first_name,
+    last_name,
+    image_url: env.contactCardImageUrl,
+  };
+  try {
+    await linq("/contact_card", {
+      method: "POST",
+      body: JSON.stringify({ phone_number: phone, ...payload }),
+    });
+    return;
+  } catch (err) {
+    if (linqCode(err) !== 2014 && linqStatus(err) !== 409) {
+      console.error("contact card create failed", err);
+      return;
+    }
+  }
+  try {
+    await linq(`/contact_card?phone_number=${encodeURIComponent(phone)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.error("contact card update failed", err);
+  }
+}
+
 export function isOptOutRejected(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const e = err as { status?: number; body?: { error?: { code?: number } } };
