@@ -260,3 +260,17 @@ describe("locale", () => {
     assert.equal(detectLang("Hi, remind me to train at 8"), "en");
   });
 });
+
+describe("invite welcome", () => {
+  it("is our copy, with no Linq page URL", async () => {
+    const { inviteWelcome } = await import("../src/copy.ts");
+    const nb = inviteWelcome("nb", "Inger", "lodd.ai");
+    assert.match(nb, /velkommen/i);
+    assert.match(nb, /lodd\.ai/);
+    assert.equal(/https?:\/\//i.test(nb), false);
+    assert.equal(/linq/i.test(nb), false);
+    const en = inviteWelcome("en", "Inger", "lodd.ai");
+    assert.match(en, /welcome/i);
+    assert.equal(/linqapp\.com/i.test(en), false);
+  });
+});

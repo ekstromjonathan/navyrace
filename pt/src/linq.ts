@@ -70,10 +70,6 @@ export async function reactLove(messageId: string): Promise<void> {
   }).catch(() => {});
 }
 
-export async function shareContactCard(chatId: string): Promise<void> {
-  await linq(`/chats/${chatId}/share_contact_card`, { method: "POST" });
-}
-
 export function isOptOutRejected(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const e = err as { status?: number; body?: { error?: { code?: number } } };

@@ -59,16 +59,6 @@ async function withTyping(chatId: string, fn: () => Promise<string>): Promise<st
   }
 }
 
-async function maybeCard(user: UserRow, chatId: string) {
-  if (!journal.shouldShareContactCard(user)) return;
-  try {
-    await linq.shareContactCard(chatId);
-    await journal.touchContactCard(user.id);
-  } catch {
-    /* share is best-effort; card may be unconfigured */
-  }
-}
-
 function canonPhone(phone: string): string {
   return phone.replace(/\s+/g, "");
 }
@@ -104,8 +94,6 @@ async function admitGuest(invite: InviteRow): Promise<void> {
     await journal.logMessage(guest.id, "user", invite.first_body);
   }
   await reply(invite.chat_id, copy.inviteWelcome(lang, invite.name, env.coachName), { userId: guest.id });
-  const fresh = (await journal.getUser(guest.id)) ?? guest;
-  await maybeCard(fresh, invite.chat_id);
 }
 
 async function nextInviteAsk(owner: UserRow, lang: Lang): Promise<string | null> {
@@ -607,7 +595,6 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       const inviteReply = await resolveOwnerInvite(current, lang, inbound.body);
       if (inviteReply) {
         await reply(inbound.chatId, inviteReply, { replyTo: inbound.messageId, userId: current.id });
-        await maybeCard(current, inbound.chatId);
         return;
       }
     }
@@ -619,7 +606,6 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       if (pendingParsed.kind === "rpe" && pendingParsed.quality !== "hoppet") {
         await linq.reactLove(inbound.messageId);
       }
-      await maybeCard(current, inbound.chatId);
       return;
     }
 
@@ -631,7 +617,6 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
         if (parsed.kind === "rpe" && parsed.quality !== "hoppet") {
           await linq.reactLove(inbound.messageId);
         }
-        await maybeCard(current, inbound.chatId);
         return;
       }
     }
@@ -645,7 +630,6 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       text = again ?? (await formatToday(current, lang));
     }
     await reply(inbound.chatId, text, { replyTo: inbound.messageId, userId: current.id });
-    await maybeCard(current, inbound.chatId);
   } catch (err) {
     console.error("handleInbound failed", err);
     try {

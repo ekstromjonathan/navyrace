@@ -116,9 +116,9 @@ export function inviteWelcome(lang: Lang, name: string | null, coach: string): s
     : pick(lang, "Hi", "Hei", "Hej");
   return pick(
     lang,
-    `${hello}. I'm ${coach}, your iMessage PT. What do you want from training?`,
-    `${hello}. Jeg er ${coach}, PT over iMessage. Hva vil du ha ut av treningen?`,
-    `${hello}. Jag är ${coach}, PT över iMessage. Vad vill du ha ut av träningen?`,
+    `${hello} — welcome. I'm ${coach}, your iMessage PT. Save this number; we'll keep training here. What do you want from training?`,
+    `${hello} — velkommen. Jeg er ${coach}, PT over iMessage. Lagre nummeret, så holder vi treningen her. Hva vil du ha ut av treningen?`,
+    `${hello} — välkommen. Jag är ${coach}, PT över iMessage. Spara numret, så håller vi träningen här. Vad vill du ha ut av träningen?`,
   );
 }
 
