@@ -1,6 +1,6 @@
 # lodd.ai PT — iMessage personal trainer
 
-Journal + Linq webhook. The Vite app is unchanged. V1 is one allowlisted phone, inbound-first.
+Journal + Linq webhook. The Vite app is unchanged. Unknown numbers stay silent until the owner admits them.
 
 ## Storage
 
@@ -14,7 +14,7 @@ SUPABASE_SECRET_KEY=sb_secret_...   # Settings → API Keys → Secret keys (nev
 
 Supabase renamed keys: new projects show **Secret keys** (`sb_secret_…`) instead of a `service_role` JWT. Same privileges (bypasses RLS). Find them under [Settings → API Keys](https://supabase.com/dashboard/project/_/settings/api-keys) — use the **API Keys** tab (create if needed), or **Legacy API Keys** for the old JWT.
 
-Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0008_pt_reminder_url.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
+Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0009_pt_invites.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
 
 Without those env vars the process falls back to local SQLite (`PT_DB_PATH`) so unit tests stay offline.
 
@@ -31,6 +31,17 @@ Obvious logs skip the model. Drafts go live after a normal yes/ok/kjør (soft co
 Journal (tracks, entries, notes, facts) is the source of truth. iMessage is not dumped.
 
 A rolling `message_log` keeps the last ~50 turns per user (bodies truncated to 500 chars). The floor coach sees the last 8 as working memory so short follow-ups like «ja» / «den» / «ok» resolve. Heuristic logs (water, plunge, RPE) still skip the model.
+
+## Waitlist
+
+`LINQ_ALLOWLIST` is the **owner** (always admitted). Everyone else can text the PT number; they get **no reply** until you say yes.
+
+1. Inger texts the PT (`+14044465379`) — silence on her side.
+2. You get: `Inger vil være med. Skal jeg slippe henne inn?`
+3. Reply `ja` — she is approved, stored as a member, and the PT texts her the onboarding intro.
+4. `nei` — she stays out, still no reply to her.
+
+Name is inferred from the first message (`jeg heter Inger`, landing `Navn: …`). Otherwise the ask uses the phone number. Further messages from a waiting sender do not ping you again.
 
 ## Reminders
 
@@ -88,6 +99,7 @@ Text `+14044465379` from the allowlisted number.
 | One-shot reminder | `…kl 19 i kveld` / `bare i dag` / `tonight` — set immediately |
 | Cancel reminder | `slutt å minne meg` / `stop reminding me` |
 | Video reminder | Send a link + `minn meg kl 19 om å se videoen` — or just the link, then reply with a time |
+| Admit a waitlisted sender | Owner replies `ja` (or `nei`) to the invite ask |
 
 Locking a program is ordinary assent. Only archiving the whole program uses a strict phrase. Nothing is hard-deleted.
 
@@ -104,4 +116,4 @@ These are the choices from recent PT work (#16–#19). Prefer them unless the pr
 
 ## iMessage rules baked in
 
-Opt-out keywords first, one reply per inbound, contact card at most daily, `chat_id` as user key, webhook HMAC when `LINQ_WEBHOOK_SECRET` is set, dedup on `event_id` + `message.id`. Daily reminders are the only unsolicited outbound, and only after you asked.
+Opt-out keywords first, one reply per inbound, contact card at most daily, `chat_id` as user key, webhook HMAC when `LINQ_WEBHOOK_SECRET` is set, dedup on `event_id` + `message.id`. Unsolicited outbound: owner-requested reminders, and one invite ask to the owner when someone new texts in.

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getSupabase, jsonText, nowIso, parseJson, todayInTz } from "./db.ts";
 import type {
   ChatTurn,
+  InviteRow,
   Pending,
   Plan,
   PlanSession,
@@ -110,6 +111,12 @@ export async function getUser(id: string): Promise<UserRow | undefined> {
   return data ? asUser(data as Record<string, unknown>) : undefined;
 }
 
+export async function getUserByPhone(phone: string): Promise<UserRow | undefined> {
+  const { data, error } = await getSupabase().from("users").select("*").eq("phone_e164", phone).maybeSingle();
+  throwIf(error);
+  return data ? asUser(data as Record<string, unknown>) : undefined;
+}
+
 export async function upsertUser(chatId: string, phone: string | null): Promise<UserRow> {
   const sb = getSupabase();
   const { data: existing, error: findErr } = await sb.from("users").select("*").eq("chat_id", chatId).maybeSingle();
@@ -186,6 +193,14 @@ export async function setFacts(userId: string, patch: UserFacts): Promise<UserFa
 
 export async function setLocale(userId: string, locale: string): Promise<void> {
   const { error } = await getSupabase().from("users").update({ locale, updated_at: nowIso() }).eq("id", userId);
+  throwIf(error);
+}
+
+export async function setDisplayName(userId: string, name: string | null): Promise<void> {
+  const { error } = await getSupabase()
+    .from("users")
+    .update({ display_name: name, updated_at: nowIso() })
+    .eq("id", userId);
   throwIf(error);
 }
 
@@ -922,4 +937,108 @@ export async function listEnabledReminders(): Promise<ReminderRow[]> {
 export async function trainedOnDay(userId: string, day: string, tz: string): Promise<boolean> {
   const recs = await recentEntries(userId, 40);
   return recs.some((e) => e.kind === "training" && todayInTz(tz, String(e.occurred_at)) === day);
+}
+
+function asInvite(row: Record<string, unknown>): InviteRow {
+  return {
+    id: String(row.id),
+    phone_e164: String(row.phone_e164),
+    chat_id: String(row.chat_id),
+    name: row.name == null ? null : String(row.name),
+    first_body: String(row.first_body ?? ""),
+    status: row.status as InviteRow["status"],
+    notified_at: row.notified_at == null ? null : String(row.notified_at),
+    decided_at: row.decided_at == null ? null : String(row.decided_at),
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
+}
+
+export async function getInvite(id: string): Promise<InviteRow | undefined> {
+  const { data, error } = await getSupabase().from("invites").select("*").eq("id", id).maybeSingle();
+  throwIf(error);
+  return data ? asInvite(data as Record<string, unknown>) : undefined;
+}
+
+export async function getInviteByPhone(phone: string): Promise<InviteRow | undefined> {
+  const { data, error } = await getSupabase().from("invites").select("*").eq("phone_e164", phone).maybeSingle();
+  throwIf(error);
+  return data ? asInvite(data as Record<string, unknown>) : undefined;
+}
+
+export async function listPendingInvites(): Promise<InviteRow[]> {
+  const { data, error } = await getSupabase()
+    .from("invites")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+  throwIf(error);
+  return (data ?? []).map((r) => asInvite(r as Record<string, unknown>));
+}
+
+export async function upsertPendingInvite(input: {
+  phone: string;
+  chatId: string;
+  name: string | null;
+  firstBody: string;
+}): Promise<InviteRow> {
+  const existing = await getInviteByPhone(input.phone);
+  const ts = nowIso();
+  if (existing) {
+    if (existing.status !== "pending") return existing;
+    const { data, error } = await getSupabase()
+      .from("invites")
+      .update({
+        chat_id: input.chatId,
+        name: input.name ?? existing.name,
+        updated_at: ts,
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+    throwIf(error);
+    return asInvite(data as Record<string, unknown>);
+  }
+  const id = randomUUID();
+  const { data, error } = await getSupabase()
+    .from("invites")
+    .insert({
+      id,
+      phone_e164: input.phone,
+      chat_id: input.chatId,
+      name: input.name,
+      first_body: input.firstBody.slice(0, 500),
+      status: "pending",
+      created_at: ts,
+      updated_at: ts,
+    })
+    .select("*")
+    .single();
+  throwIf(error);
+  return asInvite(data as Record<string, unknown>);
+}
+
+export async function markInviteNotified(id: string): Promise<void> {
+  const ts = nowIso();
+  const { error } = await getSupabase().from("invites").update({ notified_at: ts, updated_at: ts }).eq("id", id);
+  throwIf(error);
+}
+
+export async function decideInvite(id: string, status: "approved" | "denied"): Promise<InviteRow | undefined> {
+  const existing = await getInvite(id);
+  if (!existing || existing.status !== "pending") return existing;
+  const ts = nowIso();
+  const { data, error } = await getSupabase()
+    .from("invites")
+    .update({ status, decided_at: ts, updated_at: ts })
+    .eq("id", id)
+    .select("*")
+    .single();
+  throwIf(error);
+  return asInvite(data as Record<string, unknown>);
+}
+
+export async function isApprovedPhone(phone: string): Promise<boolean> {
+  const rec = await getInviteByPhone(phone);
+  return rec?.status === "approved";
 }

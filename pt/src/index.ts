@@ -55,6 +55,7 @@ app.get("/health", async (c) =>
     smartModel: env.smartModel || null,
     journal: backend || journalBackend(),
     reminders: (await journal.listEnabledReminders()).length,
+    pendingInvites: (await journal.listPendingInvites()).length,
     linq: env.hasLinqToken,
     spa: Boolean(staticRoot),
   }),

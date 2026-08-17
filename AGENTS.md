@@ -20,7 +20,7 @@ Local forward: `linq webhooks listen --forward-to http://localhost:8787/webhook`
 2. **Infer, don’t interrogate** — Prefer natural-language cues (`i kveld` → one-shot reminder, `hver dag` → daily) over extra “is this X or Y?” turns.
 3. **Journal is truth** — Facts/tracks/entries/notes are durable; `message_log` is short working memory. When OpenRouter fails, still answer from the journal (e.g. today’s session) instead of only an error string.
 4. **Diagnose delivery carefully** — Inbound in `pt.webhook_events` / `message_log` means Linq→webhook worked; generic *«fikk ikke laget et skikkelig svar»* is usually LLM/OpenRouter, not “messages not arriving”.
-5. **iMessage constraints** — One reply per inbound, short copy, inbound-first; unsolicited outbound only for user-requested reminders. Nothing is hard-deleted (archive logs / archive tracks).
+5. **iMessage constraints** — One reply per inbound, short copy, inbound-first for coaching. Unsolicited outbound: user-requested reminders, and one owner ping when a new number asks in. Nothing is hard-deleted (archive logs / archive tracks). Unknown senders get no reply until the owner admits them (`ja`).
 6. **Speed + memory** — Persist `set_fact` as they talk; don’t re-introduce or re-ask answered fields; assume they will train and lead with today’s session when a plan is active.
 
 ### Services / commands

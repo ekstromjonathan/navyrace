@@ -3,6 +3,7 @@ import * as sqlite from "./journal-sqlite.ts";
 import * as supabase from "./journal-supabase.ts";
 import { missingForPlan, readyForPlan } from "./plan-facts.ts";
 import type {
+  InviteRow,
   Pending,
   Plan,
   PlanSession,
@@ -68,6 +69,10 @@ export async function getUser(id: string): Promise<UserRow | undefined> {
   return asAsync(api().getUser(id));
 }
 
+export async function getUserByPhone(phone: string): Promise<UserRow | undefined> {
+  return asAsync(api().getUserByPhone(phone));
+}
+
 export async function upsertUser(chatId: string, phone: string | null): Promise<UserRow> {
   return asAsync(api().upsertUser(chatId, phone));
 }
@@ -86,6 +91,10 @@ export async function setFacts(userId: string, patch: UserFacts): Promise<UserFa
 
 export async function setLocale(userId: string, locale: string): Promise<void> {
   return asAsync(api().setLocale(userId, locale));
+}
+
+export async function setDisplayName(userId: string, name: string | null): Promise<void> {
+  return asAsync(api().setDisplayName(userId, name));
 }
 
 export async function isFreshStart(userId: string): Promise<boolean> {
@@ -293,4 +302,37 @@ export async function listEnabledReminders(): Promise<ReminderRow[]> {
 
 export async function trainedOnDay(userId: string, day: string, tz: string): Promise<boolean> {
   return asAsync(api().trainedOnDay(userId, day, tz));
+}
+
+export async function getInvite(id: string): Promise<InviteRow | undefined> {
+  return asAsync(api().getInvite(id));
+}
+
+export async function getInviteByPhone(phone: string): Promise<InviteRow | undefined> {
+  return asAsync(api().getInviteByPhone(phone));
+}
+
+export async function listPendingInvites(): Promise<InviteRow[]> {
+  return asAsync(api().listPendingInvites());
+}
+
+export async function upsertPendingInvite(input: {
+  phone: string;
+  chatId: string;
+  name: string | null;
+  firstBody: string;
+}): Promise<InviteRow> {
+  return asAsync(api().upsertPendingInvite(input));
+}
+
+export async function markInviteNotified(id: string): Promise<void> {
+  return asAsync(api().markInviteNotified(id));
+}
+
+export async function decideInvite(id: string, status: "approved" | "denied"): Promise<InviteRow | undefined> {
+  return asAsync(api().decideInvite(id, status));
+}
+
+export async function isApprovedPhone(phone: string): Promise<boolean> {
+  return asAsync(api().isApprovedPhone(phone));
 }

@@ -48,6 +48,12 @@ export type Pending =
       type: "rpe_followup";
       entryId: string;
       askedAt: string;
+    }
+  | {
+      /** Owner: admit or deny a waitlisted sender. */
+      type: "invite_approve";
+      inviteId: string;
+      askedAt: string;
     };
 
 export type UserFacts = {
@@ -113,6 +119,21 @@ export type Plan = {
   weeks?: number;
   daysPerWeek?: number;
   sessions: PlanSession[];
+};
+
+export type InviteStatus = "pending" | "approved" | "denied";
+
+export type InviteRow = {
+  id: string;
+  phone_e164: string;
+  chat_id: string;
+  name: string | null;
+  first_body: string;
+  status: InviteStatus;
+  notified_at: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ReminderKind = "train";

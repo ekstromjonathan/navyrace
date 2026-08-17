@@ -240,4 +240,23 @@ describe("journal", () => {
     assert.equal((await journal.nextSession(u.id, (await journal.getTrack(training.id))!))?.session.id, "w1d1");
     assert.equal(await journal.archiveEntry({ userId: u.id, entryId: "missing" }), null);
   });
+
+  it("stores waitlist invites until approved", async () => {
+    const invite = await journal.upsertPendingInvite({
+      phone: "+4711223344",
+      chatId: "chat-inger",
+      name: "Inger",
+      firstBody: "Hei, jeg heter Inger",
+    });
+    assert.equal(invite.status, "pending");
+    assert.equal((await journal.listPendingInvites()).some((i) => i.id === invite.id), true);
+    const approved = await journal.decideInvite(invite.id, "approved");
+    assert.equal(approved?.status, "approved");
+    assert.equal(await journal.isApprovedPhone("+4711223344"), true);
+    assert.equal((await journal.listPendingInvites()).some((i) => i.id === invite.id), false);
+
+    const user = await journal.upsertUser("chat-named", "+4799988877");
+    await journal.setDisplayName(user.id, "Ola");
+    assert.equal((await journal.getUserByPhone("+4799988877"))?.display_name, "Ola");
+  });
 });

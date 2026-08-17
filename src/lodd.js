@@ -1,6 +1,6 @@
 import { t } from "./i18n.js";
 
-const NOTIFY_NUMBER = "+4740343295";
+const NOTIFY_NUMBER = "+14044465379";
 const WAITLIST_KEY = "lodd:pt-waitlist";
 
 const form = document.getElementById("signup-form");

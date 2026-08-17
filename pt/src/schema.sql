@@ -112,3 +112,18 @@ CREATE TABLE IF NOT EXISTS processed_messages (
   linq_message_id TEXT PRIMARY KEY,
   processed_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS invites (
+  id TEXT PRIMARY KEY,
+  phone_e164 TEXT NOT NULL UNIQUE,
+  chat_id TEXT NOT NULL,
+  name TEXT,
+  first_body TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied')),
+  notified_at TEXT,
+  decided_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS invites_status_created ON invites(status, created_at);

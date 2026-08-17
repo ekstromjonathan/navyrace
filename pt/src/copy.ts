@@ -49,10 +49,34 @@ export function reminderConfirmOnceWithUrl(
   return `Ok — én påminnelse ${onceOn} kl ${hhmm(hour, minute)} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å avbryte.`;
 }
 
-export function videoLinkAsk(lang: Lang): string {
+export function inviteAsk(lang: Lang, name: string | null, phone: string): string {
+  const who = name?.trim() || phone;
+  if (lang === "en") {
+    return `${who} wants in. Should I let them in?`;
+  }
+  if (name?.trim()) {
+    return `${name.trim()} vil være med. Skal jeg slippe henne inn?`;
+  }
+  return `${phone} vil være med. Skal jeg slippe inn?`;
+}
+
+export function inviteApproved(lang: Lang, name: string | null, phone: string): string {
+  const who = name?.trim() || phone;
   return lang === "en"
-    ? "Got the link. What time should I remind you? e.g. «remind me at 7»."
-    : "Fikk lenken. Når skal jeg minne deg? Si f.eks. «minn meg kl 19».";
+    ? `Ok — ${who} is in. I'll start onboarding.`
+    : `Ok — ${who} er inne. Jeg tar onboarding.`;
+}
+
+export function inviteDenied(lang: Lang, name: string | null, phone: string): string {
+  const who = name?.trim() || phone;
+  return lang === "en" ? `Ok, ${who} is not getting in.` : `Ok, ${who} kommer ikke inn.`;
+}
+
+export function inviteWelcome(lang: Lang, name: string | null, coach: string): string {
+  const hello = name?.trim() ? (lang === "en" ? `Hi ${name.trim()}` : `Hei ${name.trim()}`) : lang === "en" ? "Hi" : "Hei";
+  return lang === "en"
+    ? `${hello}. I'm ${coach}, your iMessage PT. What do you want from training?`
+    : `${hello}. Jeg er ${coach}, PT over iMessage. Hva vil du ha ut av treningen?`;
 }
 
 export function reminderScopeAsk(lang: Lang, hour: number, minute: number): string {

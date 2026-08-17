@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getDb, nowIso, parseJson, todayInTz } from "./db.ts";
 import type {
   ChatTurn,
+  InviteRow,
   Pending,
   Plan,
   PlanSession,
@@ -59,6 +60,10 @@ export function getUser(id: string): UserRow | undefined {
   return row<UserRow>("SELECT * FROM users WHERE id = ?", id);
 }
 
+export function getUserByPhone(phone: string): UserRow | undefined {
+  return row<UserRow>("SELECT * FROM users WHERE phone_e164 = ?", phone);
+}
+
 export function upsertUser(chatId: string, phone: string | null): UserRow {
   const existing = row<UserRow>("SELECT * FROM users WHERE chat_id = ?", chatId);
   const ts = nowIso();
@@ -108,6 +113,10 @@ export function setFacts(userId: string, patch: UserFacts): UserFacts {
 
 export function setLocale(userId: string, locale: string): void {
   run("UPDATE users SET locale = ?, updated_at = ? WHERE id = ?", locale, nowIso(), userId);
+}
+
+export function setDisplayName(userId: string, name: string | null): void {
+  run("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?", name, nowIso(), userId);
 }
 
 export function isFreshStart(userId: string): boolean {
@@ -715,4 +724,67 @@ export function listEnabledReminders(): ReminderRow[] {
 export function trainedOnDay(userId: string, day: string, tz: string): boolean {
   const recs = recentEntries(userId, 40);
   return recs.some((e) => e.kind === "training" && todayInTz(tz, String(e.occurred_at)) === day);
+}
+
+export function getInvite(id: string): InviteRow | undefined {
+  return row<InviteRow>("SELECT * FROM invites WHERE id = ?", id);
+}
+
+export function getInviteByPhone(phone: string): InviteRow | undefined {
+  return row<InviteRow>("SELECT * FROM invites WHERE phone_e164 = ?", phone);
+}
+
+export function listPendingInvites(): InviteRow[] {
+  return rows<InviteRow>("SELECT * FROM invites WHERE status = 'pending' ORDER BY created_at ASC");
+}
+
+export function upsertPendingInvite(input: {
+  phone: string;
+  chatId: string;
+  name: string | null;
+  firstBody: string;
+}): InviteRow {
+  const existing = getInviteByPhone(input.phone);
+  const ts = nowIso();
+  if (existing) {
+    if (existing.status !== "pending") return existing;
+    run(
+      "UPDATE invites SET chat_id = ?, name = COALESCE(?, name), updated_at = ? WHERE id = ?",
+      input.chatId,
+      input.name,
+      ts,
+      existing.id,
+    );
+    return getInvite(existing.id)!;
+  }
+  const id = randomUUID();
+  run(
+    `INSERT INTO invites (id, phone_e164, chat_id, name, first_body, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`,
+    id,
+    input.phone,
+    input.chatId,
+    input.name,
+    input.firstBody.slice(0, 500),
+    ts,
+    ts,
+  );
+  return getInvite(id)!;
+}
+
+export function markInviteNotified(id: string): void {
+  run("UPDATE invites SET notified_at = ?, updated_at = ? WHERE id = ?", nowIso(), nowIso(), id);
+}
+
+export function decideInvite(id: string, status: "approved" | "denied"): InviteRow | undefined {
+  const existing = getInvite(id);
+  if (!existing || existing.status !== "pending") return existing;
+  const ts = nowIso();
+  run("UPDATE invites SET status = ?, decided_at = ?, updated_at = ? WHERE id = ?", status, ts, ts, id);
+  return getInvite(id);
+}
+
+export function isApprovedPhone(phone: string): boolean {
+  const rec = getInviteByPhone(phone);
+  return rec?.status === "approved";
 }

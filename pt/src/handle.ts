@@ -10,6 +10,7 @@ import {
   isReminderScopeCancel,
   parseLogDayReply,
 } from "./gates.ts";
+import { extractApplicantName, isInviteNo, isInviteYes } from "./invite.ts";
 import { runAgent } from "./agent.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
@@ -17,7 +18,7 @@ import * as linq from "./linq.ts";
 import { normalizeEvent } from "./webhook.ts";
 import { detectLang, isLang, type Lang } from "./locale.ts";
 import { addLocalDays, dayAnchorIso, resolveOnceOn, todayInTz } from "./db.ts";
-import type { Inbound, UserRow } from "./types.ts";
+import type { Inbound, InviteRow, UserRow } from "./types.ts";
 
 async function lockLang(user: UserRow, body: string): Promise<{ user: UserRow; lang: Lang; onboarding: boolean }> {
   const facts = journal.factsOf(user);
@@ -66,6 +67,120 @@ async function maybeCard(user: UserRow, chatId: string) {
   } catch {
     /* share is best-effort; card may be unconfigured */
   }
+}
+
+function canonPhone(phone: string): string {
+  return phone.replace(/\s+/g, "");
+}
+
+async function isAdmitted(phone: string | null): Promise<boolean> {
+  if (!phone) return false;
+  if (isAllowlisted(phone)) return true;
+  return journal.isApprovedPhone(canonPhone(phone));
+}
+
+async function ownerUser(): Promise<UserRow | undefined> {
+  for (const n of env.allowlist) {
+    const u = await journal.getUserByPhone(n);
+    if (u) return u;
+  }
+  return undefined;
+}
+
+function ownerLang(user: UserRow): Lang {
+  const raw = journal.factsOf(user).uiLang;
+  return isLang(raw) ? raw : isLang(user.locale) ? user.locale : "nb";
+}
+
+async function admitGuest(invite: InviteRow): Promise<void> {
+  const decided = await journal.decideInvite(invite.id, "approved");
+  if (!decided || decided.status !== "approved") return;
+  const guest = await journal.upsertUser(invite.chat_id, invite.phone_e164);
+  if (invite.name) await journal.setDisplayName(guest.id, invite.name);
+  const lang = detectLang(invite.first_body) ?? "nb";
+  await journal.setFacts(guest.id, { uiLang: lang });
+  await journal.setLocale(guest.id, lang);
+  if (invite.first_body.trim()) {
+    await journal.logMessage(guest.id, "user", invite.first_body);
+  }
+  await reply(invite.chat_id, copy.inviteWelcome(lang, invite.name, env.coachName), { userId: guest.id });
+  const fresh = (await journal.getUser(guest.id)) ?? guest;
+  await maybeCard(fresh, invite.chat_id);
+}
+
+async function nextInviteAsk(owner: UserRow, lang: Lang): Promise<string | null> {
+  const next = (await journal.listPendingInvites())[0];
+  if (!next) {
+    await journal.setPending(owner.id, null);
+    return null;
+  }
+  await journal.setPending(owner.id, {
+    type: "invite_approve",
+    inviteId: next.id,
+    askedAt: new Date().toISOString(),
+  });
+  await journal.markInviteNotified(next.id);
+  return copy.inviteAsk(lang, next.name, next.phone_e164);
+}
+
+async function resolveOwnerInvite(owner: UserRow, lang: Lang, body: string): Promise<string | null> {
+  if (!isInviteYes(body) && !isInviteNo(body)) return null;
+  const pending = journal.pendingOf(owner);
+  let invite: InviteRow | undefined;
+  if (pending?.type === "invite_approve") {
+    invite = await journal.getInvite(pending.inviteId);
+  }
+  if (!invite || invite.status !== "pending") {
+    invite = (await journal.listPendingInvites())[0];
+  }
+  if (!invite || invite.status !== "pending") {
+    if (pending?.type === "invite_approve") await journal.setPending(owner.id, null);
+    return null;
+  }
+  if (isInviteNo(body)) {
+    await journal.decideInvite(invite.id, "denied");
+    const confirm = copy.inviteDenied(lang, invite.name, invite.phone_e164);
+    const follow = await nextInviteAsk(owner, lang);
+    return follow ? `${confirm}\n\n${follow}` : confirm;
+  }
+  await admitGuest(invite);
+  const confirm = copy.inviteApproved(lang, invite.name, invite.phone_e164);
+  const follow = await nextInviteAsk(owner, lang);
+  return follow ? `${confirm}\n\n${follow}` : confirm;
+}
+
+async function handleUnknownSender(inbound: Inbound): Promise<void> {
+  if (!inbound.phone || isOptOut(inbound.body)) return;
+  const phone = canonPhone(inbound.phone);
+  const existing = await journal.getInviteByPhone(phone);
+  if (existing?.status === "denied") return;
+  const invite = await journal.upsertPendingInvite({
+    phone,
+    chatId: inbound.chatId,
+    name: extractApplicantName(inbound.body),
+    firstBody: inbound.body,
+  });
+  if (invite.status !== "pending") return;
+
+  const owner = await ownerUser();
+  if (!owner) {
+    console.error("invite waiting but owner chat is missing", invite.id, phone);
+    return;
+  }
+  const ownerPending = journal.pendingOf(owner);
+  if (ownerPending?.type === "invite_approve") {
+    const current = await journal.getInvite(ownerPending.inviteId);
+    if (current?.status === "pending") return;
+  }
+  if (invite.notified_at) return;
+  const ask = copy.inviteAsk(ownerLang(owner), invite.name, invite.phone_e164);
+  await reply(owner.chat_id, ask, { userId: owner.id });
+  await journal.setPending(owner.id, {
+    type: "invite_approve",
+    inviteId: invite.id,
+    askedAt: new Date().toISOString(),
+  });
+  await journal.markInviteNotified(invite.id);
 }
 
 function dayLabel(lang: Lang, day: "today" | "yesterday"): string {
@@ -447,8 +562,16 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
   if (inbound.direction && inbound.direction !== "inbound") return;
   if (inbound.isGroup) return;
   if (!inbound.body.trim()) return;
-  if (!isAllowlisted(inbound.phone)) return;
   if (!(await journal.claimMessage(inbound.messageId))) return;
+
+  if (!(await isAdmitted(inbound.phone))) {
+    try {
+      await handleUnknownSender(inbound);
+    } catch (err) {
+      console.error("waitlist failed", inbound.phone, err);
+    }
+    return;
+  }
 
   let user: UserRow | undefined;
   try {
@@ -474,6 +597,15 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
     }
 
     if (current.health_status === "CRITICAL") return;
+
+    if (isAllowlisted(inbound.phone)) {
+      const inviteReply = await resolveOwnerInvite(current, lang, inbound.body);
+      if (inviteReply) {
+        await reply(inbound.chatId, inviteReply, { replyTo: inbound.messageId, userId: current.id });
+        await maybeCard(current, inbound.chatId);
+        return;
+      }
+    }
 
     const pendingReply = await handlePending(current, lang, inbound.body);
     if (pendingReply) {

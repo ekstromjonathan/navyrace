@@ -147,6 +147,19 @@ describe("parser", () => {
     assert.equal(parseMessage("Hva har du logget til nå?").kind, "unknown");
   });
 
+  it("extracts waitlist names and owner yes/no", async () => {
+    const { extractApplicantName, isInviteYes, isInviteNo } = await import("../src/invite.ts");
+    assert.equal(extractApplicantName("Hei, jeg heter Inger"), "Inger");
+    assert.equal(extractApplicantName("lodd.ai signup\nNavn: Inger\nTelefon: +4711111111"), "Inger");
+    assert.equal(extractApplicantName("Hi, my name is Sam"), "Sam");
+    assert.equal(extractApplicantName("Hei, kan jeg være med?"), null);
+    assert.equal(isInviteYes("Ja"), true);
+    assert.equal(isInviteYes("slipp inn"), true);
+    assert.equal(isInviteYes("ok kjør"), false);
+    assert.equal(isInviteNo("nei"), true);
+    assert.equal(isInviteNo("gjorde økt"), false);
+  });
+
   it("parses video reminders with URLs", () => {
     const yt = "https://youtu.be/XTbJZXXccpE";
     const withTime = parseMessage(`${yt} minn meg kl 19 om å se videoen`);
