@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.ts";
-import { resolveOnceOn } from "./db.ts";
+import { resolveOnceOn, addLocalDays, dayAnchorIso, todayInTz } from "./db.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
 import type { Lang } from "./locale.ts";
@@ -28,7 +28,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "log_entry",
     description:
-      "Logg noe brukeren gjorde (vane, restitusjon, eller hvordan en økt føltes: lett/passe/brutalt). Etter en økt: logg innsats og juster neste.",
+      "Logg noe brukeren gjorde. Viktig: når de sier de har trent / gjort en økt — også hvis det IKKE matcher planen — kall dette med en gang. Bruk kind=training, note=hva de faktisk gjorde. sessionRef=plan-id (f.eks. w1d1) hvis det er dagens/planlagte økt (eller de sier «dagens økt»); ellers sessionRef=extra:YYYY-MM-DD så det trackes uten å hoppe i planen. day=today|yesterday — hvis usikkert hvilken dag: IKKE gjett, spør «i dag eller i går?» først.",
     input_schema: {
       type: "object",
       properties: {
@@ -41,6 +41,11 @@ const TOOLS: Anthropic.Messages.Tool[] = [
         quality: { type: "string" },
         note: { type: "string" },
         sessionRef: { type: "string" },
+        day: {
+          type: "string",
+          enum: ["today", "yesterday"],
+          description: "Hvilken lokal kalenderdag økta tilhører. Påkrevd for treningsøkter.",
+        },
       },
       required: ["slug", "kind", "name"],
     },
@@ -220,8 +225,11 @@ Language: Reply only in ${language}. The user started in this language. Never sw
 
 ## Training stance
 - Assume they want to train and will train. Never ask “are you training today?” / “do you have time to train?”. Present today's session (or the next step toward a plan).
-- After a session (they say done / finished / logged): ask how hard it felt — lett / passe / brutalt — and how it felt in the body. Log with log_entry (quality). Next similar session auto-adjusts.
-- When a plan is active: lead with today's session, not a check-in about motivation to show up.
+- When they report a workout (done / finished / “gjorde økt” / logged kettlebell etc.): ALWAYS call log_entry immediately — even if it wasn't exactly the prescribed session. Put what they actually did in note.
+- If which calendar day is unclear (no “i dag” / “i går” / “nå”), ask one short question: today or yesterday? Do not guess.
+- Planned session (“dagens økt” or matching today): sessionRef = today's plan id from snapshot. Extra/different session: sessionRef = extra:YYYY-MM-DD so it still tracks the day without skipping ahead in the plan.
+- After a session is logged: ask how hard it felt — lett / passe / brutalt — and how it felt in the body. Log quality. Next similar planned session auto-adjusts.
+- When a plan is active: lead with today's session, not a check-in about motivation to show up. Never answer a log with only the plan dump — persist first.
 
 ## Style
 - Max 4–6 lines. One next action. At most one question.
@@ -311,6 +319,23 @@ async function runTool(
       });
       const quantity =
         input.value != null ? { value: Number(input.value), unit: String(input.unit || "") } : null;
+      const dayRaw = input.day != null ? String(input.day) : "";
+      let occurredAt: string | undefined;
+      if (dayRaw === "today" || dayRaw === "yesterday") {
+        const today = todayInTz(user.tz);
+        const dayYmd = dayRaw === "today" ? today : addLocalDays(today, -1);
+        occurredAt = dayAnchorIso(dayYmd);
+      }
+      if (kind === "training" && input.note && !dayRaw) {
+        return JSON.stringify({
+          ok: false,
+          needDay: true,
+          ask:
+            lang === "en"
+              ? "Which day should I log that on — today or yesterday?"
+              : "Hvilken dag skal jeg logge det på — i dag eller i går?",
+        });
+      }
       const result = await journal.logEntry({
         trackId: track.id,
         userId: user.id,
@@ -320,8 +345,9 @@ async function runTool(
         sessionRef: input.sessionRef ? String(input.sessionRef) : null,
         source: "llm",
         linqMessageId: `${messageId}:${slug}`,
+        occurredAt,
       });
-      return JSON.stringify({ ok: true, trackId: track.id, duplicate: result.duplicate });
+      return JSON.stringify({ ok: true, trackId: track.id, duplicate: result.duplicate, id: result.id });
     }
     case "add_note":
       return JSON.stringify({

@@ -67,6 +67,44 @@ export function rpeLogged(lang: Lang, quality: string): string {
   return "Notert som passe. Holder planen.";
 }
 
+export function sessionLogged(
+  lang: Lang,
+  opts: { title: string; dayLabel: string; planned: boolean; askRpe: boolean },
+): string {
+  if (lang === "en") {
+    const where = opts.planned
+      ? `Logged against “${opts.title}” (${opts.dayLabel}).`
+      : `Logged extra session “${opts.title}” (${opts.dayLabel}) — plan stays as-is.`;
+    return opts.askRpe ? `${where}\nHow hard was it? (easy / about right / brutal)` : where;
+  }
+  const where = opts.planned
+    ? `Logget mot «${opts.title}» (${opts.dayLabel}).`
+    : `Logget ekstraøkt «${opts.title}» (${opts.dayLabel}) — planen står.`;
+  return opts.askRpe ? `${where}\nHvor hardt var det? (lett / passe / brutalt)` : where;
+}
+
+export function sessionDayAsk(lang: Lang): string {
+  return lang === "en"
+    ? "Got it — which day should I log that on? Today or yesterday?"
+    : "Skjønner — hvilken dag skal jeg logge det på? I dag eller i går?";
+}
+
+export function sessionDayCancelled(lang: Lang): string {
+  return lang === "en" ? "Ok, nothing logged." : "Ok, ingenting logget.";
+}
+
+export function sessionNoPlan(lang: Lang): string {
+  return lang === "en"
+    ? "No active program yet — I'll still note what you did once we lock a plan. Want to lock the draft?"
+    : "Ingen aktivt program ennå — jeg noterer det når vi har låst et opplegg. Vil du låse utkastet?";
+}
+
+export function rpeNeedSession(lang: Lang): string {
+  return lang === "en"
+    ? "Tell me what you did first (even if it wasn't the planned session), then easy / about right / brutal."
+    : "Si først hva du gjorde (selv om det ikke var den planlagte økta), så lett / passe / brutalt.";
+}
+
 export function loggedItem(lang: Lang, name: string, qty: string, n: number): string {
   if (lang === "en") return `Logged ${name.toLowerCase()}${qty}. ${n} on that track.`;
   return `Logget ${name.toLowerCase()}${qty}. ${n} på det sporet.`;

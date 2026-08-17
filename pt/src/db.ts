@@ -114,6 +114,11 @@ export function todayInTz(tz = env.tz, at: Date | string = new Date()): string {
   return localParts(tz, at).date;
 }
 
+/** Stable ISO timestamp for a local calendar day (noon UTC — safe for Europe/Oslo date bucketing). */
+export function dayAnchorIso(dayYmd: string): string {
+  return `${dayYmd}T12:00:00.000Z`;
+}
+
 /** Add calendar days to a YYYY-MM-DD string (UTC noon arithmetic — safe for date-only). */
 export function addLocalDays(dateYmd: string, days: number): string {
   const [y, m, d] = dateYmd.split("-").map(Number);

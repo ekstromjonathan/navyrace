@@ -176,6 +176,13 @@ export async function logEntry(input: {
   return asAsync(api().logEntry(input));
 }
 
+export async function patchEntry(
+  entryId: string,
+  patch: { quality?: string | null; note?: string | null },
+): Promise<boolean> {
+  return asAsync(api().patchEntry(entryId, patch));
+}
+
 export async function archiveEntry(input: {
   userId: string;
   entryId?: string;

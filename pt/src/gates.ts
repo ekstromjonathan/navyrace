@@ -56,3 +56,14 @@ export function isReminderOnceReply(body: string): boolean {
 export function isReminderScopeCancel(body: string): boolean {
   return REMINDER_SCOPE_CANCEL.test(body.trim());
 }
+
+/** Reply to “which day?” — today / yesterday only. */
+export function parseLogDayReply(body: string): "today" | "yesterday" | null {
+  const t = body.trim().toLowerCase();
+  if (!t || t.length > 80) return null;
+  if (/^(i\s*dag|today|nå|naa|nettopp)(\s*[.!]*)?$/i.test(t)) return "today";
+  if (/^(i\s*går|i\s*gaar|yesterday)(\s*[.!]*)?$/i.test(t)) return "yesterday";
+  if (/\b(i\s*går|i\s*gaar|yesterday)\b/i.test(t) && !/\b(i\s*dag|today)\b/i.test(t)) return "yesterday";
+  if (/\b(i\s*dag|today)\b/i.test(t)) return "today";
+  return null;
+}
