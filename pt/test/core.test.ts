@@ -269,6 +269,7 @@ describe("invite welcome", () => {
     const nb = inviteWelcome("nb", "Inger Elise Kjøndal Ekström", "lodd.ai");
     assert.match(nb, /^Hei Inger —/);
     assert.match(nb, /din nye coach/i);
+    assert.match(nb, /bedre versjon av deg selv/);
     assert.match(nb, /økter/i);
     assert.match(nb, /vaner/i);
     assert.match(nb, /påminnelser/i);

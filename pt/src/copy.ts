@@ -123,9 +123,9 @@ export function inviteWelcome(lang: Lang, name: string | null, coach: string): s
     : pick(lang, "Hi", "Hei", "Hej");
   return pick(
     lang,
-    `${hello} — I'm ${coach}. Your new coach.\n\nWorkouts, habits, reminders — tell me, I'll keep track.\n\nWhat do you want to keep on top of?`,
-    `${hello} — jeg er ${coach}. Din nye coach.\n\nØkter, vaner, påminnelser — si ifra, så tar jeg det.\n\nHva har du lyst å holde styr på?`,
-    `${hello} — jag är ${coach}. Din nya coach.\n\nPass, vanor, påminnelser — säg till, så tar jag det.\n\nVad vill du hålla koll på?`,
+    `${hello} — I'm ${coach}. Your new coach.\n\nI want to help you become a better version of yourself. Workouts, habits, reminders — tell me, I'll keep track.\n\nWhat do you want to keep on top of?`,
+    `${hello} — jeg er ${coach}. Din nye coach.\n\nJeg vil hjelpe deg å bli en bedre versjon av deg selv. Økter, vaner, påminnelser — si ifra, så tar jeg det.\n\nHva har du lyst å holde styr på?`,
+    `${hello} — jag är ${coach}. Din nya coach.\n\nJag vill hjälpa dig att bli en bättre version av dig själv. Pass, vanor, påminnelser — säg till, så tar jag det.\n\nVad vill du hålla koll på?`,
   );
 }
 
