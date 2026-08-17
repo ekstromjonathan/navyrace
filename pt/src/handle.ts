@@ -177,6 +177,19 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
     return copy.savedField(lang, pending.field);
   }
 
+  if (pending.type === "video_reminder_time") {
+    if (isReminderScopeCancel(body) || isActivateCancel(body)) {
+      await journal.setPending(user.id, null);
+      return copy.reminderScopeCancelled(lang);
+    }
+    const parsed = parseMessage(body);
+    if (parsed.kind === "reminder_set") {
+      await journal.setPending(user.id, null);
+      return commitReminderSet(user, lang, parsed.hour, parsed.minute, parsed.scope, pending.url);
+    }
+    return copy.videoLinkAsk(lang);
+  }
+
   if (pending.type === "reminder_scope") {
     // Legacy pending from older ask-flow: soft resolve, no magic phrase.
     if (isReminderScopeCancel(body)) {
@@ -262,20 +275,45 @@ async function formatToday(user: UserRow, lang: Lang): Promise<string> {
     .join("\n");
 }
 
+async function commitReminderSet(
+  user: UserRow,
+  lang: Lang,
+  hour: number,
+  minute: number,
+  scope: "daily" | "once",
+  url: string | null,
+): Promise<string> {
+  const urlOpt = url ? { url } : { url: null as string | null };
+  if (scope === "once") {
+    const onceOn = resolveOnceOn(user.tz, hour, minute);
+    await journal.upsertReminder(user.id, "train", hour, minute, { onceOn, ...urlOpt });
+    return url
+      ? copy.reminderConfirmOnceWithUrl(lang, hour, minute, onceOn, user.tz, url)
+      : copy.reminderConfirmOnce(lang, hour, minute, onceOn, user.tz);
+  }
+  await journal.upsertReminder(user.id, "train", hour, minute, { onceOn: null, ...urlOpt });
+  return url
+    ? copy.reminderConfirmWithUrl(lang, hour, minute, user.tz, url)
+    : copy.reminderConfirm(lang, hour, minute, user.tz);
+}
+
 async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Promise<string | null> {
   const parsed = parseMessage(inbound.body);
   if (!parsed.confident) return null;
 
   if (parsed.kind === "today") return formatToday(user, lang);
 
+  if (parsed.kind === "video_link") {
+    await journal.setPending(user.id, {
+      type: "video_reminder_time",
+      url: parsed.url,
+      askedAt: new Date().toISOString(),
+    });
+    return copy.videoLinkAsk(lang);
+  }
+
   if (parsed.kind === "reminder_set") {
-    if (parsed.scope === "once") {
-      const onceOn = resolveOnceOn(user.tz, parsed.hour, parsed.minute);
-      await journal.upsertReminder(user.id, "train", parsed.hour, parsed.minute, { onceOn });
-      return copy.reminderConfirmOnce(lang, parsed.hour, parsed.minute, onceOn, user.tz);
-    }
-    await journal.upsertReminder(user.id, "train", parsed.hour, parsed.minute, { onceOn: null });
-    return copy.reminderConfirm(lang, parsed.hour, parsed.minute, user.tz);
+    return commitReminderSet(user, lang, parsed.hour, parsed.minute, parsed.scope, parsed.url);
   }
 
   if (parsed.kind === "reminder_cancel") {

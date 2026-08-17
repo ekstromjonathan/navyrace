@@ -9,9 +9,10 @@ import type { ReminderRow, UserRow } from "./types.ts";
 const CATCHUP_MINUTES = 180;
 const TICK_MS = 30_000;
 
-export async function reminderBody(user: UserRow): Promise<string> {
+export async function reminderBody(user: UserRow, reminder: ReminderRow): Promise<string> {
   const raw = journal.factsOf(user).uiLang;
   const lang = isLang(raw) ? raw : isLang(user.locale) ? user.locale : "nb";
+  if (reminder.url) return copy.reminderPingVideo(lang, reminder.url);
   const training = await journal.activeTraining(user.id);
   if (!training) return copy.reminderPingNoPlan(lang);
   const next = await journal.nextSession(user.id, training);
@@ -34,7 +35,7 @@ export async function isReminderDue(reminder: ReminderRow, user: UserRow, now: D
   const current = local.hour * 60 + local.minute;
   if (current < scheduled) return false;
   if (current - scheduled > CATCHUP_MINUTES) return false;
-  if (await journal.trainedOnDay(user.id, local.date, user.tz)) return false;
+  if (!reminder.url && (await journal.trainedOnDay(user.id, local.date, user.tz))) return false;
   return true;
 }
 
@@ -47,7 +48,7 @@ export async function fireDueReminders(
     const user = await journal.getUser(reminder.user_id);
     if (!user) continue;
     if (!(await isReminderDue(reminder, user, now))) continue;
-    const body = await reminderBody(user);
+    const body = await reminderBody(user, reminder);
     try {
       await send(user.chat_id, body, user.id);
       await journal.markReminderFired(reminder.id, localParts(user.tz, now).date);

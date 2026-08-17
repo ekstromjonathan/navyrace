@@ -72,6 +72,7 @@ function asReminder(row: Record<string, unknown>): ReminderRow {
     enabled: row.enabled === true || row.enabled === 1 || row.enabled === "1" ? 1 : 0,
     last_fired_on: row.last_fired_on == null ? null : String(row.last_fired_on).slice(0, 10),
     once_on: row.once_on == null ? null : String(row.once_on).slice(0, 10),
+    url: row.url == null ? null : String(row.url),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -803,6 +804,7 @@ export async function snapshot(user: UserRow) {
         minute: r.minute,
         onceOn: r.once_on,
         lastFiredOn: r.last_fired_on,
+        url: r.url,
       })),
   };
 }
@@ -816,11 +818,12 @@ export async function upsertReminder(
   kind: ReminderKind,
   hour: number,
   minute: number,
-  opts?: { onceOn?: string | null },
+  opts?: { onceOn?: string | null; url?: string | null },
 ): Promise<ReminderRow> {
   const h = Math.min(23, Math.max(0, Math.round(hour)));
   const m = Math.min(59, Math.max(0, Math.round(minute)));
   const onceOn = opts?.onceOn === undefined ? null : opts.onceOn;
+  const url = opts && "url" in opts ? (opts.url ?? null) : undefined;
   const sb = getSupabase();
   const { data: existing, error: findErr } = await sb
     .from("reminders")
@@ -831,9 +834,11 @@ export async function upsertReminder(
   throwIf(findErr);
   const ts = nowIso();
   if (existing) {
+    const patch: Record<string, unknown> = { hour: h, minute: m, enabled: true, once_on: onceOn, updated_at: ts };
+    if (url !== undefined) patch.url = url;
     const { data, error } = await sb
       .from("reminders")
-      .update({ hour: h, minute: m, enabled: true, once_on: onceOn, updated_at: ts })
+      .update(patch)
       .eq("id", (existing as { id: string }).id)
       .select("*")
       .single();
@@ -851,6 +856,7 @@ export async function upsertReminder(
       minute: m,
       enabled: true,
       once_on: onceOn,
+      url: url ?? null,
       created_at: ts,
       updated_at: ts,
     })

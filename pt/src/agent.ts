@@ -165,7 +165,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "set_reminder",
     description:
-      "Sett treningspåminnelse (brukerens tidssone). Default kl 08:00. scope=once for i kveld/i dag/tonight; scope=daily for hver dag eller når uvisst. Ingen ekstra bekreftelse — bare sett og bekreft kort. Kall når brukeren ber om å bli minnet.",
+      "Sett trenings- eller videopåminnelse (brukerens tidssone). Default kl 08:00. scope=once for i kveld/i dag/tonight; scope=daily for hver dag eller når uvisst. url=full lenke når brukeren deler video/link og vil minnes. Ingen ekstra bekreftelse — bare sett og bekreft kort.",
     input_schema: {
       type: "object",
       properties: {
@@ -175,6 +175,10 @@ const TOOLS: Anthropic.Messages.Tool[] = [
           type: "string",
           enum: ["daily", "once"],
           description: "daily = recurring, once = one-shot today/tonight",
+        },
+        url: {
+          type: "string",
+          description: "Full http(s) URL to include in the ping (YouTube, Vimeo, etc.)",
         },
       },
     },
@@ -234,10 +238,10 @@ Language: Reply only in ${language}. The user started in this language. Never sw
 ## Style
 - Max 4–6 lines. One next action. At most one question.
 - Plain, informal words. No jargon (RPE, OCR, HIIT, zone 2) — say how hard it felt, obstacle race, intervals, easy conversational pace.
-- Sound like a friend who knows training. Short ack, then move forward. No effects, no spam, no links unless asked.
+- Sound like a friend who knows training. Short ack, then move forward. No effects, no spam. Include a link in replies only when the user shared one and asked for a reminder ping.
 - You are not a doctor. On pain: log it, ease load, refer out if it lasts.
 - Don't invent history. Don't delete active programs — request_archive. Don't hard-delete logs — archive_entry.
-- Reminders via set_reminder when they ask. Infer once (i kveld/i dag) vs daily — no confirmation gate. One short ping; skip if a session is already logged. One-shot disables after firing.
+- Reminders via set_reminder when they ask. Infer once (i kveld/i dag) vs daily — no confirmation gate. Pass url when they share a video/link. Video/link pings fire even if they already logged training that day. Training pings skip if a session is already logged. One-shot disables after firing.
 ${onboard}`.trim();
 }
 
@@ -504,25 +508,34 @@ async function runTool(
       const hour = input.hour == null ? 8 : Number(input.hour);
       const minute = input.minute == null ? 0 : Number(input.minute);
       const scope = String(input.scope || "") === "once" ? "once" : "daily";
+      const urlRaw = typeof input.url === "string" ? input.url.trim() : "";
+      const url = urlRaw.startsWith("http") ? urlRaw.replace(/[.,!?;:]+$/, "") : null;
+      const urlOpt = url ? { url } : { url: null as string | null };
       if (scope === "once") {
         const onceOn = resolveOnceOn(user.tz, hour, minute);
-        const rec = await journal.upsertReminder(user.id, "train", hour, minute, { onceOn });
+        const rec = await journal.upsertReminder(user.id, "train", hour, minute, { onceOn, ...urlOpt });
         return JSON.stringify({
           ok: true,
           hour: rec.hour,
           minute: rec.minute,
           onceOn,
+          url: rec.url,
           tz: user.tz,
-          confirm: copy.reminderConfirmOnce(lang, rec.hour, rec.minute, onceOn, user.tz),
+          confirm: url
+            ? copy.reminderConfirmOnceWithUrl(lang, rec.hour, rec.minute, onceOn, user.tz, url)
+            : copy.reminderConfirmOnce(lang, rec.hour, rec.minute, onceOn, user.tz),
         });
       }
-      const rec = await journal.upsertReminder(user.id, "train", hour, minute, { onceOn: null });
+      const rec = await journal.upsertReminder(user.id, "train", hour, minute, { onceOn: null, ...urlOpt });
       return JSON.stringify({
         ok: true,
         hour: rec.hour,
         minute: rec.minute,
+        url: rec.url,
         tz: user.tz,
-        confirm: copy.reminderConfirm(lang, rec.hour, rec.minute, user.tz),
+        confirm: url
+          ? copy.reminderConfirmWithUrl(lang, rec.hour, rec.minute, user.tz, url)
+          : copy.reminderConfirm(lang, rec.hour, rec.minute, user.tz),
       });
     }
     case "cancel_reminder": {

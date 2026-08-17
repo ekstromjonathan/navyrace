@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS reminders (
   enabled INTEGER NOT NULL DEFAULT 1,
   last_fired_on TEXT,
   once_on TEXT,
+  url TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id),

@@ -147,6 +147,29 @@ describe("parser", () => {
     assert.equal(parseMessage("Hva har du logget til nå?").kind, "unknown");
   });
 
+  it("parses video reminders with URLs", () => {
+    const yt = "https://youtu.be/XTbJZXXccpE";
+    const withTime = parseMessage(`${yt} minn meg kl 19 om å se videoen`);
+    assert.equal(withTime.kind, "reminder_set");
+    if (withTime.kind === "reminder_set") {
+      assert.equal(withTime.hour, 19);
+      assert.equal(withTime.url, yt);
+    }
+    const linkOnly = parseMessage(yt);
+    assert.equal(linkOnly.kind, "video_link");
+    if (linkOnly.kind === "video_link") {
+      assert.equal(linkOnly.url, yt);
+    }
+  });
+
+  it("extracts URLs from text", async () => {
+    const { extractUrl, isVideoUrl } = await import("../src/urls.ts");
+    const url = extractUrl("Se denne https://youtu.be/abc123?is=foo i kveld");
+    assert.equal(url, "https://youtu.be/abc123?is=foo");
+    assert.equal(isVideoUrl("https://youtu.be/abc"), true);
+    assert.equal(isVideoUrl("https://example.com"), false);
+  });
+
   it("parses reminder scope replies", async () => {
     const { isReminderDailyReply, isReminderOnceReply } = await import("../src/gates.ts");
     assert.equal(isReminderDailyReply("hver dag"), true);

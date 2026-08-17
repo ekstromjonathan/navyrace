@@ -30,6 +30,12 @@ export type Pending =
       askedAt: string;
     }
   | {
+      /** User sent a link — waiting for clock time before setting reminder. */
+      type: "video_reminder_time";
+      url: string;
+      askedAt: string;
+    }
+  | {
       /** Ask which calendar day a free-form session log belongs to. */
       type: "log_day";
       note: string;
@@ -121,6 +127,8 @@ export type ReminderRow = {
   last_fired_on: string | null;
   /** Local YYYY-MM-DD for one-shot; null = daily. */
   once_on: string | null;
+  /** Optional link included in the reminder ping. */
+  url: string | null;
   created_at: string;
   updated_at: string;
 };

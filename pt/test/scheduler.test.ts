@@ -63,4 +63,36 @@ describe("scheduler", () => {
     assert.equal(after?.enabled, 0);
     assert.equal(after?.last_fired_on, "2026-08-15");
   });
+
+  it("sends a video reminder with the stored URL and ignores trained-today skip", async () => {
+    const videoUser = await journal.upsertUser("chat-video-sched", "+4740343299");
+    const training = await journal.createTrack({
+      userId: videoUser.id,
+      kind: "training",
+      slug: "program",
+      name: "Test",
+      status: "active",
+      plan: { sessions: [{ id: "w1d1", title: "Styrke", loadKey: "str", load: 3, unit: "runder" }] },
+    });
+    await journal.logEntry({
+      trackId: training.id,
+      userId: videoUser.id,
+      sessionRef: "w1d1",
+      source: "heuristic",
+      occurredAt: "2026-08-15T06:00:00.000Z",
+    });
+    assert.equal(await journal.trainedOnDay(videoUser.id, "2026-08-15", "Europe/Oslo"), true);
+
+    const yt = "https://youtu.be/XTbJZXXccpE";
+    await journal.upsertReminder(videoUser.id, "train", 8, 0, { url: yt });
+
+    const sent: string[] = [];
+    const n = await fireDueReminders(at805, async (_chat, body) => {
+      sent.push(body);
+    });
+    assert.ok(n >= 1);
+    const mine = sent.find((s) => s.includes(yt));
+    assert.ok(mine);
+    assert.match(mine ?? "", /Påminnelse|Reminder/);
+  });
 });

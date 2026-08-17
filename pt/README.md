@@ -14,7 +14,7 @@ SUPABASE_SECRET_KEY=sb_secret_...   # Settings → API Keys → Secret keys (nev
 
 Supabase renamed keys: new projects show **Secret keys** (`sb_secret_…`) instead of a `service_role` JWT. Same privileges (bypasses RLS). Find them under [Settings → API Keys](https://supabase.com/dashboard/project/_/settings/api-keys) — use the **API Keys** tab (create if needed), or **Legacy API Keys** for the old JWT.
 
-Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0007_pt_reminder_once.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
+Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0008_pt_reminder_url.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
 
 Without those env vars the process falls back to local SQLite (`PT_DB_PATH`) so unit tests stay offline.
 
@@ -38,6 +38,7 @@ If you ask the PT to remind you (e.g. «minn meg på å trene kl 8» or «kl 19 
 
 - Daily (default, or «hver dag»): skips the day if you already logged a training entry, or if you opted out.
 - One-shot (`once_on`, from «i kveld» / «i dag» / «bare i dag»): fires on that local calendar day only, then turns itself off.
+- Video/link (optional `url` on reminder): include a YouTube or other URL — ping sends the link; fires even if you already trained that day.
 - Catch-up window is 3 hours (process down at 08:00 can still ping at 10:00, not at 22:00).
 - «slutt å minne meg» turns it off.
 - Only fires while `npm start` is running.
@@ -86,6 +87,7 @@ Text `+14044465379` from the allowlisted number.
 | Daily training reminder | `minn meg på å trene kl 8` / `remind me to train at 8` (or «hver dag») |
 | One-shot reminder | `…kl 19 i kveld` / `bare i dag` / `tonight` — set immediately |
 | Cancel reminder | `slutt å minne meg` / `stop reminding me` |
+| Video reminder | Send a link + `minn meg kl 19 om å se videoen` — or just the link, then reply with a time |
 
 Locking a program is ordinary assent. Only archiving the whole program uses a strict phrase. Nothing is hard-deleted.
 

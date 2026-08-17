@@ -47,6 +47,7 @@ export function getDb(): DatabaseSync {
   sqlite.exec(readFileSync(resolve(here, "schema.sql"), "utf8"));
   ensureEntryArchiveColumns(sqlite);
   ensureReminderOnceColumn(sqlite);
+  ensureReminderUrlColumn(sqlite);
   return sqlite;
 }
 
@@ -68,6 +69,13 @@ function ensureReminderOnceColumn(database: DatabaseSync) {
   const cols = database.prepare("PRAGMA table_info(reminders)").all() as { name: string }[];
   if (!cols.some((c) => c.name === "once_on")) {
     database.exec("ALTER TABLE reminders ADD COLUMN once_on TEXT");
+  }
+}
+
+function ensureReminderUrlColumn(database: DatabaseSync) {
+  const cols = database.prepare("PRAGMA table_info(reminders)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "url")) {
+    database.exec("ALTER TABLE reminders ADD COLUMN url TEXT");
   }
 }
 

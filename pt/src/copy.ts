@@ -22,6 +22,39 @@ export function reminderConfirmOnce(lang: Lang, hour: number, minute: number, on
   return `Ok — én påminnelse ${onceOn} kl ${hhmm(hour, minute)} (${tz}). Si «slutt å minne meg» for å avbryte.`;
 }
 
+export function reminderConfirmWithUrl(
+  lang: Lang,
+  hour: number,
+  minute: number,
+  tz: string,
+  url: string,
+): string {
+  if (lang === "en") {
+    return `Ok — daily reminder at ${hhmm(hour, minute)} (${tz}) with your link:\n${url}\nSay “stop reminding me” to turn it off.`;
+  }
+  return `Ok — daglig påminnelse kl ${hhmm(hour, minute)} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å skru av.`;
+}
+
+export function reminderConfirmOnceWithUrl(
+  lang: Lang,
+  hour: number,
+  minute: number,
+  onceOn: string,
+  tz: string,
+  url: string,
+): string {
+  if (lang === "en") {
+    return `Ok — one reminder on ${onceOn} at ${hhmm(hour, minute)} (${tz}) with your link:\n${url}\nSay “stop reminding me” to cancel.`;
+  }
+  return `Ok — én påminnelse ${onceOn} kl ${hhmm(hour, minute)} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å avbryte.`;
+}
+
+export function videoLinkAsk(lang: Lang): string {
+  return lang === "en"
+    ? "Got the link. What time should I remind you? e.g. «remind me at 7»."
+    : "Fikk lenken. Når skal jeg minne deg? Si f.eks. «minn meg kl 19».";
+}
+
 export function reminderScopeAsk(lang: Lang, hour: number, minute: number): string {
   if (lang === "en") {
     return `Got it — ${hhmm(hour, minute)}. Should that be every day, or just once (today/tonight)?`;
@@ -233,6 +266,13 @@ export function reminderPingToday(lang: Lang, line: string): string {
     return [`Training today.`, line, "Say easy / about right / brutal when you're done."].join("\n");
   }
   return [`Trening i dag.`, line, "Si lett / passe / brutalt når du er ferdig."].join("\n");
+}
+
+export function reminderPingVideo(lang: Lang, url: string): string {
+  if (lang === "en") {
+    return [`Reminder — time to watch this:`, url].join("\n");
+  }
+  return [`Påminnelse — tid for å se dette:`, url].join("\n");
 }
 
 export function handlerError(lang: Lang): string {

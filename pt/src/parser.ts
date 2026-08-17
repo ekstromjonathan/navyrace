@@ -1,3 +1,5 @@
+import { extractUrl } from "./urls.ts";
+
 export type HeuristicIntent =
   | {
       kind: "log";
@@ -23,8 +25,9 @@ export type HeuristicIntent =
   | { kind: "today"; confident: true }
   | { kind: "activate"; confident: true }
   | { kind: "archive"; confident: true }
-  | { kind: "reminder_set"; confident: true; hour: number; minute: number; scope: "daily" | "once" }
+  | { kind: "reminder_set"; confident: true; hour: number; minute: number; scope: "daily" | "once"; url: string | null }
   | { kind: "reminder_cancel"; confident: true }
+  | { kind: "video_link"; confident: true; url: string }
   | { kind: "archive_entry"; confident: true; slug?: string; trackKind?: "training" }
   | { kind: "unknown"; confident: false };
 
@@ -67,12 +70,18 @@ export function parseMessage(body: string): HeuristicIntent {
     return { kind: "reminder_cancel", confident: true };
   }
 
-  if (
+  const url = extractUrl(text);
+  const hasReminderIntent =
     /\b(minn meg|minne meg|påminn meg)\b/i.test(lower) ||
-    (/\bpåminnelse\b/i.test(lower) && /\b(kl|hver dag|trene|trening|i kveld|i dag)\b/i.test(lower)) ||
+    (/\bpåminnelse\b/i.test(lower) &&
+      /\b(kl|hver dag|trene|trening|i kveld|i dag|video|se|watch)\b/i.test(lower)) ||
     /\bremind me\b/i.test(lower) ||
-    (/\breminder\b/i.test(lower) && /\b(train|training|daily|every day|tonight|today)\b/i.test(lower))
-  ) {
+    (/\breminder\b/i.test(lower) &&
+      /\b(train|training|daily|every day|tonight|today|video|watch)\b/i.test(lower)) ||
+    (url != null &&
+      /\b(se (denne )?video(en)?|gå gjennom|watch (this )?video|videoen|denne lenken|this link)\b/i.test(lower));
+
+  if (hasReminderIntent) {
     const clock = parseClock(lower);
     const scope = detectReminderScope(lower);
     let hour = clock.hour;
@@ -82,7 +91,11 @@ export function parseMessage(body: string): HeuristicIntent {
       hour = 18;
       minute = 0;
     }
-    return { kind: "reminder_set", confident: true, hour, minute, scope };
+    return { kind: "reminder_set", confident: true, hour, minute, scope, url };
+  }
+
+  if (url && text.replace(url, "").trim().length < 24) {
+    return { kind: "video_link", confident: true, url };
   }
 
   if (

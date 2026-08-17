@@ -617,6 +617,7 @@ export function snapshot(user: UserRow) {
       minute: r.minute,
       onceOn: r.once_on,
       lastFiredOn: r.last_fired_on,
+      url: r.url,
     })),
   };
 }
@@ -630,34 +631,48 @@ export function upsertReminder(
   kind: ReminderKind,
   hour: number,
   minute: number,
-  opts?: { onceOn?: string | null },
+  opts?: { onceOn?: string | null; url?: string | null },
 ): ReminderRow {
   const h = Math.min(23, Math.max(0, Math.round(hour)));
   const m = Math.min(59, Math.max(0, Math.round(minute)));
   const onceOn = opts?.onceOn === undefined ? null : opts.onceOn;
+  const url = opts && "url" in opts ? (opts.url ?? null) : undefined;
   const existing = row<ReminderRow>("SELECT * FROM reminders WHERE user_id = ? AND kind = ?", userId, kind);
   const ts = nowIso();
   if (existing) {
-    run(
-      "UPDATE reminders SET hour = ?, minute = ?, enabled = 1, once_on = ?, updated_at = ? WHERE id = ?",
-      h,
-      m,
-      onceOn,
-      ts,
-      existing.id,
-    );
+    if (url !== undefined) {
+      run(
+        "UPDATE reminders SET hour = ?, minute = ?, enabled = 1, once_on = ?, url = ?, updated_at = ? WHERE id = ?",
+        h,
+        m,
+        onceOn,
+        url,
+        ts,
+        existing.id,
+      );
+    } else {
+      run(
+        "UPDATE reminders SET hour = ?, minute = ?, enabled = 1, once_on = ?, updated_at = ? WHERE id = ?",
+        h,
+        m,
+        onceOn,
+        ts,
+        existing.id,
+      );
+    }
     return getReminder(existing.id)!;
   }
   const id = randomUUID();
   run(
-    `INSERT INTO reminders (id, user_id, kind, hour, minute, enabled, once_on, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+    `INSERT INTO reminders (id, user_id, kind, hour, minute, enabled, once_on, url, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
     id,
     userId,
     kind,
     h,
     m,
     onceOn,
+    url ?? null,
     ts,
     ts,
   );
