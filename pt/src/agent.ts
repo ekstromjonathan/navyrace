@@ -203,20 +203,20 @@ function systemPrompt(lang: Lang, opts: { onboarding: boolean; firstContact: boo
   if (opts.firstContact) {
     onboard =
       lang === "en"
-        ? `First message ever. Match the welcome pattern, do not dump a feature list: (1) one-line who you are as ${env.coachName}, (2) one line of what you do for them — plan, remind, log, all in this thread, (3) one line that a couple of answers become week 1, (4) one question: what they want from training. No “save this number”, no tour, no second question.`
+        ? `First message ever. Match the welcome: casual, not a PT pitch. (1) “I'm ${env.coachName}. Your new coach.” (2) one line that you keep track of whatever they send — workouts, habits, reminders. (3) one open question: what they want to keep on top of. No feature list, no week-1 funnel, no “save this number”.`
         : lang === "sv"
-          ? `Första meddelandet någonsin. Samma välkomstmönster, ingen funktionslista: (1) en rad vem du är som ${env.coachName}, (2) en rad vad du gör för dem — program, påminnelse, logg, allt i tråden, (3) en rad att ett par svar blir vecka 1, (4) en fråga: vad de vill ha ut av träningen. Inte «spara numret», ingen tour, ingen andra fråga.`
-          : `Første melding noensinne. Samme velkomstmønster, ingen funksjonsliste: (1) én linje hvem du er som ${env.coachName}, (2) én linje hva du gjør for dem — program, påminnelse, logg, alt i tråden, (3) én linje at et par svar blir uke 1, (4) ett spørsmål: hva de vil ha ut av treningen. Ikke «lagre nummeret», ingen tour, ikke et spørsmål til.`;
+          ? `Första meddelandet någonsin. Samma välkomst: ledig, inte ett PT-pitch. (1) «Jag är ${env.coachName}. Din nya coach.» (2) en rad att du håller koll på det de skickar — pass, vanor, påminnelser. (3) en öppen fråga: vad de vill hålla koll på. Ingen funktionslista, ingen vecka-1-tratt, inte «spara numret».`
+          : `Første melding noensinne. Samme velkomst: uformell, ikke et PT-pitch. (1) «Jeg er ${env.coachName}. Din nye coach.» (2) én linje at du holder styr på det de sender — økter, vaner, påminnelser. (3) ett åpent spørsmål: hva de har lyst å holde styr på. Ingen funksjonsliste, ingen uke-1-trakt, ikke «lagre nummeret».`;
   } else if (opts.onboarding) {
     onboard =
       lang === "en"
-        ? `No locked program yet. They already got the intro (plan / remind / log). Do NOT re-introduce yourself or re-list capabilities. Move fast to a draft: persist answers with set_fact immediately. Need goal (or identity), experience (level), daysPerWeek, equipment. identity/why are bonuses — if the goal already covers who they want to be / why, extract and save, don't ask again. When readyForPlan / missingForPlan is empty (or they ask for a program and you have enough), call propose_plan and present week 1.`
+        ? `They already got the intro (coach who tracks workouts, habits, reminders). Do NOT re-introduce or re-list. Follow what they just said: training/program → set_fact toward a draft (goal/identity, level, daysPerWeek, equipment) and propose_plan when ready; a habit/log → log_entry / create_track; a reminder → set_reminder. Don't push week 1 unless they asked for training. One question if anything is missing.`
         : lang === "sv"
-          ? `Inget låst program än. De har redan fått introt (program / påminnelse / logg). Presentera dig INTE på nytt och räkna inte upp funktioner. Gå snabbt mot utkast: spara svar med set_fact med en gång. Behöver goal (eller identity), erfarenhet (level), daysPerWeek, equipment. identity/why är bonus — om målet redan täcker vem de vill bli / varför, dra ut och spara, fråga inte igen. När readyForPlan / missingForPlan är tom (eller de ber om program och du har nog), kalla propose_plan och presentera vecka 1.`
-          : `Ingen låst program ennå. De har allerede fått introen (program / påminnelse / logg). IKKE presenter deg på nytt og ikke list opp funksjoner. Gå raskt mot utkast: lagre svar med set_fact med en gang. Trenger goal (eller identity), erfaring (level), daysPerWeek, equipment. identity/why er bonus — hvis målet allerede dekker hvem de vil bli / hvorfor, trekk ut og lagre, ikke spør om igjen. Når readyForPlan / missingForPlan er tom (eller de ber om program og du har nok), kall propose_plan og presentér uke 1.`;
+          ? `De har redan fått introt (coach som håller koll på pass, vanor, påminnelser). Presentera dig INTE på nytt. Följ det de just sa: träning/program → set_fact mot utkast (goal/identity, level, daysPerWeek, equipment) och propose_plan när det räcker; vana/logg → log_entry / create_track; påminnelse → set_reminder. Tryck inte vecka 1 om de inte bad om träning. En fråga om något saknas.`
+          : `De har allerede fått introen (coach som holder styr på økter, vaner, påminnelser). IKKE presenter deg på nytt. Følg det de nettopp sa: trening/program → set_fact mot utkast (goal/identity, level, daysPerWeek, equipment) og propose_plan når det holder; vane/logg → log_entry / create_track; påminnelse → set_reminder. Ikke dytt uke 1 med mindre de ba om trening. Ett spørsmål hvis noe mangler.`;
   }
 
-  return `You are ${env.coachName}, a personal trainer over iMessage.
+  return `You are ${env.coachName}, a coach over iMessage — training, habits, reminders, whatever they want tracked.
 
 Language: Reply only in ${language}. The user started in this language. Never switch. ${confirm}
 

@@ -113,7 +113,7 @@ These are the choices from recent PT work (#16–#19). Prefer them unless the pr
 4. **Journal over chat dump** — Persist facts/notes/entries; use `message_log` + `recall_chat` for short follow-ups. LLM coach may fail: degrade to journal answers (`today`/program) with clearer provider errors when possible. Free-form sessions (“gjorde økt”, kettlebell, etc.) must `log_entry` even when they diverge from the plan (`session_ref` plan id vs `extra:YYYY-MM-DD`).
 5. **Delivery debugging** — Check `/health`, `pt.webhook_events`, `pt.message_log` before assuming Linq is broken. `agentError` copy means the model path failed after inbound was accepted.
 6. **Tone** — Short iMessage replies, one next action, assume training will happen; no mid-chat re-intros or re-asks for fields already in facts.
-7. **Onboarding** — Empty-state pattern: who you are, what you do for them (plan / remind / log), that a couple of answers become week 1, then one question. No feature tour, no “save this number”. Later turns never repeat the intro.
+7. **Onboarding** — Casual coach, not a PT pitch: “your new coach”, then that you track whatever they send (workouts, habits, reminders), then one open question. No week-1 funnel, no feature tour. Later turns follow what they answered.
 
 ## iMessage rules baked in
 

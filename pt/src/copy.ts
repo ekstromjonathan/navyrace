@@ -110,6 +110,12 @@ export function inviteDenied(lang: Lang, name: string | null, phone: string): st
   );
 }
 
+/** Greeting uses the first given name, not the full legal name. */
+export function firstName(name: string | null | undefined): string | null {
+  const first = name?.trim().split(/\s+/)[0];
+  return first || null;
+}
+
 export function inviteWelcome(lang: Lang, name: string | null, coach: string): string {
   const who = firstName(name);
   const hello = who
@@ -117,16 +123,10 @@ export function inviteWelcome(lang: Lang, name: string | null, coach: string): s
     : pick(lang, "Hi", "Hei", "Hej");
   return pick(
     lang,
-    `${hello}. I'm ${coach} — your PT in iMessage.\n\nI write the plan, remind you, and log what you do. Just text here.\n\nA couple of questions, then you get week 1. What do you want from training?`,
-    `${hello}. Jeg er ${coach} — PT over iMessage.\n\nJeg lager programmet, minner deg, og logger det du gjør. Bare skriv her.\n\nEt par spørsmål, så får du uke 1. Hva vil du ha ut av treningen?`,
-    `${hello}. Jag är ${coach} — PT över iMessage.\n\nJag gör programmet, påminner dig, och loggar det du gör. Skriv bara här.\n\nEtt par frågor, sen får du vecka 1. Vad vill du ha ut av träningen?`,
+    `${hello} — I'm ${coach}. Your new coach.\n\nWorkouts, habits, reminders — tell me, I'll keep track.\n\nWhat do you want to keep on top of?`,
+    `${hello} — jeg er ${coach}. Din nye coach.\n\nØkter, vaner, påminnelser — si ifra, så tar jeg det.\n\nHva har du lyst å holde styr på?`,
+    `${hello} — jag är ${coach}. Din nya coach.\n\nPass, vanor, påminnelser — säg till, så tar jag det.\n\nVad vill du hålla koll på?`,
   );
-}
-
-/** Greeting uses the first given name, not the full legal name. */
-export function firstName(name: string | null | undefined): string | null {
-  const first = name?.trim().split(/\s+/)[0];
-  return first || null;
 }
 
 export function reminderScopeAsk(lang: Lang, hour: number, minute: number): string {

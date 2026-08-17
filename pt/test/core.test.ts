@@ -262,24 +262,24 @@ describe("locale", () => {
 });
 
 describe("invite welcome", () => {
-  it("orients then asks one question, with no Linq page URL", async () => {
+  it("is a casual coach, not a PT pitch", async () => {
     const { inviteWelcome, firstName } = await import("../src/copy.ts");
     assert.equal(firstName("Inger Elise Kjøndal Ekström"), "Inger");
     assert.equal(firstName(null), null);
     const nb = inviteWelcome("nb", "Inger Elise Kjøndal Ekström", "lodd.ai");
-    assert.match(nb, /^Hei Inger\./);
-    assert.match(nb, /programmet/i);
-    assert.match(nb, /minner/i);
-    assert.match(nb, /logger/i);
-    assert.match(nb, /uke 1/i);
-    assert.match(nb, /Hva vil du ha ut av treningen\?/);
-    assert.equal(nb.includes("velkommen"), false);
-    assert.equal(/lagre nummeret/i.test(nb), false);
+    assert.match(nb, /^Hei Inger —/);
+    assert.match(nb, /din nye coach/i);
+    assert.match(nb, /økter/i);
+    assert.match(nb, /vaner/i);
+    assert.match(nb, /påminnelser/i);
+    assert.match(nb, /Hva har du lyst å holde styr på\?/);
+    assert.equal(/\bPT\b/.test(nb), false);
+    assert.equal(/uke 1/i.test(nb), false);
     assert.equal(/https?:\/\//i.test(nb), false);
     assert.equal(/linq/i.test(nb), false);
     const en = inviteWelcome("en", "Inger", "lodd.ai");
-    assert.match(en, /week 1/i);
-    assert.match(en, /What do you want from training\?/);
+    assert.match(en, /your new coach/i);
+    assert.match(en, /habits/i);
     assert.equal(/linqapp\.com/i.test(en), false);
   });
 });
