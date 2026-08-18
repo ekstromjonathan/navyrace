@@ -237,6 +237,16 @@ export function setPlan(trackId: string, plan: Plan): TrackRow {
   return getTrack(trackId)!;
 }
 
+export function patchPlan(trackId: string, plan: Plan): TrackRow {
+  run(
+    "UPDATE tracks SET plan = ?, version = version + 1, updated_at = ? WHERE id = ?",
+    JSON.stringify(plan),
+    nowIso(),
+    trackId,
+  );
+  return getTrack(trackId)!;
+}
+
 export function planOf(track: TrackRow): Plan | null {
   return parseJson<Plan | null>(track.plan, null);
 }

@@ -147,6 +147,33 @@ export function buildDayView(
   return { kind: "session", weekday, week, session, load: adapted.load, adapt: adapted.adapt };
 }
 
+/** Sessions in `week` ordered by weekday. */
+export function sessionsInWeek(plan: Plan | null, week: number): PlanSession[] {
+  if (!plan?.sessions?.length) return [];
+  return assignSessionDays(plan)
+    .sessions.filter((s) => (s.week ?? 1) === week)
+    .slice()
+    .sort((a, b) => (a.day ?? 0) - (b.day ?? 0));
+}
+
+/** Upcoming planned sessions after `fromYmd` (exclusive), same or later weeks. */
+export function upcomingSessions(
+  plan: Plan | null,
+  startedOn: string,
+  fromYmd: string,
+  limit = 6,
+): { ymd: string; session: PlanSession }[] {
+  if (!plan?.sessions?.length) return [];
+  const assigned = assignSessionDays(plan);
+  const out: { ymd: string; session: PlanSession }[] = [];
+  for (let i = 1; i <= 21 && out.length < limit; i++) {
+    const ymd = addLocalDays(fromYmd, i);
+    const view = buildDayView(assigned, [], ymd, startedOn);
+    if (view.kind === "session") out.push({ ymd, session: view.session });
+  }
+  return out;
+}
+
 export function snapshotToday(view: DayView): Record<string, unknown> | null {
   if (view.kind === "none") return null;
   const base = {

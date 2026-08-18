@@ -41,6 +41,7 @@ export type Pending =
       note: string;
       quality: string | null;
       claimsPlanned: boolean;
+      extra?: boolean;
       askedAt: string;
     }
   | {
