@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { getDb, nowIso, parseJson, todayInTz } from "./db.ts";
+import {
+  applyLoadAdapt,
+  buildDayView,
+  snapshotToday,
+  stampPlanOnActivate,
+  startedOnOf,
+  type DayView,
+} from "./calendar.ts";
 import type {
   ChatTurn,
   InviteRow,
@@ -243,7 +251,19 @@ export function activateTrack(trackId: string): TrackRow {
       throw new Error("active training exists — archive it first");
     }
   }
-  run("UPDATE tracks SET status = 'active', updated_at = ? WHERE id = ?", nowIso(), trackId);
+  const user = getUser(track.user_id);
+  const tz = user?.tz || "Europe/Oslo";
+  const stamped = stampPlanOnActivate(planOf(track), todayInTz(tz));
+  if (stamped) {
+    run(
+      "UPDATE tracks SET status = 'active', plan = ?, updated_at = ? WHERE id = ?",
+      JSON.stringify(stamped),
+      nowIso(),
+      trackId,
+    );
+  } else {
+    run("UPDATE tracks SET status = 'active', updated_at = ? WHERE id = ?", nowIso(), trackId);
+  }
   return getTrack(trackId)!;
 }
 
@@ -553,42 +573,45 @@ export function lastRpeForLoadKey(userId: string, loadKey: string): string | nul
   return rec?.quality ?? null;
 }
 
-const RPE_MULT: Record<string, number> = { lett: 1.08, passe: 1, brutalt: 0.9 };
-
-export function nextSession(userId: string, track: TrackRow): { session: PlanSession; load: number | null; adapt: "lett" | "brutalt" | null } | null {
-  const plan = planOf(track);
-  if (!plan?.sessions?.length) return null;
-  const done = new Set(
+function doneSessionRefs(trackId: string): Set<string> {
+  return new Set(
     rows<{ session_ref: string }>(
-      "SELECT session_ref FROM entries WHERE track_id = ? AND archived_at IS NULL AND session_ref IS NOT NULL AND quality != 'hoppet'",
-      track.id,
+      "SELECT session_ref FROM entries WHERE track_id = ? AND archived_at IS NULL AND session_ref IS NOT NULL AND IFNULL(quality, '') != 'hoppet'",
+      trackId,
     )
       .map((r) => r.session_ref)
       .filter(Boolean),
   );
+}
+
+export function nextSession(userId: string, track: TrackRow): { session: PlanSession; load: number | null; adapt: "lett" | "brutalt" | null } | null {
+  const plan = planOf(track);
+  if (!plan?.sessions?.length) return null;
+  const done = doneSessionRefs(track.id);
   const session = plan.sessions.find((s) => !done.has(s.id)) ?? null;
   if (!session) return null;
-  let load = session.load ?? null;
-  let adapt: "lett" | "brutalt" | null = null;
-  if (load != null && session.loadKey) {
-    const prev = lastRpeForLoadKey(userId, session.loadKey);
-    const m = prev ? RPE_MULT[prev] : null;
-    if (m && m !== 1) {
-      const unit = session.unit === "km" ? Math.round(load * m * 2) / 2 : Math.round(load * m);
-      if (unit !== load) {
-        load = unit;
-        adapt = prev === "lett" ? "lett" : "brutalt";
-      }
-    }
-  }
-  return { session, load, adapt };
+  const prev = session.loadKey ? lastRpeForLoadKey(userId, session.loadKey) : null;
+  const adapted = applyLoadAdapt(session, prev);
+  return { session, load: adapted.load, adapt: adapted.adapt };
+}
+
+export function todayView(user: UserRow, at?: string): DayView {
+  const training = activeTraining(user.id);
+  if (!training) return { kind: "none" };
+  const plan = planOf(training);
+  if (!plan?.sessions?.length) return { kind: "none" };
+  const today = at ?? todayInTz(user.tz);
+  const startedOn = startedOnOf(training, plan, user.tz);
+  return buildDayView(plan, doneSessionRefs(training.id), today, startedOn, (loadKey) =>
+    lastRpeForLoadKey(user.id, loadKey),
+  );
 }
 
 export function snapshot(user: UserRow) {
   const tracks = listTracks(user.id).filter((t) => t.status !== "archived");
   const training = activeTraining(user.id);
   const draft = draftTraining(user.id);
-  const today = training ? nextSession(user.id, training) : null;
+  const view = todayView(user);
   return {
     facts: factsOf(user),
     pending: pendingOf(user),
@@ -606,17 +629,7 @@ export function snapshot(user: UserRow) {
       ? { id: training.id, name: training.name, version: training.version }
       : null,
     draftTraining: draft ? { id: draft.id, name: draft.name, version: draft.version } : null,
-    today: today
-      ? {
-          id: today.session.id,
-          title: today.session.title,
-          load: today.load,
-          unit: today.session.unit,
-          items: (today.session.items ?? []).slice(0, 6),
-          est: today.session.est,
-          adapt: today.adapt,
-        }
-      : null,
+    today: snapshotToday(view),
     recentEntries: recentEntries(user.id, 8),
     recentNotes: recentNotes(user.id, 8),
     recentChat: recentChat(user.id, 24),

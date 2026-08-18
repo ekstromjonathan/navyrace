@@ -17,8 +17,16 @@ import * as copy from "./copy.ts";
 import * as linq from "./linq.ts";
 import { normalizeEvent } from "./webhook.ts";
 import { detectLang, isLang, type Lang } from "./locale.ts";
+import { missingForPlan } from "./plan-facts.ts";
 import { addLocalDays, dayAnchorIso, resolveOnceOn, todayInTz } from "./db.ts";
 import type { Inbound, InviteRow, UserRow } from "./types.ts";
+
+type ReplyResult = { text: string; effect?: string };
+
+function asReply(value: string | ReplyResult | null): ReplyResult | null {
+  if (!value) return null;
+  return typeof value === "string" ? { text: value } : value;
+}
 
 async function lockLang(user: UserRow, body: string): Promise<{ user: UserRow; lang: Lang; onboarding: boolean }> {
   const facts = journal.factsOf(user);
@@ -37,7 +45,7 @@ async function lockLang(user: UserRow, body: string): Promise<{ user: UserRow; l
 async function reply(
   chatId: string,
   text: string,
-  opts?: { overrideOptout?: boolean; replyTo?: string; userId?: string },
+  opts?: { overrideOptout?: boolean; replyTo?: string; userId?: string; effect?: string },
 ) {
   const clipped = text.trim().slice(0, 1200);
   if (!clipped) return;
@@ -50,7 +58,7 @@ async function reply(
   if (opts?.userId) await journal.logMessage(opts.userId, "pt", clipped);
 }
 
-async function withTyping(chatId: string, fn: () => Promise<string>): Promise<string> {
+async function withTyping<T>(chatId: string, fn: () => Promise<T>): Promise<T> {
   await linq.startTyping(chatId);
   try {
     return await fn();
@@ -205,20 +213,20 @@ async function commitSessionLog(
     claimsPlanned: boolean;
     messageId?: string;
   },
-): Promise<string> {
+): Promise<ReplyResult> {
   const training = await journal.activeTraining(user.id);
-  if (!training) return copy.sessionNoPlan(lang);
+  if (!training) return { text: copy.sessionNoPlan(lang) };
 
   const today = todayInTz(user.tz);
   const dayYmd = opts.day === "today" ? today : addLocalDays(today, -1);
-  const next = await journal.nextSession(user.id, training);
-  const planned = Boolean(opts.claimsPlanned && next);
+  const view = await journal.todayView(user, dayYmd);
+  const planned = opts.claimsPlanned && view.kind === "session";
   const sessionRef = planned
-    ? next!.session.id
+    ? view.session.id
     : opts.claimsPlanned
       ? null
       : `extra:${dayYmd}`;
-  const title = planned ? next!.session.title : shortSessionTitle(opts.note);
+  const title = planned ? view.session.title : shortSessionTitle(opts.note);
 
   const result = await journal.logEntry({
     trackId: training.id,
@@ -230,7 +238,7 @@ async function commitSessionLog(
     linqMessageId: opts.messageId ?? null,
     occurredAt: dayAnchorIso(dayYmd),
   });
-  if (result.duplicate) return copy.duplicateLog(lang);
+  if (result.duplicate) return { text: copy.duplicateLog(lang) };
 
   const askRpe = !opts.quality;
   if (askRpe && result.id) {
@@ -243,15 +251,17 @@ async function commitSessionLog(
     await journal.setPending(user.id, null);
   }
 
-  return copy.sessionLogged(lang, {
+  const text = copy.sessionLogged(lang, {
     title,
     dayLabel: dayLabel(lang, opts.day),
     planned,
     askRpe,
   });
+  const celebrate = opts.quality !== "hoppet";
+  return { text, effect: celebrate ? "confetti" : undefined };
 }
 
-async function handlePending(user: UserRow, lang: Lang, body: string): Promise<string | null> {
+async function handlePending(user: UserRow, lang: Lang, body: string): Promise<string | ReplyResult | null> {
   const pending = journal.pendingOf(user);
   if (!pending) return null;
 
@@ -376,24 +386,29 @@ async function formatToday(user: UserRow, lang: Lang): Promise<string> {
     if (draft) return copy.todayDraft(lang, draft.name);
     return copy.todayNoPlan(lang);
   }
-  const next = await journal.nextSession(user.id, training);
-  if (!next) return copy.todayDone(lang, training.name);
-  const items = (next.session.items ?? []).slice(0, 5).map((it) => `• ${it.name}${it.detail ? ` — ${it.detail}` : ""}`);
-  const load = next.load != null ? `${next.load}${next.session.unit ? ` ${next.session.unit}` : ""}` : "";
-  const heading =
-    lang === "en"
-      ? `Today: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
-      : lang === "sv"
-        ? `Idag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`
-        : `I dag: ${next.session.title}${load ? ` (${load})` : ""}${next.session.est ? ` · ${next.session.est}` : ""}`;
+  const view = await journal.todayView(user);
+  if (view.kind === "complete") return copy.todayDone(lang, training.name);
+  if (view.kind === "rest") return copy.restDayTips(lang, view.weekday);
+  if (view.kind === "logged") return copy.todayLogged(lang, view.session.title);
+  if (view.kind !== "session") return copy.todayNoPlan(lang);
+  const items = (view.session.items ?? []).slice(0, 5).map((it) => `• ${it.name}${it.detail ? ` — ${it.detail}` : ""}`);
   return [
-    heading,
+    copy.sessionHeading(lang, view.session, view.load),
     ...items,
-    next.adapt ? copy.adaptNote(lang, next.adapt) : null,
+    view.adapt ? copy.adaptNote(lang, view.adapt) : null,
     copy.todayFooter(lang),
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+async function formatGreeting(user: UserRow, lang: Lang): Promise<string> {
+  const view = await journal.todayView(user);
+  const draft = await journal.draftTraining(user.id);
+  return copy.greetingReply(lang, view, {
+    missingForPlan: missingForPlan(journal.factsOf(user)),
+    draftName: draft?.name ?? null,
+  });
 }
 
 async function commitReminderSet(
@@ -418,9 +433,11 @@ async function commitReminderSet(
     : copy.reminderConfirm(lang, hour, minute, user.tz);
 }
 
-async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Promise<string | null> {
+async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Promise<string | ReplyResult | null> {
   const parsed = parseMessage(inbound.body);
   if (!parsed.confident) return null;
+
+  if (parsed.kind === "greeting") return formatGreeting(user, lang);
 
   if (parsed.kind === "today") return formatToday(user, lang);
 
@@ -524,15 +541,15 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
       return copy.rpeLogged(lang, parsed.quality);
     }
 
-    const next = await journal.nextSession(user.id, training);
-    if (!next && parsed.quality !== "hoppet") {
+    const view = await journal.todayView(user);
+    if (view.kind !== "session" && parsed.quality !== "hoppet") {
       return copy.rpeNeedSession(lang);
     }
     await journal.logEntry({
       trackId: training.id,
       userId: user.id,
       quality: parsed.quality,
-      sessionRef: next?.session.id ?? null,
+      sessionRef: view.kind === "session" ? view.session.id : null,
       source: "heuristic",
       linqMessageId: inbound.messageId,
     });
@@ -613,9 +630,13 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       }
     }
 
-    const pendingReply = await handlePending(current, lang, inbound.body);
-    if (pendingReply) {
-      await reply(inbound.chatId, pendingReply, { replyTo: inbound.messageId, userId: current.id });
+    const pendingOut = asReply(await handlePending(current, lang, inbound.body));
+    if (pendingOut) {
+      await reply(inbound.chatId, pendingOut.text, {
+        replyTo: inbound.messageId,
+        userId: current.id,
+        effect: pendingOut.effect,
+      });
       const pendingParsed = parseMessage(inbound.body);
       if (pendingParsed.kind === "rpe" && pendingParsed.quality !== "hoppet") {
         await linq.reactLove(inbound.messageId);
@@ -625,9 +646,13 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
     }
 
     if (!onboarding) {
-      const heuristic = await applyHeuristic(current, lang, inbound);
-      if (heuristic) {
-        await reply(inbound.chatId, heuristic, { replyTo: inbound.messageId, userId: current.id });
+      const heuristicOut = asReply(await applyHeuristic(current, lang, inbound));
+      if (heuristicOut) {
+        await reply(inbound.chatId, heuristicOut.text, {
+          replyTo: inbound.messageId,
+          userId: current.id,
+          effect: heuristicOut.effect,
+        });
         const parsed = parseMessage(inbound.body);
         if (parsed.kind === "rpe" && parsed.quality !== "hoppet") {
           await linq.reactLove(inbound.messageId);
@@ -637,15 +662,28 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       }
     }
 
-    let text = await withTyping(inbound.chatId, () =>
+    let agent = await withTyping(inbound.chatId, () =>
       runAgent(current, inbound.body, inbound.messageId, { lang, onboarding }),
     );
     /* If OpenRouter hiccups: prefer session-log heuristic over dumping “today”. */
-    if (copy.isAgentFailureReply(text) && !onboarding) {
-      const again = await applyHeuristic(current, lang, inbound);
-      text = again ?? (await formatToday(current, lang));
+    if (copy.isAgentFailureReply(agent.text) && !onboarding) {
+      const again = asReply(await applyHeuristic(current, lang, inbound));
+      if (again) agent = { text: again.text, celebrate: Boolean(again.effect) };
+      else {
+        const parsed = parseMessage(inbound.body);
+        agent = {
+          text:
+            parsed.kind === "greeting"
+              ? await formatGreeting(current, lang)
+              : await formatToday(current, lang),
+        };
+      }
     }
-    await reply(inbound.chatId, text, { replyTo: inbound.messageId, userId: current.id });
+    await reply(inbound.chatId, agent.text, {
+      replyTo: inbound.messageId,
+      userId: current.id,
+      effect: agent.celebrate ? "confetti" : undefined,
+    });
     await maybeCard(current, inbound.chatId);
   } catch (err) {
     console.error("handleInbound failed", err);

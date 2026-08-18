@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.ts";
 import { resolveOnceOn, addLocalDays, dayAnchorIso, todayInTz } from "./db.ts";
+import { assignSessionDays } from "./calendar.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
 import type { Lang } from "./locale.ts";
@@ -10,7 +11,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "get_snapshot",
     description:
-      "Les journalen: facts, missingForPlan, spor, dagens økt, logger, notater, påminnelser. Kall tidlig. Dette er sannheten du bygger på.",
+      "Les journalen: facts, missingForPlan, spor, dagens kalenderøkt (eller hviledag), logger, notater, påminnelser. Kall tidlig. today er DENNE ukedagen — ikke neste uloggede økt fra en annen dag.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -28,7 +29,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "log_entry",
     description:
-      "Logg noe brukeren gjorde. Viktig: når de sier de har trent / gjort en økt — også hvis det IKKE matcher planen — kall dette med en gang. Bruk kind=training, note=hva de faktisk gjorde. sessionRef=plan-id (f.eks. w1d1) hvis det er dagens/planlagte økt (eller de sier «dagens økt»); ellers sessionRef=extra:YYYY-MM-DD så det trackes uten å hoppe i planen. day=today|yesterday — hvis usikkert hvilken dag: IKKE gjett, spør «i dag eller i går?» først.",
+      "Logg noe brukeren gjorde. Viktig: når de sier de har trent / gjort en økt — også hvis det IKKE matcher planen — kall dette med en gang. Bruk kind=training, note=hva de faktisk gjorde. sessionRef=plan-id (f.eks. w1d0) KUN hvis snapshot.today har id og rest=false (dagens kalenderøkt); ellers sessionRef=extra:YYYY-MM-DD så det trackes uten å hoppe i planen. day=today|yesterday — hvis usikkert hvilken dag: IKKE gjett, spør «i dag eller i går?» først.",
     input_schema: {
       type: "object",
       properties: {
@@ -109,6 +110,10 @@ const TOOLS: Anthropic.Messages.Tool[] = [
             properties: {
               id: { type: "string" },
               week: { type: "number" },
+              day: {
+                type: "number",
+                description: "Ukedag: 0=mandag … 6=søndag. Hver økt hører til én ukedag.",
+              },
               title: { type: "string" },
               loadKey: { type: "string" },
               load: { type: "number" },
@@ -234,17 +239,21 @@ Language: Reply only in ${language}. The user started in this language. Never sw
 - Don't keep re-asking them to lock after they've already asked to start / said kjør.
 
 ## Training stance
-- Assume they want to train and will train. Never ask “are you training today?” / “do you have time to train?”. Present today's session (or the next step toward a plan).
+- Sessions belong to weekdays. snapshot.today is THIS calendar day's slot — never the next unlogged session from another day.
+- Rest day (today.rest): do NOT suggest the next training session. Keep the chat going and give short recovery tips (walk, food, sleep, easy mobility). They can still log an extra session.
+- Greeting (hei / hallo / hey / hi with little else): keep a short dialogue. Hint the next step in one line — do not dump today's workout. Rest day → rest tips as the hint. Training day → name today's session and offer details if they ask. No plan → hint the missing onboarding step. Already logged today → acknowledge, don't pitch tomorrow.
+- When they ask “i dag” / “hva trener jeg”: then give the session details (or rest tips).
+- Assume they want to train on training days. Never ask “are you training today?” / “do you have time to train?”.
 - When they report a workout (done / finished / “gjorde økt” / logged kettlebell etc.): ALWAYS call log_entry immediately — even if it wasn't exactly the prescribed session. Put what they actually did in note.
 - If which calendar day is unclear (no “i dag” / “i går” / “nå”), ask one short question: today or yesterday? Do not guess.
-- Planned session (“dagens økt” or matching today): sessionRef = today's plan id from snapshot. Extra/different session: sessionRef = extra:YYYY-MM-DD so it still tracks the day without skipping ahead in the plan.
-- After a session is logged: ask how hard it felt — lett / passe / brutalt — and how it felt in the body. Log quality. Next similar planned session auto-adjusts.
-- When a plan is active: lead with today's session, not a check-in about motivation to show up. Never answer a log with only the plan dump — persist first.
+- Planned session (“dagens økt” or matching today): sessionRef = snapshot.today.id only when rest is false and it isn't already logged. Extra/different session or rest-day training: sessionRef = extra:YYYY-MM-DD so it still tracks the day without skipping ahead in the plan.
+- After a session is logged: celebrate briefly (the system may send iMessage confetti). Ask how hard it felt — lett / passe / brutalt — and how it felt in the body. Log quality. Do not immediately pitch the next day's session.
+- When a plan is active: on a training day you may lead with today's session if they asked for it. Never answer a log with only the plan dump — persist first.
 
 ## Style
 - Max 4–6 lines. One next action. At most one question.
 - Plain, informal words. No jargon (RPE, OCR, HIIT, zone 2) — say how hard it felt, obstacle race, intervals, easy conversational pace.
-- Sound like a friend who knows training. Short ack, then move forward. No effects, no spam. Include a link in replies only when the user shared one and asked for a reminder ping.
+- Sound like a friend who knows training. Short ack, then move forward. No spam. Include a link in replies only when the user shared one and asked for a reminder ping. Confetti is reserved for a completed session — not greetings.
 - You are not a doctor. On pain: log it, ease load, refer out if it lasts.
 - Don't invent history. Don't delete active programs — request_archive. Don't hard-delete logs — archive_entry.
 - Reminders via set_reminder when they ask. Infer once (i kveld/i dag) vs daily — no confirmation gate. Pass url when they share a video/link. Video/link pings fire even if they already logged training that day. Training pings skip if a session is already logged. One-shot disables after firing.
@@ -274,8 +283,8 @@ async function generatePlanWithSmart(user: UserRow, input: Record<string, unknow
     model: env.smartModel,
     max_tokens: 4096,
     system: `Du er programmer-hatten til ${env.coachName}. Skriv KUN JSON:
-{"weeks":number,"daysPerWeek":number,"sessions":[{"id":"w1d1","week":1,"title":string,"loadKey":string,"load":number,"unit":string,"est":string,"items":[{"name":string,"detail":string}]}]}
-Regler: utstyr og skader i facts styrer øvelsene. loadKey grupperer like økter så innsats-tilbakemelding (lett/passe/brutalt) kan justere neste. 3–6 økter per uke. Enkelt språk i titler og detaljer — ingen forkortelser. Ikke prosa.`,
+{"weeks":number,"daysPerWeek":number,"sessions":[{"id":"w1d0","week":1,"day":0,"title":string,"loadKey":string,"load":number,"unit":string,"est":string,"items":[{"name":string,"detail":string}]}]}
+Regler: utstyr og skader i facts styrer øvelsene. loadKey grupperer like økter så innsats-tilbakemelding (lett/passe/brutalt) kan justere neste. 3–6 økter per uke. day er ukedag 0=mandag … 6=søndag — samme ukedager hver uke, hviledager har ingen økt. id som w{uke}d{ukedag}. Enkelt språk i titler og detaljer — ingen forkortelser. Ikke prosa.`,
     messages: [
       {
         role: "user",
@@ -359,7 +368,15 @@ async function runTool(
         linqMessageId: `${messageId}:${slug}`,
         occurredAt,
       });
-      return JSON.stringify({ ok: true, trackId: track.id, duplicate: result.duplicate, id: result.id });
+      const celebrate =
+        kind === "training" && !result.duplicate && String(input.quality || "") !== "hoppet";
+      return JSON.stringify({
+        ok: true,
+        trackId: track.id,
+        duplicate: result.duplicate,
+        id: result.id,
+        celebrate,
+      });
     }
     case "add_note":
       return JSON.stringify({
@@ -409,6 +426,7 @@ async function runTool(
         return JSON.stringify({ error: err instanceof Error ? err.message : "programmer failed" });
       }
       if (!plan.sessions?.length) return JSON.stringify({ error: "sessions required" });
+      plan = assignSessionDays(plan);
       let track = input.trackId
         ? await journal.getTrack(String(input.trackId))
         : await journal.draftTraining(user.id);
@@ -441,6 +459,7 @@ async function runTool(
         sessionCount: plan.sessions.length,
         week1: week1.map((s) => ({
           title: s.title,
+          day: s.day ?? null,
           est: s.est ?? null,
           load: s.load ?? null,
           unit: s.unit ?? null,
@@ -577,15 +596,17 @@ async function createWithRetry(
   }
 }
 
+export type AgentResult = { text: string; celebrate?: boolean };
+
 export async function runAgent(
   user: UserRow,
   body: string,
   messageId: string,
   opts: { lang: Lang; onboarding: boolean },
-): Promise<string> {
+): Promise<AgentResult> {
   const client = llmClient();
   if (!client) {
-    return copy.noLlm(opts.lang);
+    return { text: copy.noLlm(opts.lang) };
   }
   try {
     const snap = await journal.snapshot(user);
@@ -603,6 +624,7 @@ export async function runAgent(
       },
     ];
 
+    let celebrate = false;
     for (let i = 0; i < 6; i++) {
       const res = await createWithRetry(client, {
         model: env.model,
@@ -614,22 +636,37 @@ export async function runAgent(
       const toolUses = res.content.filter((c): c is Anthropic.Messages.ToolUseBlock => c.type === "tool_use");
       const texts = res.content.filter((c): c is Anthropic.Messages.TextBlock => c.type === "text").map((c) => c.text);
       if (res.stop_reason === "end_turn" || toolUses.length === 0) {
-        return (texts.join("\n").trim() || "Ok.").slice(0, 1200);
+        return { text: (texts.join("\n").trim() || "Ok.").slice(0, 1200), celebrate };
       }
       messages.push({ role: "assistant", content: res.content });
       const results: Anthropic.Messages.ToolResultBlockParam[] = [];
       for (const tu of toolUses) {
+        const content = await runTool(
+          user,
+          opts.lang,
+          tu.name,
+          (tu.input ?? {}) as Record<string, unknown>,
+          messageId,
+        );
+        if (tu.name === "log_entry") {
+          try {
+            const parsed = JSON.parse(content) as { celebrate?: boolean };
+            if (parsed.celebrate) celebrate = true;
+          } catch {
+            /* ignore */
+          }
+        }
         results.push({
           type: "tool_result",
           tool_use_id: tu.id,
-          content: await runTool(user, opts.lang, tu.name, (tu.input ?? {}) as Record<string, unknown>, messageId),
+          content,
         });
       }
       messages.push({ role: "user", content: results });
     }
-    return copy.agentStopped(opts.lang);
+    return { text: copy.agentStopped(opts.lang), celebrate };
   } catch (err) {
-    return copy.agentError(opts.lang, err);
+    return { text: copy.agentError(opts.lang, err) };
   }
 }
 

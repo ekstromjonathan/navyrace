@@ -107,6 +107,8 @@ export type TrackRow = {
 export type PlanSession = {
   id: string;
   week?: number;
+  /** Monday = 0 … Sunday = 6. Session belongs to this weekday, not a queue. */
+  day?: number;
   title: string;
   loadKey?: string;
   load?: number;
@@ -118,6 +120,8 @@ export type PlanSession = {
 export type Plan = {
   weeks?: number;
   daysPerWeek?: number;
+  /** Local YYYY-MM-DD when the plan was locked. Week 1 starts that week's Monday. */
+  startedOn?: string;
   sessions: PlanSession[];
 };
 

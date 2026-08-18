@@ -53,6 +53,35 @@ describe("parser", () => {
     assert.equal(parseMessage("Hva har du?").kind, "unknown");
   });
 
+  it("treats a bare hei as a greeting, not a workout dump", () => {
+    assert.equal(parseMessage("hei").kind, "greeting");
+    assert.equal(parseMessage("Hei!").kind, "greeting");
+    assert.equal(parseMessage("heisann").kind, "greeting");
+    assert.equal(parseMessage("god morgen").kind, "greeting");
+    assert.equal(parseMessage("hey").kind, "greeting");
+    assert.equal(parseMessage("Hei, jeg er sliten").kind, "unknown");
+  });
+
+  it("writes rest-day and greeting copy without pitching the next session", async () => {
+    const { restDayTips, greetingReply } = await import("../src/copy.ts");
+    const rest = restDayTips("nb", 1);
+    assert.match(rest, /hviledag|hvile/i);
+    assert.equal(/neste økt/i.test(rest), false);
+    const greet = greetingReply("nb", { kind: "rest", weekday: 1, week: 1 });
+    assert.match(greet, /^Hei/);
+    assert.equal(/neste økt/i.test(greet), false);
+    const train = greetingReply("nb", {
+      kind: "session",
+      weekday: 0,
+      week: 1,
+      session: { id: "w1a", title: "Styrke" },
+      load: 4,
+      adapt: null,
+    });
+    assert.match(train, /Styrke/);
+    assert.equal(/• /.test(train), false);
+  });
+
   it("detects LLM failure fallback copy", async () => {
     const { isAgentFailureReply, agentError } = await import("../src/copy.ts");
     assert.equal(isAgentFailureReply(agentError("nb", new Error("429 rate limit"))), true);

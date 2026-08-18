@@ -241,6 +241,48 @@ describe("journal", () => {
     assert.equal(await journal.archiveEntry({ userId: u.id, entryId: "missing" }), null);
   });
 
+  it("binds sessions to weekdays so a rest day is not the next økt", async () => {
+    const { addLocalDays } = await import("../src/db.ts");
+    const { weekdayMon0 } = await import("../src/calendar.ts");
+    const u = await journal.upsertUser("chat-cal", "+4740343210");
+    const draft = await journal.createTrack({
+      userId: u.id,
+      kind: "training",
+      slug: "program",
+      name: "Kalender",
+      status: "draft",
+      plan: {
+        daysPerWeek: 3,
+        weeks: 1,
+        sessions: [
+          { id: "w1a", week: 1, title: "Styrke" },
+          { id: "w1b", week: 1, title: "Intervall" },
+          { id: "w1c", week: 1, title: "Langtur" },
+        ],
+      },
+    });
+    const active = await journal.activateTrack(draft.id);
+    const plan = journal.planOf(active);
+    assert.match(plan?.startedOn ?? "", /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(plan?.sessions[0]?.day, 0);
+    assert.equal(plan?.sessions[1]?.day, 2);
+    const mon = addLocalDays(plan!.startedOn!, -weekdayMon0(plan!.startedOn!));
+    const tue = addLocalDays(mon, 1);
+    const monView = await journal.todayView(u, mon);
+    assert.equal(monView.kind, "session");
+    if (monView.kind === "session") assert.equal(monView.session.id, "w1a");
+    const tueView = await journal.todayView(u, tue);
+    assert.equal(tueView.kind, "rest");
+    await journal.logEntry({
+      trackId: active.id,
+      userId: u.id,
+      sessionRef: "w1a",
+      source: "heuristic",
+    });
+    const monAfter = await journal.todayView(u, mon);
+    assert.equal(monAfter.kind, "logged");
+  });
+
   it("stores waitlist invites until approved", async () => {
     const invite = await journal.upsertPendingInvite({
       phone: "+4711223344",

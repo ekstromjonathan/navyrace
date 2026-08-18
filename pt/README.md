@@ -114,6 +114,7 @@ These are the choices from recent PT work (#16–#19). Prefer them unless the pr
 5. **Delivery debugging** — Check `/health`, `pt.webhook_events`, `pt.message_log` before assuming Linq is broken. `agentError` copy means the model path failed after inbound was accepted.
 6. **Tone** — Short iMessage replies, one next action, assume training will happen; no mid-chat re-intros or re-asks for fields already in facts.
 7. **Onboarding** — Casual coach: “your new coach”, help them become a better version of themselves, then that you track whatever they send (workouts, habits, reminders), then one open question. No week-1 funnel, no feature tour. Later turns follow what they answered.
+8. **Calendar days** — Sessions belong to weekdays (`day` 0=Mon…6=Sun). Rest days: recovery tips, never the next session. Bare hei/hallo: short dialogue + one-line hint, not the workout dump. Completed sessions: celebrate (Linq screen effect `confetti`).
 
 ## iMessage rules baked in
 
