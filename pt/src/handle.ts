@@ -1,5 +1,5 @@
 import { env, isAllowlisted } from "./env.ts";
-import { parseMessage } from "./parser.ts";
+import { parseMessage, parseAdaptChoice, isDidYouHearMe } from "./parser.ts";
 import { isOptOut } from "./optout.ts";
 import {
   isActivatePhrase,
@@ -20,9 +20,9 @@ import { detectLang, isLang, type Lang } from "./locale.ts";
 import { missingForPlan } from "./plan-facts.ts";
 import { addLocalDays, dayAnchorIso, resolveOnceOn, todayInTz } from "./db.ts";
 import { isExtraWording, inferModality, modalityLabel } from "./activity.ts";
-import { adaptAfterLog } from "./adapt.ts";
+import { adaptAfterLog, applyAdaptChoice } from "./adapt.ts";
 import { startedOnOf, assignSessionDays } from "./calendar.ts";
-import { consecutiveConflict, coachFallback, loadAgenda } from "./fallback.ts";
+import { consecutiveConflict, coachFallback, loadAgenda, plannedSessionOf } from "./fallback.ts";
 import type { Inbound, InviteRow, UserRow } from "./types.ts";
 
 type ReplyResult = { text: string; effect?: string };
@@ -297,6 +297,52 @@ async function commitSessionLog(
   return { text, effect: celebrate ? "confetti" : undefined };
 }
 
+async function maybePendingAdapt(user: UserRow, text: string) {
+  if (!copy.isAdaptOffer(text)) return;
+  await journal.setPending(user.id, { type: "adapt_choice", askedAt: new Date().toISOString() });
+}
+
+async function commitAdaptChoice(
+  user: UserRow,
+  lang: Lang,
+  choice: "swap" | "ease" | "keep",
+): Promise<ReplyResult> {
+  const agenda = await loadAgenda(user);
+  const today = plannedSessionOf(agenda.today.view);
+  if (!agenda.plan || !agenda.track || !agenda.startedOn || !today || agenda.today.view.kind !== "session") {
+    await journal.setPending(user.id, null);
+    return { text: await formatWeek(user, lang) };
+  }
+  if (choice === "keep") {
+    await journal.setPending(user.id, null);
+    return { text: copy.adaptedKeep(lang, today.title) };
+  }
+  const result = applyAdaptChoice(agenda.plan, choice, {
+    startedOn: agenda.startedOn,
+    yesterdayYmd: agenda.yesterday.ymd,
+    yesterdayPlanned: plannedSessionOf(agenda.yesterday.view),
+    yesterdayModality: agenda.yesterday.actual?.modality ?? consecutiveConflict(agenda)?.yesterdayMod ?? null,
+    yesterdayNote: agenda.yesterday.actual?.note ?? undefined,
+    todaySession: today,
+  });
+  if (result.changed) {
+    await journal.patchPlan(agenda.track.id, assignSessionDays(result.plan));
+    await journal.addNote({
+      userId: user.id,
+      trackId: agenda.track.id,
+      kind: "adapt",
+      body: result.summaryNb.slice(0, 240),
+    });
+  }
+  await journal.setPending(user.id, null);
+  const next =
+    result.swappedToday?.title ??
+    result.plan.sessions.find((s) => s.id === today.id)?.title ??
+    today.title;
+  if (choice === "swap") return { text: copy.adaptedSwap(lang, next) };
+  return { text: copy.adaptedEase(lang, next) };
+}
+
 async function handlePending(user: UserRow, lang: Lang, body: string): Promise<string | ReplyResult | null> {
   const pending = journal.pendingOf(user);
   if (!pending) return null;
@@ -413,6 +459,18 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
         : "Trenger fortsatt innsats: lett / passe / brutalt.";
   }
 
+  if (pending.type === "adapt_choice") {
+    const choice = parseAdaptChoice(body);
+    if (choice) return commitAdaptChoice(user, lang, choice);
+    if (isActivateCancel(body)) {
+      await journal.setPending(user.id, null);
+      const agenda = await loadAgenda(user);
+      const today = plannedSessionOf(agenda.today.view);
+      return copy.adaptedKeep(lang, today?.title ?? "");
+    }
+    return null;
+  }
+
   return null;
 }
 
@@ -497,11 +555,26 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
   const parsed = parseMessage(inbound.body);
   if (!parsed.confident) return null;
 
-  if (parsed.kind === "greeting") return formatGreeting(user, lang);
+  if (parsed.kind === "greeting") {
+    const text = await formatGreeting(user, lang);
+    await maybePendingAdapt(user, text);
+    return text;
+  }
 
   if (parsed.kind === "today") return formatToday(user, lang);
 
   if (parsed.kind === "program") return formatWeek(user, lang);
+
+  if (parsed.kind === "adapt_choice") {
+    try {
+      const agenda = await loadAgenda(user);
+      if (consecutiveConflict(agenda) || journal.pendingOf(user)?.type === "adapt_choice") {
+        return commitAdaptChoice(user, lang, parsed.choice);
+      }
+    } catch {
+      /* fall through */
+    }
+  }
 
   if (parsed.kind === "video_link") {
     await journal.setPending(user.id, {
@@ -694,14 +767,21 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       }
     }
 
-    const pendingOut = asReply(await handlePending(current, lang, inbound.body));
+    const chat = await journal.recentChat(current.id, 20, inbound.messageId);
+    const previousUser = [...chat].reverse().find((m) => m.role === "user" && m.body.trim() !== inbound.body.trim());
+    const lastPt = [...chat].reverse().find((m) => m.role === "pt")?.body ?? null;
+    const work: Inbound = isDidYouHearMe(inbound.body) && previousUser
+      ? { ...inbound, body: previousUser.body }
+      : inbound;
+
+    const pendingOut = asReply(await handlePending(current, lang, work.body));
     if (pendingOut) {
       await reply(inbound.chatId, pendingOut.text, {
         replyTo: inbound.messageId,
         userId: current.id,
         effect: pendingOut.effect,
       });
-      const pendingParsed = parseMessage(inbound.body);
+      const pendingParsed = parseMessage(work.body);
       if (pendingParsed.kind === "rpe" && pendingParsed.quality !== "hoppet") {
         await linq.reactLove(inbound.messageId);
       }
@@ -710,14 +790,15 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
     }
 
     if (!onboarding) {
-      const heuristicOut = asReply(await applyHeuristic(current, lang, inbound));
+      const heuristicOut = asReply(await applyHeuristic(current, lang, work));
       if (heuristicOut) {
+        await maybePendingAdapt(current, heuristicOut.text);
         await reply(inbound.chatId, heuristicOut.text, {
           replyTo: inbound.messageId,
           userId: current.id,
           effect: heuristicOut.effect,
         });
-        const parsed = parseMessage(inbound.body);
+        const parsed = parseMessage(work.body);
         if (parsed.kind === "rpe" && parsed.quality !== "hoppet") {
           await linq.reactLove(inbound.messageId);
         }
@@ -727,26 +808,41 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
     }
 
     let agent = await withTyping(inbound.chatId, () =>
-      runAgent(current, inbound.body, inbound.messageId, { lang, onboarding, chatId: inbound.chatId }),
+      runAgent(current, work.body, inbound.messageId, { lang, onboarding, chatId: inbound.chatId }),
     );
-    /* If OpenRouter hiccups: answer from the journal — never dump today's workout as a fake reply. */
+    /* If OpenRouter hiccups: answer the actual message from the journal — never loop the same canned line. */
     if (copy.isAgentFailureReply(agent.text) && !onboarding) {
-      const again = asReply(await applyHeuristic(current, lang, inbound));
-      if (again) agent = { text: again.text, celebrate: Boolean(again.effect) };
-      else {
-        const parsed = parseMessage(inbound.body);
-        agent = {
-          text:
+      const choice = parseAdaptChoice(work.body);
+      if (choice) {
+        const acted = asReply(await commitAdaptChoice(current, lang, choice));
+        if (acted) agent = { text: acted.text, celebrate: Boolean(acted.effect) };
+      } else {
+        const again = asReply(await applyHeuristic(current, lang, work));
+        if (again) agent = { text: again.text, celebrate: Boolean(again.effect) };
+        else {
+          const parsed = parseMessage(work.body);
+          let text =
             parsed.kind === "greeting"
               ? await formatGreeting(current, lang)
               : parsed.kind === "today"
                 ? await formatToday(current, lang)
                 : parsed.kind === "program"
                   ? await formatWeek(current, lang)
-                  : await coachFallback(current, lang, inbound.body),
-        };
+                  : await coachFallback(current, lang, work.body, {
+                      lastPt,
+                      previousUser: previousUser?.body ?? null,
+                    });
+          if (copy.isAdaptOffer(agent.text) && copy.isAdaptOffer(text)) {
+            text = await coachFallback(current, lang, work.body, {
+              lastPt: text,
+              previousUser: previousUser?.body ?? null,
+            });
+          }
+          agent = { text: `${copy.modelDownLead(lang)}\n${text}` };
+        }
       }
     }
+    await maybePendingAdapt(current, agent.text);
     await reply(inbound.chatId, agent.text, {
       replyTo: inbound.messageId,
       userId: current.id,

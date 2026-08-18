@@ -1,6 +1,7 @@
 import { addLocalDays, localParts, todayInTz } from "./db.ts";
 import { inferModality, modalityLabel, modalityOfSession, stacksHard, type Modality } from "./activity.ts";
 import { assignSessionDays, startedOnOf } from "./calendar.ts";
+import { parseAdaptChoice, isDidYouHearMe } from "./parser.ts";
 import * as copy from "./copy.ts";
 import * as journal from "./journal.ts";
 import type { Lang } from "./locale.ts";
@@ -120,7 +121,7 @@ function isQuestion(body: string): boolean {
 }
 
 function wantsProgram(body: string): boolean {
-  return /\b(program|opplegg|ukeplan|planen som er satt|hvilken plan|days? per week|ganger (i|ila) uka|dager i uka)\b/i.test(
+  return /\b(program|opplegg|ukeplan|planen som er satt|hvilken plan|days? per week|ganger (i|ila) uka|dager i uka|hvor er vi|hvor står vi|denne uka|denne uken)\b/i.test(
     body,
   );
 }
@@ -134,7 +135,10 @@ function wantsReminders(body: string): boolean {
 }
 
 function consecutiveQuestion(body: string): boolean {
-  return /\b(også|igjen|bør vi|skal vi|to dager|på rad)\b/i.test(body) || /\bi går\b/i.test(body);
+  return (
+    /\b(også|igjen|bør vi|skal vi løpe|to dager|på rad|løpe i dag)\b/i.test(body) ||
+    (/\bi går\b/i.test(body) && /\b(i dag|også|igjen)\b/i.test(body))
+  );
 }
 
 export function consecutiveConflict(agenda: CoachAgenda): {
@@ -154,10 +158,22 @@ function isAck(body: string): boolean {
 }
 
 /** Journal-backed reply when the LLM path fails or as a coaching summary. */
-export async function coachFallback(user: UserRow, lang: Lang, body: string): Promise<string> {
-  const agenda = await loadAgenda(user);
-  const text = body.trim();
+export async function coachFallback(
+  user: UserRow,
+  lang: Lang,
+  body: string,
+  opts: { lastPt?: string | null; previousUser?: string | null } = {},
+): Promise<string> {
+  const text0 = body.trim();
+  const text =
+    isDidYouHearMe(text0) && opts.previousUser?.trim() ? opts.previousUser.trim() : text0;
 
+  const agenda = await loadAgenda(user);
+
+  if (parseAdaptChoice(text)) {
+    /* Caller should have applied the choice; this is a last-resort line. */
+    return copy.fallbackAck(lang);
+  }
   if (isAck(text)) {
     return copy.fallbackAck(lang);
   }
@@ -170,7 +186,7 @@ export async function coachFallback(user: UserRow, lang: Lang, body: string): Pr
       entries: agenda.entries.slice(0, 5),
     });
   }
-  if (wantsProgram(text) || (isQuestion(text) && /plan|program|uke/i.test(text))) {
+  if (wantsProgram(text) || (isQuestion(text) && /plan|program|uke|uka/i.test(text))) {
     return copy.fallbackWeek(lang, agenda);
   }
 
@@ -178,7 +194,8 @@ export async function coachFallback(user: UserRow, lang: Lang, body: string): Pr
   const labeled = conflict
     ? { yesterdayMod: modalityLabel(lang, conflict.yesterdayMod), todaySession: conflict.todaySession }
     : null;
-  if (labeled && (consecutiveQuestion(text) || isQuestion(text))) {
+  const alreadyAsked = Boolean(opts.lastPt && copy.isAdaptOffer(opts.lastPt));
+  if (labeled && consecutiveQuestion(text) && !alreadyAsked) {
     return copy.fallbackConsecutive(lang, {
       agenda,
       yesterdayMod: labeled.yesterdayMod,
@@ -187,12 +204,11 @@ export async function coachFallback(user: UserRow, lang: Lang, body: string): Pr
   }
 
   if (agenda.today.view.kind === "logged") {
-    const title =
-      agenda.today.view.kind === "logged" ? agenda.today.view.session.title : "";
+    const title = agenda.today.view.session.title;
     return copy.todayLogged(lang, title);
   }
 
-  return copy.fallbackMeet(lang, agenda, labeled);
+  return copy.fallbackMeet(lang, agenda);
 }
 
 export function agendaForSnapshot(agenda: CoachAgenda) {

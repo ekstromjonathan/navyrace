@@ -5,7 +5,7 @@ import {
   stacksHard,
   type Modality,
 } from "./activity.ts";
-import { upcomingSessions } from "./calendar.ts";
+import { upcomingSessions, sessionsInWeek } from "./calendar.ts";
 import type { Plan, PlanSession } from "./types.ts";
 
 export type AdaptResult = {
@@ -119,6 +119,66 @@ export function adaptAfterLog(
     changed,
     summaryNb: changed ? notes.join("; ") : "",
     swappedToday,
+  };
+}
+
+/** Ease today's session in place (they asked for a quiet day). */
+export function easeToday(plan: Plan, today: PlanSession, reason: string): AdaptResult {
+  if (alreadyEased(today)) {
+    return { plan, changed: false, summaryNb: "" };
+  }
+  const eased = easeSession(today, reason);
+  return {
+    plan: replaceSession(clonePlan(plan), today.id, eased),
+    changed: true,
+    summaryNb: `letter ${today.title.toLowerCase()} i dag`,
+  };
+}
+
+function otherFamilyThisWeek(plan: Plan, today: PlanSession, avoid: Modality): PlanSession | null {
+  const week = today.week ?? 1;
+  return (
+    sessionsInWeek(plan, week).find(
+      (s) => s.id !== today.id && !stacksHard(avoid, modalityOfSession(s)),
+    ) ?? null
+  );
+}
+
+/** Swap vs ease vs keep today's slot after stacked days. */
+export function applyAdaptChoice(
+  plan: Plan,
+  choice: "swap" | "ease" | "keep",
+  opts: {
+    startedOn: string;
+    yesterdayYmd: string;
+    yesterdayPlanned: PlanSession | null;
+    yesterdayModality: Modality | null;
+    yesterdayNote?: string;
+    todaySession: PlanSession | null;
+  },
+): AdaptResult {
+  if (choice === "keep" || !opts.todaySession) {
+    return { plan, changed: false, summaryNb: "" };
+  }
+  if (choice === "ease") {
+    return easeToday(plan, opts.todaySession, "Du ville ha en rolig dag — letter dagens økt.");
+  }
+  const swapped = adaptForConsecutive(plan, opts);
+  if (swapped.changed) return swapped;
+  if (!opts.yesterdayModality) return swapped;
+  const alt = otherFamilyThisWeek(plan, opts.todaySession, opts.yesterdayModality);
+  if (!alt) return swapped;
+  const moved = {
+    ...alt,
+    id: opts.todaySession.id,
+    week: opts.todaySession.week,
+    day: opts.todaySession.day,
+  };
+  return {
+    plan: replaceSession(clonePlan(plan), opts.todaySession.id, moved),
+    changed: true,
+    summaryNb: `bytter i dag til ${alt.title.toLowerCase()}`,
+    swappedToday: moved,
   };
 }
 

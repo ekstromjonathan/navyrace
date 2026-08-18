@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseMessage } from "../src/parser.ts";
+import { parseMessage, isDidYouHearMe, parseAdaptChoice } from "../src/parser.ts";
 import { isOptOut, isLinqKeywordOptOut } from "../src/optout.ts";
 import { isActivatePhrase, isActivateCancel, isArchivePhrase } from "../src/gates.ts";
 import { normalizeEvent } from "../src/webhook.ts";
@@ -40,6 +40,10 @@ describe("parser", () => {
     assert.equal(parseMessage("Hvilket program går vi for?").kind, "program");
     assert.equal(parseMessage("hva er programmet").kind, "program");
     assert.equal(parseMessage("what's my program").kind, "program");
+    assert.equal(parseMessage("Hvor er vi nå denne uka?").kind, "program");
+    assert.equal(parseMessage("Bytte").kind, "adapt_choice");
+    assert.equal(parseMessage("Holde det veldig rolig").kind, "adapt_choice");
+    assert.equal(parseMessage("Tenker vi kan ta en rolig dag og tilpasse programmet der etter").kind, "adapt_choice");
     assert.equal(parseMessage("kjør programmet").kind, "activate");
     assert.equal(parseMessage("run the program").kind, "activate");
     assert.equal(parseMessage("kjør").kind, "activate");
@@ -114,6 +118,9 @@ describe("parser", () => {
     });
     assert.match(consec, /løping i går/i);
     assert.equal(/I dag: Løping med fartslek \(9/.test(consec), false);
+    const { isAdaptOffer, modelDownLead } = await import("../src/copy.ts");
+    assert.equal(isAdaptOffer(consec), true);
+    assert.match(modelDownLead("nb"), /Modellen svarte ikke/);
   });
 
   it("detects LLM failure fallback copy", async () => {
@@ -192,6 +199,9 @@ describe("parser", () => {
       "unknown",
     );
     assert.equal(parseMessage("Konge: takk").kind, "unknown");
+    assert.equal(isDidYouHearMe("Svarte nettopp på det?"), true);
+    assert.equal(parseAdaptChoice("Bytte"), "swap");
+    assert.equal(parseAdaptChoice("Holde det veldig rolig"), "ease");
   });
 
   it("parses daily training reminders", () => {

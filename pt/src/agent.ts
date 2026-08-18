@@ -4,6 +4,7 @@ import { resolveOnceOn, addLocalDays, dayAnchorIso, todayInTz } from "./db.ts";
 import { assignSessionDays, startedOnOf } from "./calendar.ts";
 import { adaptAfterLog } from "./adapt.ts";
 import { isExtraWording } from "./activity.ts";
+import { completePlain } from "./llm.ts";
 import { pingResearchHold, research as runResearch } from "./research.ts";
 import { agendaForSnapshot, loadAgenda } from "./fallback.ts";
 import * as journal from "./journal.ts";
@@ -861,6 +862,25 @@ export async function runAgent(
     }
     return { text: copy.agentStopped(opts.lang), celebrate };
   } catch (err) {
+    console.error("agent failed", err instanceof Error ? err.message : err);
+    try {
+      const snap = await journal.snapshot(user);
+      const agenda = agendaForSnapshot(await loadAgenda(user));
+      const plain = await completePlain({
+        model: env.model,
+        maxTokens: 500,
+        system: `${systemPrompt(opts.lang, { onboarding: opts.onboarding, firstContact: false })}
+
+No tools this turn. Answer the user's message from the journal and agenda. Do not dump today's full workout unless they asked for it. If they want a quieter day or a swap, say clearly what today becomes.`,
+        user: `Journal: ${JSON.stringify({ facts: snap.facts, today: snap.today, pending: snap.pending })}\nAgenda: ${JSON.stringify(agenda)}\nUser: ${body}`,
+      });
+      const text = plain.trim().slice(0, 1200);
+      if (text && !copy.isAgentFailureReply(text) && text.length > 8) {
+        return { text };
+      }
+    } catch (plainErr) {
+      console.error("plain llm retry failed", plainErr instanceof Error ? plainErr.message : plainErr);
+    }
     return { text: copy.agentError(opts.lang, err) };
   }
 }
