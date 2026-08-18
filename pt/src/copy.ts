@@ -743,6 +743,24 @@ export function adaptedEase(lang: Lang, title: string): string {
   );
 }
 
+export function adaptedAlreadyEase(lang: Lang, title: string): string {
+  return pick(
+    lang,
+    `Today is already the easy version (“${title}”). The rest of the week stays.`,
+    `I dag er allerede letter («${title}»). Resten av uka står.`,
+    `Idag är redan lättat («${title}»). Resten av veckan står.`,
+  );
+}
+
+export function fallbackAlive(lang: Lang): string {
+  return pick(
+    lang,
+    "Yes — I'm here. Ask about the week, or say swap / easy day.",
+    "Ja. Jeg er her. Spør om uka, eller si bytte / rolig dag.",
+    "Ja. Jag är här. Fråga om veckan, eller säg byt / lugn dag.",
+  );
+}
+
 export function adaptedKeep(lang: Lang, title: string): string {
   return pick(
     lang,

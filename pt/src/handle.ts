@@ -138,7 +138,7 @@ async function nextInviteAsk(owner: UserRow, lang: Lang): Promise<string | null>
 
 async function resolveOwnerInvite(owner: UserRow, lang: Lang, body: string): Promise<string | null> {
   if (!isInviteYes(body) && !isInviteNo(body)) return null;
-  const pending = journal.pendingOf(owner);
+  const pending = await journal.pendingOf(owner);
   let invite: InviteRow | undefined;
   if (pending?.type === "invite_approve") {
     invite = await journal.getInvite(pending.inviteId);
@@ -180,7 +180,7 @@ async function handleUnknownSender(inbound: Inbound): Promise<void> {
     console.error("invite waiting but owner chat is missing", invite.id, phone);
     return;
   }
-  const ownerPending = journal.pendingOf(owner);
+  const ownerPending = await journal.pendingOf(owner);
   if (ownerPending?.type === "invite_approve") {
     const current = await journal.getInvite(ownerPending.inviteId);
     if (current?.status === "pending") return;
@@ -340,11 +340,12 @@ async function commitAdaptChoice(
     result.plan.sessions.find((s) => s.id === today.id)?.title ??
     today.title;
   if (choice === "swap") return { text: copy.adaptedSwap(lang, next) };
+  if (!result.changed) return { text: copy.adaptedAlreadyEase(lang, next) };
   return { text: copy.adaptedEase(lang, next) };
 }
 
 async function handlePending(user: UserRow, lang: Lang, body: string): Promise<string | ReplyResult | null> {
-  const pending = journal.pendingOf(user);
+  const pending = await journal.pendingOf(user);
   if (!pending) return null;
 
   if (pending.type === "activate_confirm") {
@@ -504,7 +505,7 @@ async function formatGreeting(user: UserRow, lang: Lang): Promise<string> {
   try {
     const agenda = await loadAgenda(user);
     const conflict = consecutiveConflict(agenda);
-    if (conflict) {
+    if (conflict && (await journal.pendingOf(user))?.type !== "adapt_choice") {
       consecutive = {
         yesterday: modalityLabel(lang, conflict.yesterdayMod),
         today: conflict.todaySession.title,
@@ -565,10 +566,12 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
 
   if (parsed.kind === "program") return formatWeek(user, lang);
 
+  if (parsed.kind === "alive") return copy.fallbackAlive(lang);
+
   if (parsed.kind === "adapt_choice") {
     try {
       const agenda = await loadAgenda(user);
-      if (consecutiveConflict(agenda) || journal.pendingOf(user)?.type === "adapt_choice") {
+      if (consecutiveConflict(agenda) || (await journal.pendingOf(user))?.type === "adapt_choice" || agenda.today.view.kind === "session") {
         return commitAdaptChoice(user, lang, parsed.choice);
       }
     } catch {
@@ -832,9 +835,9 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
                       lastPt,
                       previousUser: previousUser?.body ?? null,
                     });
-          if (copy.isAdaptOffer(agent.text) && copy.isAdaptOffer(text)) {
+          if (copy.isAdaptOffer(lastPt ?? "") && copy.isAdaptOffer(text)) {
             text = await coachFallback(current, lang, work.body, {
-              lastPt: text,
+              lastPt,
               previousUser: previousUser?.body ?? null,
             });
           }

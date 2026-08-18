@@ -26,6 +26,7 @@ export type HeuristicIntent =
   | { kind: "rpe"; confident: true; quality: "lett" | "passe" | "brutalt" | "hoppet" }
   | { kind: "today"; confident: true }
   | { kind: "program"; confident: true }
+  | { kind: "alive"; confident: true }
   | { kind: "adapt_choice"; confident: true; choice: "swap" | "ease" | "keep" }
   | { kind: "greeting"; confident: true }
   | { kind: "activate"; confident: true }
@@ -115,11 +116,15 @@ export function parseMessage(body: string): HeuristicIntent {
     /^(hvilket program( går vi for)?|hva er programmet|mitt program|hvilken plan|hva har vi)\??$/i.test(lower) ||
     /^(which program|what'?s (my|the) program|my program)\??$/i.test(lower) ||
     /^(vad är programmet|vilket program)\??$/i.test(lower) ||
-    /^(hvor (er|står) vi( nå)?( denne uka)?|hvor er jeg i (uka|uken|programmet)|status (på )?(uka|uken|programmet)|hvor er vi nå denne uka)\??$/i.test(
+    /^(hvor (er|står) vi( nå)?( denne uka)?|hvor er jeg i (uka|uken|programmet)|status (på )?(uka|uken|programmet)|hvor er vi nå denne uka|hva er status( nå)?|what's (my )?status)\??$/i.test(
       lower,
     )
   ) {
     return { kind: "program", confident: true };
+  }
+
+  if (isAliveCheck(text)) {
+    return { kind: "alive", confident: true };
   }
 
   const adaptChoice = parseAdaptChoice(text);
@@ -230,7 +235,7 @@ export function parseAdaptChoice(text: string): "swap" | "ease" | "keep" | null 
     return "swap";
   }
   if (
-    /\b(hold(e)? det (veldig )?rolig|rolig(e)? dag|ta det rolig|ta en rolig|easy (day|version)|veldig rolig)\b/i.test(
+    /\b(hold(e)? det (veldig )?rolig|rolig(e)? dag|ta det rolig|ta en rolig|kan gjerne ta en rolig|easy (day|version)|veldig rolig)\b/i.test(
       lower,
     )
   ) {
@@ -238,6 +243,12 @@ export function parseAdaptChoice(text: string): "swap" | "ease" | "keep" | null 
   }
   if (/^(kjør|behold|som planlagt|keep it|kjøre planen)([.!]*)?$/i.test(t)) return "keep";
   return null;
+}
+
+export function isAliveCheck(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length > 48) return false;
+  return /^(er du (våken|der|derinne)\??|våken\??|you there\??|are you (there|awake)\??)$/i.test(t);
 }
 
 /** They already answered and the coach repeated itself. */

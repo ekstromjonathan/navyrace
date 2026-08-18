@@ -121,7 +121,7 @@ function isQuestion(body: string): boolean {
 }
 
 function wantsProgram(body: string): boolean {
-  return /\b(program|opplegg|ukeplan|planen som er satt|hvilken plan|days? per week|ganger (i|ila) uka|dager i uka|hvor er vi|hvor står vi|denne uka|denne uken)\b/i.test(
+  return /\b(program|opplegg|ukeplan|planen som er satt|hvilken plan|days? per week|ganger (i|ila) uka|dager i uka|hvor er vi|hvor står vi|denne uka|denne uken|hva er status|status nå)\b/i.test(
     body,
   );
 }

@@ -41,9 +41,12 @@ describe("parser", () => {
     assert.equal(parseMessage("hva er programmet").kind, "program");
     assert.equal(parseMessage("what's my program").kind, "program");
     assert.equal(parseMessage("Hvor er vi nå denne uka?").kind, "program");
+    assert.equal(parseMessage("Hva er status nå?").kind, "program");
+    assert.equal(parseMessage("Er du våken?").kind, "alive");
     assert.equal(parseMessage("Bytte").kind, "adapt_choice");
     assert.equal(parseMessage("Holde det veldig rolig").kind, "adapt_choice");
     assert.equal(parseMessage("Tenker vi kan ta en rolig dag og tilpasse programmet der etter").kind, "adapt_choice");
+    assert.equal(parseMessage("Kan gjerne ta en rolig dag i dag").kind, "adapt_choice");
     assert.equal(parseMessage("kjør programmet").kind, "activate");
     assert.equal(parseMessage("run the program").kind, "activate");
     assert.equal(parseMessage("kjør").kind, "activate");
