@@ -1,3 +1,4 @@
+import { isExtraWording, looksLikeActivityReport } from "./activity.ts";
 import { extractUrl } from "./urls.ts";
 
 export type HeuristicIntent =
@@ -20,9 +21,11 @@ export type HeuristicIntent =
       note: string;
       /** User claimed today's/planned session (even if content differs). */
       claimsPlanned: boolean;
+      extra: boolean;
     }
   | { kind: "rpe"; confident: true; quality: "lett" | "passe" | "brutalt" | "hoppet" }
   | { kind: "today"; confident: true }
+  | { kind: "program"; confident: true }
   | { kind: "greeting"; confident: true }
   | { kind: "activate"; confident: true }
   | { kind: "archive"; confident: true }
@@ -103,10 +106,16 @@ export function parseMessage(body: string): HeuristicIntent {
     /^(hva (trener|gjør) jeg( i dag)?|i dag\??|neste økt)$/i.test(lower) ||
     /^(vad (tränar|gör) jag( idag)?|idag\??|nästa pass)$/i.test(lower) ||
     /^(what am i training( today)?|today'?s (workout|session)|next session)$/i.test(lower) ||
-    /^(hvilket program( går vi for)?|hva er programmet|mitt program|hvilken plan|hva har vi)\??$/i.test(lower) ||
-    /^(which program|what'?s (my|the) program|my program)\??$/i.test(lower)
+    /^(hva er dagens økt( igjen)?|dagens økt)\??$/i.test(lower)
   ) {
     return { kind: "today", confident: true };
+  }
+  if (
+    /^(hvilket program( går vi for)?|hva er programmet|mitt program|hvilken plan|hva har vi)\??$/i.test(lower) ||
+    /^(which program|what'?s (my|the) program|my program)\??$/i.test(lower) ||
+    /^(vad är programmet|vilket program)\??$/i.test(lower)
+  ) {
+    return { kind: "program", confident: true };
   }
 
   if (isBareGreeting(text)) {
@@ -248,20 +257,23 @@ export function parseSessionLog(text: string): Extract<HeuristicIntent, { kind: 
   const didSession =
     /\b(gjorde|gjort|ferdig(\s+med)?|fullført|trente|har\s+trent|tok\s+en\s+økt|tok\s+økt)\b/i.test(lower) ||
     /\b(tränade|har\s+tränat|tog\s+ett\s+pass|gjorde\s+pass|klart)\b/i.test(lower) ||
-    /\b(did|finished|completed|trained|worked\s+out)\b/i.test(lower);
+    /\b(did|finished|completed|trained|worked\s+out)\b/i.test(lower) ||
+    /\b(spilte|spelte|padlet|klatret|syklet|svømte|jogget)\b/i.test(lower);
   const logVerb =
     /\b(logg(?:er|et|a)?|logger\s+nå|logged|logging)\b/i.test(lower) &&
-    /\b(økt|okt|trening|workout|session|kettlebell|styrke|løp|lop|yoga|klatring|padling|svøm|swim|kb)\b/i.test(
+    /\b(økt|okt|trening|workout|session|kettlebell|styrke|løp|lop|yoga|klatring|padling|svøm|swim|kb|tennis|padel|kajakk)\b/i.test(
       lower,
     );
   const bareDone =
     /^(ferdig|done|ferdig\s+nå|done\s+now|økt\s+ferdig|session\s+done)([.!]*)?$/i.test(trimmed);
+  const activityReport = looksLikeActivityReport(trimmed);
 
-  if (!didSession && !logVerb && !bareDone && !claimsPlanned) return null;
+  if (!didSession && !logVerb && !bareDone && !claimsPlanned && !activityReport) return null;
 
   // “hva logget du” / questions — not a log.
-  if (/^(hva|what|hvordan|how)\b/i.test(lower) || /\?\s*$/.test(trimmed)) return null;
+  if (/^(hva|what|hvordan|how|bør|skal|kan)\b/i.test(lower) || /\?\s*$/.test(trimmed)) return null;
 
+  const extra = isExtraWording(lower);
   const day = parseSessionDay(lower);
   const quality = parseSessionQuality(lower);
   return {
@@ -270,7 +282,8 @@ export function parseSessionLog(text: string): Extract<HeuristicIntent, { kind: 
     day,
     quality,
     note: trimmed.slice(0, 400),
-    claimsPlanned: claimsPlanned || bareDone,
+    claimsPlanned: !extra && (claimsPlanned || bareDone),
+    extra,
   };
 }
 

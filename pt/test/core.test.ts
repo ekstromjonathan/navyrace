@@ -37,9 +37,9 @@ describe("parser", () => {
   it("parses rpe and today", () => {
     assert.equal(parseMessage("brutalt").kind, "rpe");
     assert.equal(parseMessage("hva trener jeg i dag").kind, "today");
-    assert.equal(parseMessage("Hvilket program går vi for?").kind, "today");
-    assert.equal(parseMessage("hva er programmet").kind, "today");
-    assert.equal(parseMessage("what's my program").kind, "today");
+    assert.equal(parseMessage("Hvilket program går vi for?").kind, "program");
+    assert.equal(parseMessage("hva er programmet").kind, "program");
+    assert.equal(parseMessage("what's my program").kind, "program");
     assert.equal(parseMessage("kjør programmet").kind, "activate");
     assert.equal(parseMessage("run the program").kind, "activate");
     assert.equal(parseMessage("kjør").kind, "activate");
@@ -80,6 +80,40 @@ describe("parser", () => {
     });
     assert.match(train, /Styrke/);
     assert.equal(/• /.test(train), false);
+    const { fallbackWeek, researchHold, fallbackConsecutive, fallbackMeet, fallbackAck } = await import("../src/copy.ts");
+    assert.equal(researchHold("nb"), "Bra spørsmål, la meg sjekke litt.");
+    assert.match(fallbackAck("nb"), /hyggelig/i);
+    const week = fallbackWeek("nb", {
+      week: 2,
+      daysPerWeek: 4,
+      weekSessions: [
+        { weekday: 0, title: "Styrke" },
+        { weekday: 1, title: "Fartslek" },
+      ],
+    });
+    assert.match(week, /4 økter/);
+    assert.match(week, /ikke hver dag/);
+    const meet = fallbackMeet(
+      "nb",
+      {
+        daysPerWeek: 4,
+        weekSessions: [
+          { weekday: 0, title: "Styrke" },
+          { weekday: 1, title: "Fartslek" },
+        ],
+        today: { view: { kind: "none" } },
+      },
+      null,
+    );
+    assert.match(meet, /4 økter/);
+    assert.equal(/I dag: Løping med fartslek/.test(meet), false);
+    const consec = fallbackConsecutive("nb", {
+      agenda: { daysPerWeek: 4, weekSessions: [{ weekday: 0, title: "Styrke" }, { weekday: 1, title: "Fartslek" }] },
+      yesterdayMod: "løping",
+      todayTitle: "Løping med fartslek",
+    });
+    assert.match(consec, /løping i går/i);
+    assert.equal(/I dag: Løping med fartslek \(9/.test(consec), false);
   });
 
   it("detects LLM failure fallback copy", async () => {
@@ -122,12 +156,13 @@ describe("parser", () => {
       assert.equal(custom.day, "today");
       assert.equal(custom.claimsPlanned, true);
       assert.match(custom.note, /kettlebell/i);
+      assert.equal(custom.extra, false);
     }
-    const extra = parseMessage("Trente 20 min yoga i går");
-    assert.equal(extra.kind, "session_log");
-    if (extra.kind === "session_log") {
-      assert.equal(extra.day, "yesterday");
-      assert.equal(extra.claimsPlanned, false);
+    const yoga = parseMessage("Trente 20 min yoga i går");
+    assert.equal(yoga.kind, "session_log");
+    if (yoga.kind === "session_log") {
+      assert.equal(yoga.day, "yesterday");
+      assert.equal(yoga.claimsPlanned, false);
     }
     const unclear = parseMessage("Trente kettlebell og stretching");
     assert.equal(unclear.kind, "session_log");
@@ -135,6 +170,28 @@ describe("parser", () => {
       assert.equal(unclear.day, null);
     }
     assert.equal(parseMessage("Hva logget du?").kind, "unknown");
+    const tennis = parseMessage("Jeg spilte tennis i 2 timer i dag");
+    assert.equal(tennis.kind, "session_log");
+    if (tennis.kind === "session_log") {
+      assert.equal(tennis.day, "today");
+      assert.equal(tennis.extra, false);
+    }
+    const paddle = parseMessage("Padlet 2 timer i dag i stedet for fartslek");
+    assert.equal(paddle.kind, "session_log");
+    const run = parseMessage("Gikk noen hundre meter. Løp 7k. Siste 2 med bra trøkk.");
+    assert.equal(run.kind, "session_log");
+    const extra = parseMessage("Trente tennis i tillegg til programmet i dag");
+    assert.equal(extra.kind, "session_log");
+    if (extra.kind === "session_log") assert.equal(extra.extra, true);
+    assert.equal(
+      parseMessage("Ok, takk. Men jeg trente løping i går? Bør vi løpe i dag også?").kind,
+      "unknown",
+    );
+    assert.equal(
+      parseMessage("Hm. Sikker på at du følger planen som er satt opp nå? Skulle jo bare trene 3-4 ganger ila uka?").kind,
+      "unknown",
+    );
+    assert.equal(parseMessage("Konge: takk").kind, "unknown");
   });
 
   it("parses daily training reminders", () => {

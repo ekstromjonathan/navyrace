@@ -281,6 +281,13 @@ describe("journal", () => {
     });
     const monAfter = await journal.todayView(u, mon);
     assert.equal(monAfter.kind, "logged");
+
+    const patched = await journal.patchPlan(active.id, {
+      ...plan!,
+      sessions: plan!.sessions.map((s) => (s.id === "w1b" ? { ...s, title: "Roligere intervall" } : s)),
+    });
+    assert.equal(patched.status, "active");
+    assert.equal(journal.planOf(patched)?.sessions.find((s) => s.id === "w1b")?.title, "Roligere intervall");
   });
 
   it("stores waitlist invites until approved", async () => {

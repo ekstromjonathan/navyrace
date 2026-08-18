@@ -155,6 +155,11 @@ export async function setPlan(trackId: string, plan: Plan): Promise<TrackRow> {
   return asAsync(api().setPlan(trackId, plan));
 }
 
+/** Update plan JSON without flipping status back to draft. */
+export async function patchPlan(trackId: string, plan: Plan): Promise<TrackRow> {
+  return asAsync(api().patchPlan(trackId, plan));
+}
+
 export async function activateTrack(trackId: string): Promise<TrackRow> {
   return asAsync(api().activateTrack(trackId));
 }

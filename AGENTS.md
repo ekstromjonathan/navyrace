@@ -18,11 +18,12 @@ Local forward: `linq webhooks listen --forward-to http://localhost:8787/webhook`
 
 1. **Confirmation ladder** — Only *destructive* actions use a strict exact phrase (archive whole program: `arkiver og lag nytt`). Locking a draft = soft assent (`ja` / `ok` / `kjør`). Setting reminders, logging, and similar = do it immediately and confirm briefly — **no ask-gate**. Follow-up questions must not cancel a pending soft confirm.
 2. **Infer, don’t interrogate** — Prefer natural-language cues (`i kveld` → one-shot reminder, `hver dag` → daily) over extra “is this X or Y?” turns.
-3. **Journal is truth** — Facts/tracks/entries/notes are durable; `message_log` is short working memory. When OpenRouter fails, still answer from the journal (e.g. today’s session) instead of only an error string.
+3. **Journal is truth** — Facts/tracks/entries/notes are durable; `message_log` is short working memory. When OpenRouter fails, answer the actual question from the journal (week shape, yesterday vs today, what was logged) — never dump today’s workout as a fake reply.
 4. **Diagnose delivery carefully** — Inbound in `pt.webhook_events` / `message_log` means Linq→webhook worked; generic *«fikk ikke laget et skikkelig svar»* is usually LLM/OpenRouter, not “messages not arriving”.
-5. **iMessage constraints** — One reply per inbound, short copy, inbound-first for coaching. Unsolicited outbound: user-requested reminders, and one owner ping when a new number asks in. Nothing is hard-deleted (archive logs / archive tracks). Unknown senders get no reply until the owner admits them (`ja`).
-6. **Speed + memory** — Persist `set_fact` as they talk; don’t re-introduce or re-ask answered fields; assume they will train and lead with today’s session when a plan is active.
+5. **iMessage constraints** — One reply per inbound, short copy, inbound-first for coaching. Exception: if the coach needs to look something up, ping *«bra spørsmål, la meg sjekke litt»* then send the real answer. Unsolicited outbound: user-requested reminders, and one owner ping when a new number asks in. Nothing is hard-deleted (archive logs / archive tracks). Unknown senders get no reply until the owner admits them (`ja`).
+6. **Speed + memory** — Persist `set_fact` as they talk; don’t re-introduce or re-ask answered fields. Lead with today’s session only when they asked for it (or a bare hei hint). Answer the message they sent.
 7. **Sessions belong to weekdays** — A Monday session stays Monday. Rest days get recovery tips, not the next training session. Bare `hei` keeps a short dialogue with a hint of the next step (not the full workout dump). Completed sessions are celebrated (iMessage confetti).
+8. **The plan is a starting point** — Life happens. Tennis instead of the run, two hours of paddling instead of fartlek: log what they actually did (it fills today’s slot unless they said *i tillegg*), then adapt the next days toward the goal. Two of the same family in a row → explain and offer to swap. The coach cares, meets the user, and explains the week.
 
 ### Services / commands
 

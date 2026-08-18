@@ -19,6 +19,10 @@ import { normalizeEvent } from "./webhook.ts";
 import { detectLang, isLang, type Lang } from "./locale.ts";
 import { missingForPlan } from "./plan-facts.ts";
 import { addLocalDays, dayAnchorIso, resolveOnceOn, todayInTz } from "./db.ts";
+import { isExtraWording, inferModality, modalityLabel } from "./activity.ts";
+import { adaptAfterLog } from "./adapt.ts";
+import { startedOnOf, assignSessionDays } from "./calendar.ts";
+import { consecutiveConflict, coachFallback, loadAgenda } from "./fallback.ts";
 import type { Inbound, InviteRow, UserRow } from "./types.ts";
 
 type ReplyResult = { text: string; effect?: string };
@@ -211,6 +215,7 @@ async function commitSessionLog(
     note: string;
     quality: string | null;
     claimsPlanned: boolean;
+    extra?: boolean;
     messageId?: string;
   },
 ): Promise<ReplyResult> {
@@ -220,13 +225,10 @@ async function commitSessionLog(
   const today = todayInTz(user.tz);
   const dayYmd = opts.day === "today" ? today : addLocalDays(today, -1);
   const view = await journal.todayView(user, dayYmd);
-  const planned = opts.claimsPlanned && view.kind === "session";
-  const sessionRef = planned
-    ? view.session.id
-    : opts.claimsPlanned
-      ? null
-      : `extra:${dayYmd}`;
-  const title = planned ? view.session.title : shortSessionTitle(opts.note);
+  const extraExplicit = Boolean(opts.extra || isExtraWording(opts.note));
+  const fillToday = !extraExplicit && view.kind === "session";
+  const sessionRef = fillToday ? view.session.id : `extra:${dayYmd}`;
+  const title = fillToday ? shortSessionTitle(opts.note) || view.session.title : shortSessionTitle(opts.note);
 
   const result = await journal.logEntry({
     trackId: training.id,
@@ -239,6 +241,39 @@ async function commitSessionLog(
     occurredAt: dayAnchorIso(dayYmd),
   });
   if (result.duplicate) return { text: copy.duplicateLog(lang) };
+
+  let adaptLine: string | null = null;
+  const plan = journal.planOf(training);
+  if (plan && fillToday) {
+    const planned = view.kind === "session" ? view.session : null;
+    const adapted = adaptAfterLog(plan, {
+      startedOn: startedOnOf(training, plan, user.tz),
+      loggedOnYmd: dayYmd,
+      planned,
+      actualText: opts.note,
+    });
+    if (adapted.changed) {
+      await journal.patchPlan(training.id, assignSessionDays(adapted.plan));
+      await journal.addNote({
+        userId: user.id,
+        trackId: training.id,
+        kind: "adapt",
+        body: adapted.summaryNb.slice(0, 240),
+      });
+      adaptLine = adapted.summaryNb;
+    }
+  } else if (plan && !fillToday && inferModality(opts.note)) {
+    const adapted = adaptAfterLog(plan, {
+      startedOn: startedOnOf(training, plan, user.tz),
+      loggedOnYmd: dayYmd,
+      planned: view.kind === "session" || view.kind === "logged" ? view.session : null,
+      actualText: opts.note,
+    });
+    if (adapted.changed) {
+      await journal.patchPlan(training.id, assignSessionDays(adapted.plan));
+      adaptLine = adapted.summaryNb;
+    }
+  }
 
   const askRpe = !opts.quality;
   if (askRpe && result.id) {
@@ -254,8 +289,9 @@ async function commitSessionLog(
   const text = copy.sessionLogged(lang, {
     title,
     dayLabel: dayLabel(lang, opts.day),
-    planned,
+    planned: fillToday,
     askRpe,
+    adaptLine,
   });
   const celebrate = opts.quality !== "hoppet";
   return { text, effect: celebrate ? "confetti" : undefined };
@@ -350,6 +386,7 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
       note: pending.note,
       quality: pending.quality,
       claimsPlanned: pending.claimsPlanned,
+      extra: pending.extra,
     });
   }
 
@@ -405,10 +442,33 @@ async function formatToday(user: UserRow, lang: Lang): Promise<string> {
 async function formatGreeting(user: UserRow, lang: Lang): Promise<string> {
   const view = await journal.todayView(user);
   const draft = await journal.draftTraining(user.id);
+  let consecutive: { yesterday: string; today: string } | null = null;
+  try {
+    const agenda = await loadAgenda(user);
+    const conflict = consecutiveConflict(agenda);
+    if (conflict) {
+      consecutive = {
+        yesterday: modalityLabel(lang, conflict.yesterdayMod),
+        today: conflict.todaySession.title,
+      };
+    }
+  } catch {
+    /* keep the short greeting */
+  }
   return copy.greetingReply(lang, view, {
     missingForPlan: missingForPlan(journal.factsOf(user)),
     draftName: draft?.name ?? null,
+    consecutive,
   });
+}
+
+async function formatWeek(user: UserRow, lang: Lang): Promise<string> {
+  try {
+    const agenda = await loadAgenda(user);
+    return copy.fallbackWeek(lang, agenda);
+  } catch {
+    return formatToday(user, lang);
+  }
 }
 
 async function commitReminderSet(
@@ -440,6 +500,8 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
   if (parsed.kind === "greeting") return formatGreeting(user, lang);
 
   if (parsed.kind === "today") return formatToday(user, lang);
+
+  if (parsed.kind === "program") return formatWeek(user, lang);
 
   if (parsed.kind === "video_link") {
     await journal.setPending(user.id, {
@@ -508,6 +570,7 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
         note: parsed.note,
         quality: parsed.quality,
         claimsPlanned: parsed.claimsPlanned,
+        extra: parsed.extra,
         askedAt: new Date().toISOString(),
       });
       return copy.sessionDayAsk(lang);
@@ -517,6 +580,7 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
       note: parsed.note,
       quality: parsed.quality,
       claimsPlanned: parsed.claimsPlanned,
+      extra: parsed.extra,
       messageId: inbound.messageId,
     });
   }
@@ -663,9 +727,9 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
     }
 
     let agent = await withTyping(inbound.chatId, () =>
-      runAgent(current, inbound.body, inbound.messageId, { lang, onboarding }),
+      runAgent(current, inbound.body, inbound.messageId, { lang, onboarding, chatId: inbound.chatId }),
     );
-    /* If OpenRouter hiccups: prefer session-log heuristic over dumping “today”. */
+    /* If OpenRouter hiccups: answer from the journal — never dump today's workout as a fake reply. */
     if (copy.isAgentFailureReply(agent.text) && !onboarding) {
       const again = asReply(await applyHeuristic(current, lang, inbound));
       if (again) agent = { text: again.text, celebrate: Boolean(again.effect) };
@@ -675,7 +739,11 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
           text:
             parsed.kind === "greeting"
               ? await formatGreeting(current, lang)
-              : await formatToday(current, lang),
+              : parsed.kind === "today"
+                ? await formatToday(current, lang)
+                : parsed.kind === "program"
+                  ? await formatWeek(current, lang)
+                  : await coachFallback(current, lang, inbound.body),
         };
       }
     }

@@ -69,8 +69,20 @@ export function sessionHeading(
 export function greetingReply(
   lang: Lang,
   view: DayView,
-  opts: { missingForPlan?: string[]; draftName?: string | null } = {},
+  opts: {
+    missingForPlan?: string[];
+    draftName?: string | null;
+    consecutive?: { yesterday: string; today: string } | null;
+  } = {},
 ): string {
+  if (opts.consecutive && view.kind === "session") {
+    return pick(
+      lang,
+      `Hey. You did ${opts.consecutive.yesterday} yesterday, and today is ${opts.consecutive.today}. That's more of the same than the week plan — we can swap today. Say the word.`,
+      `Hei. Du tok ${opts.consecutive.yesterday} i går, og i dag står ${opts.consecutive.today}. Det er mer av det samme enn ukeplanen — vi kan bytte i dag. Si ifra.`,
+      `Hej. Du körde ${opts.consecutive.yesterday} igår, och idag står ${opts.consecutive.today}. Det är mer av samma sak än veckoplanen — vi kan byta idag. Säg till.`,
+    );
+  }
   if (view.kind === "rest") {
     const hi = pick(lang, "Hey.", "Hei.", "Hej.");
     return `${hi} ${restDayTips(lang, view.weekday)}`;
@@ -334,7 +346,7 @@ export function rpeLogged(lang: Lang, quality: string): string {
 
 export function sessionLogged(
   lang: Lang,
-  opts: { title: string; dayLabel: string; planned: boolean; askRpe: boolean },
+  opts: { title: string; dayLabel: string; planned: boolean; askRpe: boolean; adaptLine?: string | null },
 ): string {
   const where = opts.planned
     ? pick(
@@ -345,18 +357,22 @@ export function sessionLogged(
       )
     : pick(
         lang,
-        `Logged extra session “${opts.title}” (${opts.dayLabel}) — plan stays as-is. Nice.`,
-        `Ekstraøkt «${opts.title}» logget (${opts.dayLabel}) — planen står. Bra jobba.`,
-        `Extrapass «${opts.title}» loggat (${opts.dayLabel}) — planen står. Snyggt.`,
+        `Logged extra session “${opts.title}” (${opts.dayLabel}). I'll fold it into the next days.`,
+        `Ekstraøkt «${opts.title}» logget (${opts.dayLabel}). Jeg tar den med inn i dagene framover.`,
+        `Extrapass «${opts.title}» loggat (${opts.dayLabel}). Jag tar med det i dagarna framöver.`,
       );
-  if (!opts.askRpe) return where;
-  const ask = pick(
-    lang,
-    "How hard was it? (easy / about right / brutal)",
-    "Hvor hardt var det? (lett / passe / brutalt)",
-    "Hur hårt var det? (lätt / lagom / brutalt)",
-  );
-  return `${where}\n${ask}`;
+  const adapt = opts.adaptLine?.trim()
+    ? pick(lang, `Adjusted: ${opts.adaptLine}.`, `Justert: ${opts.adaptLine}.`, `Justerat: ${opts.adaptLine}.`)
+    : null;
+  const ask = opts.askRpe
+    ? pick(
+        lang,
+        "How hard was it? (easy / about right / brutal)",
+        "Hvor hardt var det? (lett / passe / brutalt)",
+        "Hur hårt var det? (lätt / lagom / brutalt)",
+      )
+    : null;
+  return [where, adapt, ask].filter(Boolean).join("\n");
 }
 
 export function sessionDayAsk(lang: Lang): string {
@@ -540,6 +556,167 @@ export function todayFooter(lang: Lang): string {
     "Når du er ferdig: hvor hardt var det, og hvordan føltes det? (lett / passe / brutalt)",
     "När du är klar: hur hårt var det, och hur kändes det? (lätt / lagom / brutalt)",
   );
+}
+
+export function researchHold(lang: Lang): string {
+  return pick(
+    lang,
+    "Good question — let me check a bit.",
+    "Bra spørsmål, la meg sjekke litt.",
+    "Bra fråga, låt mig kolla lite.",
+  );
+}
+
+function weekLine(
+  lang: Lang,
+  weekday: number,
+  title: string,
+): string {
+  return `${weekdayName(lang, weekday)}: ${title}`;
+}
+
+export function fallbackWeek(
+  lang: Lang,
+  agenda: {
+    week?: number;
+    daysPerWeek: number;
+    weekSessions: { weekday: number; title: string }[];
+  },
+): string {
+  const n = agenda.daysPerWeek || agenda.weekSessions.length;
+  const lines = agenda.weekSessions.map((s) => weekLine(lang, s.weekday, s.title));
+  const weekLabel =
+    agenda.week != null
+      ? pick(lang, `Week ${agenda.week}`, `Uke ${agenda.week}`, `Vecka ${agenda.week}`)
+      : pick(lang, "This week", "Uka", "Veckan");
+  return pick(
+    lang,
+    [
+      `${weekLabel} is ${n} sessions — not every day.`,
+      ...lines,
+      "The other days are rest. Life happens; we keep the goal and adjust around what you actually did.",
+    ].join("\n"),
+    [
+      `${weekLabel} er ${n} økter — ikke hver dag.`,
+      ...lines,
+      "Resten er hvile. Livet skjer; vi holder målet og justerer etter det du faktisk gjorde.",
+    ].join("\n"),
+    [
+      `${weekLabel} är ${n} pass — inte varje dag.`,
+      ...lines,
+      "Övriga dagar är vila. Livet händer; vi håller målet och justerar efter det du faktiskt gjorde.",
+    ].join("\n"),
+  );
+}
+
+export function fallbackAck(lang: Lang): string {
+  return pick(
+    lang,
+    "Anytime. I'm here — say if you want today's session or the week overview.",
+    "Bare hyggelig. Jeg er her — si ifra om du vil ha dagens økt eller ukeoversikten.",
+    "Varsågod. Jag är här — säg till om du vill ha dagens pass eller veckoöversikten.",
+  );
+}
+
+export function fallbackReminders(
+  lang: Lang,
+  reminders: { hour: number; minute: number; url: string | null }[],
+): string {
+  if (!reminders.length) {
+    return pick(lang, "No reminder is on right now.", "Ingen påminnelse er på nå.", "Ingen påminnelse är på nu.");
+  }
+  const lines = reminders.map((r) => {
+    const clock = hhmm(r.hour, r.minute);
+    return r.url ? `${clock} + link` : clock;
+  });
+  return pick(
+    lang,
+    `Reminders on: ${lines.join("; ")}.`,
+    `Påminnelser: ${lines.join("; ")}.`,
+    `Påminnelser: ${lines.join("; ")}.`,
+  );
+}
+
+export function fallbackMemory(
+  lang: Lang,
+  opts: { facts: Record<string, unknown>; entries: Record<string, unknown>[] },
+): string {
+  const goal = opts.facts.goal ? String(opts.facts.goal) : "";
+  const days = opts.facts.daysPerWeek != null ? String(opts.facts.daysPerWeek) : "";
+  const logs = opts.entries
+    .map((e) => {
+      const note = e.note ? String(e.note) : String(e.name ?? e.session_ref ?? "økt");
+      const q = e.quality ? ` (${e.quality})` : "";
+      return `• ${note.slice(0, 80)}${q}`;
+    })
+    .slice(0, 4);
+  const head = pick(
+    lang,
+    [days ? `${days} days/week.` : null, goal ? `Goal: ${goal.slice(0, 160)}` : "I keep the goal and the logs."]
+      .filter(Boolean)
+      .join(" "),
+    [days ? `${days} dager i uka.` : null, goal ? `Mål: ${goal.slice(0, 160)}` : "Jeg holder styr på målet og loggene."]
+      .filter(Boolean)
+      .join(" "),
+    [days ? `${days} dagar i veckan.` : null, goal ? `Mål: ${goal.slice(0, 160)}` : "Jag håller koll på målet och loggarna."]
+      .filter(Boolean)
+      .join(" "),
+  );
+  if (!logs.length) return head;
+  return `${head}\n${logs.join("\n")}`;
+}
+
+export function fallbackConsecutive(
+  lang: Lang,
+  opts: {
+    agenda: { daysPerWeek: number; weekSessions: { weekday: number; title: string }[] };
+    yesterdayMod: string;
+    todayTitle: string;
+  },
+): string {
+  const n = opts.agenda.daysPerWeek || opts.agenda.weekSessions.length;
+  const days = opts.agenda.weekSessions.map((s) => `${weekdayName(lang, s.weekday)} ${s.title}`).join(", ");
+  return pick(
+    lang,
+    `You already did ${opts.yesterdayMod} yesterday, and today is ${opts.todayTitle}. That's two of the same family — the week is ${n} sessions (${days}). We can swap today to the missed work, or keep a very easy version. What feels right?`,
+    `Du tok ${opts.yesterdayMod} i går, og i dag står ${opts.todayTitle}. Det er to av samme type på rad — uka er ${n} økter (${days}). Vi kan bytte i dag til det som ble hoppet over, eller holde det veldig rolig. Hva føles rett?`,
+    `Du körde ${opts.yesterdayMod} igår, och idag står ${opts.todayTitle}. Det är två av samma sort i rad — veckan är ${n} pass (${days}). Vi kan byta idag till det som hoppades över, eller hålla det väldigt lugnt. Vad känns rätt?`,
+  );
+}
+
+export function fallbackMeet(
+  lang: Lang,
+  agenda: {
+    daysPerWeek: number;
+    weekSessions: { weekday: number; title: string }[];
+    today: { view: { kind: string } };
+  },
+  conflict: { yesterdayMod: string; todaySession: { title: string } } | null,
+): string {
+  if (conflict) {
+    return fallbackConsecutive(lang, {
+      agenda,
+      yesterdayMod: conflict.yesterdayMod,
+      todayTitle: conflict.todaySession.title,
+    });
+  }
+  if (agenda.today.view.kind === "rest") {
+    return restDayTips(lang, Number((agenda.today.view as { weekday?: number }).weekday ?? 0));
+  }
+  const title =
+    agenda.weekSessions.find(() => true) && agenda.today.view.kind === "session"
+      ? String((agenda.today.view as { session?: { title?: string } }).session?.title ?? "")
+      : "";
+  const n = agenda.daysPerWeek || agenda.weekSessions.length;
+  if (title) {
+    return pick(
+      lang,
+      `Week is ${n} sessions, not every day. Today is ${title} when you're ready — ask if you want the details.`,
+      `Uka er ${n} økter, ikke hver dag. I dag står ${title} når du er klar — spør om du vil ha detaljene.`,
+      `Veckan är ${n} pass, inte varje dag. Idag står ${title} när du är redo — fråga om du vill ha detaljerna.`,
+    );
+  }
+  return fallbackWeek(lang, agenda);
 }
 
 export function adaptNote(lang: Lang, prev: string): string {

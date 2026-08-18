@@ -363,6 +363,19 @@ export async function setPlan(trackId: string, plan: Plan): Promise<TrackRow> {
   return asTrack(data as Record<string, unknown>);
 }
 
+export async function patchPlan(trackId: string, plan: Plan): Promise<TrackRow> {
+  const current = await getTrack(trackId);
+  const version = (current?.version ?? 0) + 1;
+  const { data, error } = await getSupabase()
+    .from("tracks")
+    .update({ plan, version, updated_at: nowIso() })
+    .eq("id", trackId)
+    .select("*")
+    .single();
+  throwIf(error);
+  return asTrack(data as Record<string, unknown>);
+}
+
 export function planOf(track: TrackRow): Plan | null {
   return parseJson<Plan | null>(track.plan, null);
 }
