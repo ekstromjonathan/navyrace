@@ -22,7 +22,7 @@ const dictionaries = {
     termsContact: "We text you on  iMessage or SMS. Reply stop, and we stop.",
     termsDeleteTitle: "Delete",
     termsDelete: "Ask in the thread, and we delete your name and number.",
-    smsBody: "Hi, my name is {name}. I'd like to join.",
+    smsBody: "Hi, my name is {name}. I also want to become the best version of myself. Can I join?",
   },
   sv: {
     signupTitle: "Din  iMessage-coach",
@@ -47,7 +47,7 @@ const dictionaries = {
     termsContact: "Vi skriver på  iMessage eller SMS. Svara stopp, så slutar vi.",
     termsDeleteTitle: "Radera",
     termsDelete: "Säg till i tråden, så raderar vi namn och nummer.",
-    smsBody: "Hej, jag heter {name}. Jag vill vara med.",
+    smsBody: "Hej, jag heter {name}. Jag vill också bli den bästa versionen av mig själv. Kan jag få vara med?",
   },
   no: {
     signupTitle: "Din  iMessage coach",
@@ -72,7 +72,7 @@ const dictionaries = {
     termsContact: "Vi skriver på  iMessage eller SMS. Svar stopp, så slutter vi.",
     termsDeleteTitle: "Slett",
     termsDelete: "Si ifra i tråden, så sletter vi navn og nummer.",
-    smsBody: "Hei, jeg heter {name}. Jeg vil være med.",
+    smsBody: "Hei, jeg heter {name}. Jeg vil også bli den beste versjonen av meg selv. Kan jeg få bli med?",
   },
 };
 

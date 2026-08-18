@@ -26,7 +26,13 @@ export function extractApplicantName(body: string): string | null {
 }
 
 function cleanName(raw: string): string | null {
-  const name = raw.replace(/\s+/g, " ").replace(/[.:;!?]+$/g, "").trim();
+  const cut = raw.replace(/\s+/g, " ").replace(/[.:;!?]+$/g, "").trim();
+  const parts: string[] = [];
+  for (const word of cut.split(" ")) {
+    if (/^(og|and|och)$/i.test(word)) break;
+    parts.push(word);
+  }
+  const name = parts.join(" ").trim();
   if (!name || name.length < 2 || name.length > 60) return null;
   if (/^(jeg|eg|hei|hi|hey|pt|lodd|ja|nei|ok|the|a)$/i.test(name)) return null;
   return name[0].toUpperCase() + name.slice(1);
