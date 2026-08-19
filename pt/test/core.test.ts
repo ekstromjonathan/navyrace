@@ -453,7 +453,7 @@ describe("invite welcome", () => {
     assert.equal(/https?:\/\//i.test(nb), false);
     assert.equal(/linq/i.test(nb), false);
     const en = inviteWelcome("en", "Inger", "lodd.ai");
-    assert.match(en, /your new coach/i);
+    assert.match(en, /your new AI coach/i);
     assert.match(en, /habits/i);
     assert.equal(/linqapp\.com/i.test(en), false);
   });
