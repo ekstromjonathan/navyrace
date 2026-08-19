@@ -182,6 +182,7 @@ export type CoachEventKind =
   | "reminder_snoozed"
   | "reminder_ignored"
   | "memory_corrected"
+  | "privacy_requested"
   | "safety_routed";
 
 export type CoachEventSource = "user" | "coach" | "system" | "integration";

@@ -101,6 +101,24 @@ describe("journal", () => {
       route: "cardiorespiratory",
       signal: "chest-discomfort",
     });
+    const other = await journal.upsertUser("chat-quality-events-2", "+4740343212");
+    const sameKeyOtherUser = await journal.recordCoachEvent({
+      userId: other.id,
+      kind: "safety_routed",
+      source: "system",
+      dedupeKey: "safety:m-safety-1",
+      metadata: { route: "serious_injury", signal: "cannot-bear-weight" },
+    });
+    assert.notEqual(sameKeyOtherUser.id, first.id, "dedupe keys are scoped per user");
+    await assert.rejects(
+      journal.recordCoachEvent({
+        userId: user.id,
+        kind: "action_proposed",
+        source: "coach",
+        metadata: { message: "raw conversation must not be copied here" },
+      }),
+      /raw-text key/i,
+    );
   });
 
   it("keeps a rolling chat log and prunes old turns", async () => {

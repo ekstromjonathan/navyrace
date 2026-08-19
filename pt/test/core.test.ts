@@ -299,11 +299,25 @@ describe("parser", () => {
   });
 
   it("keeps sensitive routine details off unsolicited lock-screen copy", async () => {
-    const { reminderPingRoutine } = await import("../src/copy.ts");
+    const { reminderPingRoutine, safeUnsolicitedReminder } = await import("../src/copy.ts");
     assert.match(reminderPingRoutine("nb", "meditasjon"), /meditasjon/i);
-    const sensitive = reminderPingRoutine("nb", "medisin for kneskade");
-    assert.match(sensitive, /rutinen din/i);
-    assert.equal(/medisin|kneskade/i.test(sensitive), false);
+    for (const title of [
+      "medisinen min",
+      "kneskade rehab",
+      "knesmerter",
+      "insulin 10 enheter",
+      "medications",
+      "knäskada",
+      "lese bok",
+    ]) {
+      const generic = reminderPingRoutine("nb", title);
+      assert.match(generic, /rutinen din/i);
+      assert.equal(generic.includes(title), false);
+    }
+    assert.equal(
+      safeUnsolicitedReminder("nb", "Trening i dag: rehab for kneskade"),
+      "Påminnelse fra coachen — åpne iMessage.",
+    );
   });
 
   it("extracts waitlist names and owner yes/no", async () => {

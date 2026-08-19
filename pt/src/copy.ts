@@ -1,6 +1,7 @@
 import type { Lang } from "./locale.ts";
 import type { DayView } from "./calendar.ts";
 import type { PlanSession } from "./types.ts";
+import type { PrivacyRequestKind } from "./privacy.ts";
 
 function hhmm(hour: number, minute: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
@@ -149,6 +150,36 @@ export function optOutReply(lang: Lang): string {
   );
 }
 
+function privacyRequestName(lang: Lang, kind: PrivacyRequestKind): string {
+  const names = {
+    access: pick(lang, "access", "innsyn", "registerutdrag"),
+    correction: pick(lang, "correction", "retting", "rättelse"),
+    export: pick(lang, "export", "eksport", "export"),
+    deletion: pick(lang, "deletion", "sletting", "radering"),
+  };
+  return names[kind];
+}
+
+export function privacyRequestReceived(lang: Lang, kind: PrivacyRequestKind): string {
+  const name = privacyRequestName(lang, kind);
+  return pick(
+    lang,
+    `Your data ${name} request is registered for manual handling. You'll get confirmation here. “STOP” stops messages immediately.`,
+    `Forespørselen om ${name} av data er registrert for manuell behandling. Du får bekreftelse her. «STOPP» stopper meldinger med en gang.`,
+    `Din begäran om ${name} av data är registrerad för manuell hantering. Du får bekräftelse här. ”STOPP” stoppar meddelanden direkt.`,
+  );
+}
+
+export function privacyOwnerAlert(lang: Lang, kind: PrivacyRequestKind, who: string): string {
+  const name = privacyRequestName(lang, kind);
+  return pick(
+    lang,
+    `Data request (${name}) from ${who}. Handle it and confirm in their thread.`,
+    `Dataforespørsel (${name}) fra ${who}. Behandle den og bekreft i tråden deres.`,
+    `Dataförfrågan (${name}) från ${who}. Hantera den och bekräfta i deras tråd.`,
+  );
+}
+
 export function reminderConfirm(
   lang: Lang,
   hour: number,
@@ -291,6 +322,18 @@ export function inviteWelcome(lang: Lang, name: string | null, coach: string): s
     `${hello} — jeg er ${coach}. Din nye AI-coach.\n\nJeg vil hjelpe deg å bli en bedre versjon av deg selv. Økter, vaner, påminnelser — si ifra, så tar jeg det.\n\nHva har du lyst å holde styr på?`,
     `${hello} — jag är ${coach}. Din nya AI-coach.\n\nJag vill hjälpa dig att bli en bättre version av dig själv. Pass, vanor, påminnelser — säg till, så tar jag det.\n\nVad vill du hålla koll på?`,
   );
+}
+
+/** Deterministic first-contact disclosure for every reply path, including composer success. */
+export function withAiCoachDisclosure(lang: Lang, coach: string, text: string): string {
+  if (/\bAI[- ]coach\b/iu.test(text)) return text;
+  const intro = pick(
+    lang,
+    `I'm ${coach}, your AI coach.`,
+    `Jeg er ${coach}, AI-coachen din.`,
+    `Jag är ${coach}, din AI-coach.`,
+  );
+  return `${intro}\n\n${text.trim()}`;
 }
 
 export function reminderScopeAsk(lang: Lang, hour: number, minute: number): string {
@@ -869,14 +912,47 @@ export function reminderPingVideo(lang: Lang, url: string): string {
   );
 }
 
+const SAFE_LOCK_SCREEN_ROUTINES = new Set([
+  "trening",
+  "training",
+  "träning",
+  "video",
+  "meditasjon",
+  "meditation",
+  "vann",
+  "water",
+  "kaldt bad",
+  "cold plunge",
+  "stretching",
+  "mobilitet",
+  "mobility",
+  "gåtur",
+  "walk",
+  "løping",
+  "running",
+  "styrke",
+  "strength",
+  "yoga",
+]);
+
+const SENSITIVE_LOCK_SCREEN =
+  /\b(medisin\p{L}*|medication\p{L}*|medicine\p{L}*|tablett\p{L}*|pille\p{L}*|insulin\p{L}*|skad\p{L}*|injur\p{L}*|smer\p{L}*|pain\p{L}*|rehab\p{L}*|vekt\p{L}*|weight\p{L}*|\d+(?:[.,]\d+)?\s*kg|diagnos\p{L}*|blodtrykk\p{L}*|blood pressure|antidepress\p{L}*|diabet\p{L}*)\b/iu;
+
+export function safeUnsolicitedReminder(lang: Lang, body: string): string {
+  if (!SENSITIVE_LOCK_SCREEN.test(body)) return body;
+  return pick(
+    lang,
+    "Reminder from your coach — open iMessage.",
+    "Påminnelse fra coachen — åpne iMessage.",
+    "Påminnelse från coachen — öppna iMessage.",
+  );
+}
+
 export function reminderPingRoutine(lang: Lang, title: string): string {
-  const sensitive =
-    /\b(medisin(?:er)?|medication|medicine|tablett(?:er)?|pille(?:r)?|skade|injury|smerte|pain|vekt|weight|kg|diagnos(?:e)?|blodtrykk|blood pressure)\b/iu.test(
-      title,
-    );
-  const safeTitle = sensitive
-    ? pick(lang, "your routine", "rutinen din", "din rutin")
-    : title;
+  const normalized = title.trim().toLowerCase().replace(/\s+/g, " ");
+  const safeTitle = SAFE_LOCK_SCREEN_ROUTINES.has(normalized)
+    ? title
+    : pick(lang, "your routine", "rutinen din", "din rutin");
   return pick(
     lang,
     `Reminder: ${safeTitle}.`,

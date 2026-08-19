@@ -27,7 +27,7 @@ const dictionaries = {
     termsContactTitle: "Contact",
     termsContact: "We text you on  iMessage or SMS. Reply stop, and we stop.",
     termsDeleteTitle: "Delete",
-    termsDelete: "Ask in the same thread to see, correct, export, or delete your data. A short working chat history is limited; coaching facts and logs remain until deletion is requested.",
+    termsDelete: "Ask in the same thread to see, correct, export, or delete your data. Requests are registered for manual handling; coaching facts and logs remain until deletion is completed.",
     smsBody: "Hi, my name is {name}. I also want to become the best version of myself. Can I join?",
   },
   sv: {
@@ -58,7 +58,7 @@ const dictionaries = {
     termsContactTitle: "Kontakt",
     termsContact: "Vi skriver på  iMessage eller SMS. Svara stopp, så slutar vi.",
     termsDeleteTitle: "Radera",
-    termsDelete: "Be i samma tråd om att se, rätta, exportera eller radera dina data. Den korta chatthistoriken är begränsad; coachfakta och loggar sparas tills du begär radering.",
+    termsDelete: "Be i samma tråd om att se, rätta, exportera eller radera dina data. Begäran registreras för manuell hantering; coachfakta och loggar sparas tills raderingen är klar.",
     smsBody: "Hej, jag heter {name}. Jag vill också bli den bästa versionen av mig själv. Kan jag få vara med?",
   },
   no: {
@@ -89,7 +89,7 @@ const dictionaries = {
     termsContactTitle: "Kontakt",
     termsContact: "Vi skriver på  iMessage eller SMS. Svar stopp, så slutter vi.",
     termsDeleteTitle: "Slett",
-    termsDelete: "Be i samme tråd om å se, rette, eksportere eller slette dataene dine. Den korte chathistorikken er begrenset; coachfakta og logger beholdes til du ber om sletting.",
+    termsDelete: "Be i samme tråd om å se, rette, eksportere eller slette dataene dine. Forespørselen registreres for manuell behandling; coachfakta og logger beholdes til slettingen er fullført.",
     smsBody: "Hei, jeg heter {name}. Jeg vil også bli den beste versjonen av meg selv. Kan jeg få bli med?",
   },
 };

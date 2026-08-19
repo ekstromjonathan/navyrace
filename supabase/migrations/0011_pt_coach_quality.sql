@@ -6,7 +6,7 @@ create table if not exists pt.coach_events (
   kind text not null,
   source text not null check (source in ('user', 'coach', 'system', 'integration')),
   ref_id text,
-  dedupe_key text unique,
+  dedupe_key text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
@@ -16,6 +16,10 @@ create index if not exists pt_coach_events_user_time
 
 create index if not exists pt_coach_events_kind_time
   on pt.coach_events (kind, created_at desc);
+
+create unique index if not exists pt_coach_events_user_dedupe
+  on pt.coach_events (user_id, dedupe_key)
+  where dedupe_key is not null;
 
 alter table pt.coach_events enable row level security;
 

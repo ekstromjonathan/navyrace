@@ -49,7 +49,7 @@ const SIGNALS: Signal[] = [
 ];
 
 const NEGATION =
-  /\b(?:ingen|ikke|aldri|uten|no|not|never|without|inga|inte|aldrig|utan)\b(?:\s+\p{L}+){0,3}[\s,:-]*$/iu;
+  /\b(?:ingen|ikke|aldri|uten|no|not|never|without|don't|doesn't|didn't|inga|inte|aldrig|utan)\b(?:\s+\p{L}+){0,3}[\s,:-]*$/iu;
 
 function isNegated(text: string, index: number): boolean {
   const before = text.slice(Math.max(0, index - 36), index);
@@ -62,12 +62,22 @@ function isNegated(text: string, index: number): boolean {
  * to coaching than to turn every mention of pain into an emergency response.
  */
 export function detectSafetyRoute(body: string): SafetyRoute | null {
-  const text = body.replace(/\s+/g, " ").trim();
+  const text = body.replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim();
   if (!text) return null;
   for (const signal of SIGNALS) {
-    const match = signal.pattern.exec(text);
-    if (!match || isNegated(text, match.index)) continue;
-    return { kind: signal.kind, signal: signal.id };
+    const flags = signal.pattern.flags.includes("g") ? signal.pattern.flags : `${signal.pattern.flags}g`;
+    for (const match of text.matchAll(new RegExp(signal.pattern.source, flags))) {
+      if (match.index == null || isNegated(text, match.index)) continue;
+      return { kind: signal.kind, signal: signal.id };
+    }
   }
   return null;
+}
+
+/** Safety status updates must never be consumed as answers to an older pending question. */
+export function isSafetyFollowup(body: string): boolean {
+  const text = body.replace(/[’‘]/g, "'").trim();
+  return /\b(på legevakt(?:a|en)?|ringt 113|snakket med lege|får hjelp nå|er trygg nå|at the emergency room|called 911|called 113|getting help now|safe now|på akuten|ringt 112|får hjälp nu|är trygg nu)\b/iu.test(
+    text,
+  );
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { coachQualityIssues } from "../src/coach-contract.ts";
 import { detectSafetyRoute } from "../src/safety.ts";
+import { detectPrivacyRequest } from "../src/privacy.ts";
 import { COACH_SCENARIOS } from "./fixtures/coach-scenarios.ts";
 
 describe("coach quality contract", () => {
@@ -53,7 +54,27 @@ describe("deterministic safety routing", () => {
   it("does not route negated symptoms or exercise names", () => {
     assert.equal(detectSafetyRoute("Jeg har ikke brystsmerter"), null);
     assert.equal(detectSafetyRoute("Jeg har ikke hatt brystsmerter"), null);
+    assert.equal(detectSafetyRoute("I don't have chest pain"), null);
+    assert.deepEqual(
+      detectSafetyRoute("Ingen brystsmerter i går, men nå har jeg brystsmerter"),
+      { kind: "cardiorespiratory", signal: "chest-discomfort" },
+    );
+    assert.deepEqual(detectSafetyRoute("I can’t breathe"), {
+      kind: "cardiorespiratory",
+      signal: "breath-at-rest",
+    });
     assert.equal(detectSafetyRoute("Er brystpress 4 x 8 en god øvelse?"), null);
     assert.equal(detectSafetyRoute("Vanlig stølhet etter knebøy"), null);
+  });
+});
+
+describe("privacy request routing", () => {
+  it("captures explicit data-rights requests but not ordinary log changes", () => {
+    assert.equal(detectPrivacyRequest("Eksporter alle dataene mine"), "export");
+    assert.equal(detectPrivacyRequest("Slett alle personopplysninger om meg"), "deletion");
+    assert.equal(detectPrivacyRequest("I want access to all my personal data"), "access");
+    assert.equal(detectPrivacyRequest("Rätta mina personuppgifter"), "correction");
+    assert.equal(detectPrivacyRequest("Slett siste treningslogg"), null);
+    assert.equal(detectPrivacyRequest("Hva husker du om meg?"), null);
   });
 });

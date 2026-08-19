@@ -28,6 +28,7 @@ import type {
   ReminderFilter,
 } from "./types.ts";
 import { titleForSlug } from "./reminder-topic.ts";
+import { encodeCoachEventMetadata } from "./coach-events.ts";
 
 type SqlValue = string | number | bigint | null | Uint8Array;
 
@@ -77,14 +78,14 @@ export function recordCoachEvent(input: {
   dedupeKey?: string | null;
   metadata?: Record<string, unknown>;
 }): CoachEventRow {
-  const metadata = JSON.stringify(input.metadata ?? {});
-  if (metadata.length > 2048) throw new Error("coach event metadata exceeds 2048 characters");
+  const metadata = encodeCoachEventMetadata(input.metadata);
   const id = randomUUID();
   const createdAt = nowIso();
   const info = run(
-    `INSERT OR IGNORE INTO coach_events
+    `INSERT INTO coach_events
        (id, user_id, kind, source, ref_id, dedupe_key, metadata, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
     id,
     input.userId,
     input.kind,
@@ -95,8 +96,13 @@ export function recordCoachEvent(input: {
     createdAt,
   );
   if (Number(info.changes) === 0 && input.dedupeKey) {
-    const existing = row<CoachEventRow>("SELECT * FROM coach_events WHERE dedupe_key = ?", input.dedupeKey);
+    const existing = row<CoachEventRow>(
+      "SELECT * FROM coach_events WHERE user_id = ? AND dedupe_key = ?",
+      input.userId,
+      input.dedupeKey,
+    );
     if (existing) return existing;
+    throw new Error("coach event conflict did not resolve to an existing row");
   }
   return row<CoachEventRow>("SELECT * FROM coach_events WHERE id = ?", id)!;
 }

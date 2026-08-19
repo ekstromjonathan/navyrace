@@ -377,5 +377,62 @@ describe("dialogue replay", () => {
     assert.equal(events.length, 1);
     assert.equal(events[0]?.kind, "safety_routed");
     assert.equal(events[0]?.metadata.includes("trykk i brystet"), false, "event metadata has no raw message");
+
+    await handleInbound({
+      eventId: "e-dialogue-safety-2",
+      messageId: "m-dialogue-safety-2",
+      chatId: "chat-dialogue-safety",
+      phone: "+4740343295",
+      body: "Jeg er på legevakta nå",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal((await journal.pendingOf(user))?.type, "question");
+    const fresh = await journal.getUser(user.id);
+    assert.equal(journal.factsOf(fresh ?? user).equipment, undefined, "safety status is not stored as equipment");
+  });
+
+  it("discloses AI on the first deterministic coach reply", async () => {
+    const before = outbound.length;
+    await handleInbound({
+      eventId: "e-dialogue-disclosure-1",
+      messageId: "m-dialogue-disclosure-1",
+      chatId: "chat-dialogue-disclosure",
+      phone: "+4740343295",
+      body: "Minn meg på meditasjon hver dag kl 7",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal(outbound.length, before + 1);
+    assert.match(lastOut(), /^Jeg er .+, AI-coachen din\./i);
+    assert.equal((lastOut().match(/AI-coach/gi) ?? []).length, 1);
+    assert.match(lastOut(), /07:00/);
+  });
+
+  it("registers explicit privacy requests before pending or the LLM", async () => {
+    const before = outbound.length;
+    await handleInbound({
+      eventId: "e-dialogue-privacy-1",
+      messageId: "m-dialogue-privacy-1",
+      chatId: "chat-dialogue-privacy",
+      phone: "+4740343295",
+      body: "Eksporter alle dataene mine",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal(outbound.length, before + 1);
+    assert.match(lastOut(), /AI-coach/i);
+    assert.match(lastOut(), /registrert|manuell/i);
+    const user = await journal.upsertUser("chat-dialogue-privacy", "+4740343295");
+    const privacyEvents = (await journal.listCoachEvents(user.id)).filter(
+      (event) => event.kind === "privacy_requested",
+    );
+    assert.ok(privacyEvents.some((event) => event.ref_id === "m-dialogue-privacy-1"));
   });
 });

@@ -28,6 +28,7 @@ import type {
   ReminderFilter,
 } from "./types.ts";
 import { titleForSlug } from "./reminder-topic.ts";
+import { encodeCoachEventMetadata } from "./coach-events.ts";
 import type { ArchivedEntry } from "./journal-sqlite.ts";
 
 type SbError = { code?: string; message: string } | null;
@@ -148,8 +149,7 @@ export async function recordCoachEvent(input: {
   dedupeKey?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<CoachEventRow> {
-  const encoded = JSON.stringify(input.metadata ?? {});
-  if (encoded.length > 2048) throw new Error("coach event metadata exceeds 2048 characters");
+  encodeCoachEventMetadata(input.metadata);
   const body = {
     id: randomUUID(),
     user_id: input.userId,
@@ -165,6 +165,7 @@ export async function recordCoachEvent(input: {
     const { data: existing, error: existingError } = await getSupabase()
       .from("coach_events")
       .select("*")
+      .eq("user_id", input.userId)
       .eq("dedupe_key", input.dedupeKey)
       .maybeSingle();
     throwIf(existingError);

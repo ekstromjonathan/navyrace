@@ -148,6 +148,7 @@ These are the choices from recent PT work (#16–#19). Prefer them unless the pr
 - `test/coach-quality.test.ts` keeps product-level golden scenarios for lapse recovery, pain, low time, ambivalence, pride, resistance, memory repair, rest days, reminders, and model failure. It checks behavioral invariants rather than exact prose.
 - `pt.coach_events` stores compact outcomes (`kind`, `source`, references, small JSON metadata). Raw message bodies belong only in the rolling `message_log`; never duplicate them into analytics metadata.
 - `/vilkar/` describes the AI/wellness boundary, categories of data used, model/provider processing, emergency limits, and how a user requests access, correction, export, or deletion.
+- Explicit access/correction/export/deletion wording is routed before pending/LLM, stored as a durable `privacy_requested` event, confirmed as manual handling, and best-effort pinged to the owner for non-owner members.
 - The deterministic router is deliberately narrow. Ordinary soreness and non-urgent pain stay in the coaching flow; a model must never diagnose or declare it safe to continue.
 
 ## iMessage rules baked in

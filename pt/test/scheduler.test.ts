@@ -5,7 +5,7 @@ process.env.LINQ_API_TOKEN = "test-token";
 import assert from "node:assert/strict";
 import { describe, it, before } from "node:test";
 import * as journal from "../src/journal.ts";
-import { fireDueReminders, isReminderDue } from "../src/scheduler.ts";
+import { fireDueReminders, isReminderDue, reminderBody } from "../src/scheduler.ts";
 import type { ReminderRow, UserRow } from "../src/types.ts";
 
 describe("scheduler", () => {
@@ -121,5 +121,15 @@ describe("scheduler", () => {
     assert.ok(n >= 1);
     const mine = sent.find((s) => /meditasjon/i.test(s));
     assert.ok(mine);
+  });
+
+  it("redacts sensitive titles through the real scheduler path", async () => {
+    const privateUser = await journal.upsertUser("chat-private-reminder", "+4740343302");
+    const privateReminder = await journal.upsertReminder(privateUser.id, "rehab-kne", 8, 0, {
+      title: "kneskade rehab",
+    });
+    const body = await reminderBody(privateUser, privateReminder);
+    assert.equal(body, "Påminnelse fra coachen — åpne iMessage.");
+    assert.equal(/kne|skade|rehab/i.test(body), false);
   });
 });
