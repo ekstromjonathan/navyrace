@@ -1,7 +1,7 @@
 import { addLocalDays, localParts, todayInTz } from "./db.ts";
 import { inferModality, modalityLabel, modalityOfSession, stacksHard, type Modality } from "./activity.ts";
 import { assignSessionDays, startedOnOf } from "./calendar.ts";
-import { parseAdaptChoice, isDidYouHearMe } from "./parser.ts";
+import { parseAdaptChoice, isDidYouHearMe, isBareGreeting, parseMessage } from "./parser.ts";
 import * as copy from "./copy.ts";
 import * as journal from "./journal.ts";
 import type { Lang } from "./locale.ts";
@@ -121,7 +121,7 @@ function isQuestion(body: string): boolean {
 }
 
 function wantsProgram(body: string): boolean {
-  return /\b(program|opplegg|ukeplan|planen som er satt|hvilken plan|days? per week|ganger (i|ila) uka|dager i uka|hvor er vi|hvor står vi|denne uka|denne uken|hva er status|status nå)\b/i.test(
+  return /\b(program|opplegg|ukeplan(en)?|planen som er satt|hvilken plan|days? per week|ganger (i|ila) uka|dager i uka|hvor er vi|hvor står vi|denne uka|denne uken|hva er status|status nå)\b/i.test(
     body,
   );
 }
@@ -190,6 +190,17 @@ export async function coachFallback(
     return copy.fallbackWeek(lang, agenda);
   }
 
+  const parsed = parseMessage(text);
+  if (parsed.kind === "program") {
+    return copy.fallbackWeek(lang, agenda);
+  }
+  if (parsed.kind === "alive") {
+    return copy.fallbackAlive(lang);
+  }
+  if (parsed.kind === "greeting" || parsed.kind === "today" || isBareGreeting(text)) {
+    return copy.fallbackMeet(lang, agenda);
+  }
+
   const conflict = consecutiveConflict(agenda);
   const labeled = conflict
     ? { yesterdayMod: modalityLabel(lang, conflict.yesterdayMod), todaySession: conflict.todaySession }
@@ -208,7 +219,7 @@ export async function coachFallback(
     return copy.todayLogged(lang, title);
   }
 
-  return copy.fallbackMeet(lang, agenda);
+  return copy.fallbackOpen(lang);
 }
 
 export function agendaForSnapshot(agenda: CoachAgenda) {

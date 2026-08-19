@@ -1,5 +1,5 @@
 import { env } from "./env.ts";
-import { chatModels, completePlain, hasLlm } from "./llm.ts";
+import { chatModels, completePlain, hasLlm, isModelFallbackError } from "./llm.ts";
 import { agendaForSnapshot, loadAgenda } from "./fallback.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
@@ -74,14 +74,15 @@ export async function composeFromPacket(
     try {
       const text = await completePlain({
         model,
-        maxTokens: 500,
+        maxTokens: 1200,
         system: `${composeSystem(lang)}${onboard}`,
         user,
       });
       const clipped = text.trim().slice(0, 1200);
-      if (clipped && clipped.length > 2 && !copy.isAgentFailureReply(clipped)) return clipped;
+      if (clipped && !copy.isAgentFailureReply(clipped)) return clipped;
     } catch (err) {
       console.error("compose failed", model, err instanceof Error ? err.message : err);
+      if (!isModelFallbackError(err)) break;
     }
   }
   return null;

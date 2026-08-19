@@ -42,9 +42,12 @@ describe("parser", () => {
     assert.equal(parseMessage("what's my program").kind, "program");
     assert.equal(parseMessage("Hvor er vi nå denne uka?").kind, "program");
     assert.equal(parseMessage("Hva er status nå?").kind, "program");
+    assert.equal(parseMessage("Gi meg ukeplanen min").kind, "program");
+    assert.equal(parseMessage("ukeplanen").kind, "program");
     assert.equal(parseMessage("Er du våken?").kind, "alive");
     assert.equal(parseMessage("Våken?").kind, "alive");
     assert.equal(parseMessage("VåkenV").kind, "alive");
+    assert.equal(parseMessage("Svarer modellen nå?").kind, "alive");
     assert.equal(parseMessage("Hvilke reminders ligger inne?").kind, "reminder_list");
     assert.equal(parseMessage("Hvilke reminders ligger inneV").kind, "reminder_list");
     assert.equal(parseMessage("Bytte").kind, "adapt_choice");
@@ -70,6 +73,9 @@ describe("parser", () => {
     assert.equal(parseMessage("heisann").kind, "greeting");
     assert.equal(parseMessage("god morgen").kind, "greeting");
     assert.equal(parseMessage("hey").kind, "greeting");
+    assert.equal(parseMessage("Skjer'a?").kind, "greeting");
+    assert.equal(parseMessage("Skjer’a?").kind, "greeting");
+    assert.equal(parseMessage("skjera").kind, "greeting");
     assert.equal(parseMessage("Hei, jeg er sliten").kind, "unknown");
   });
 
@@ -131,9 +137,11 @@ describe("parser", () => {
   });
 
   it("detects LLM failure fallback copy", async () => {
-    const { isAgentFailureReply, agentError } = await import("../src/copy.ts");
+    const { isAgentFailureReply, isHardLlmFailureReply, agentError } = await import("../src/copy.ts");
     assert.equal(isAgentFailureReply(agentError("nb", new Error("429 rate limit"))), true);
+    assert.equal(isHardLlmFailureReply(agentError("nb", new Error("429 rate limit"))), false);
     assert.equal(isAgentFailureReply(agentError("nb", new Error("401 unauthorized"))), true);
+    assert.equal(isHardLlmFailureReply(agentError("nb", new Error("401 unauthorized"))), true);
     assert.equal(isAgentFailureReply("I dag: Styrke for hele kroppen"), false);
   });
 

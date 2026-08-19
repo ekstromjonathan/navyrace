@@ -878,17 +878,21 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
                 ? await formatToday(current, lang)
                 : parsed.kind === "program"
                   ? await formatWeek(current, lang)
-                  : await coachFallback(current, lang, work.body, {
-                      lastPt,
-                      previousUser: previousUser?.body ?? null,
-                    });
+                  : parsed.kind === "alive"
+                    ? copy.fallbackAlive(lang)
+                    : await coachFallback(current, lang, work.body, {
+                        lastPt,
+                        previousUser: previousUser?.body ?? null,
+                      });
           if (copy.isAdaptOffer(lastPt ?? "") && copy.isAdaptOffer(text)) {
             text = await coachFallback(current, lang, work.body, {
               lastPt,
               previousUser: previousUser?.body ?? null,
             });
           }
-          agent = { text: `${copy.modelDownLead(lang)}\n${text}` };
+          agent = {
+            text: copy.isHardLlmFailureReply(agent.text) ? `${agent.text}\n${text}` : text,
+          };
         }
       }
     }

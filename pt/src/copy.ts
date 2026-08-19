@@ -761,6 +761,15 @@ export function fallbackAlive(lang: Lang): string {
   );
 }
 
+export function fallbackOpen(lang: Lang): string {
+  return pick(
+    lang,
+    "I'm here. Ask for the week plan, today, or log something.",
+    "Jeg er her. Si ifra om du vil ha ukeplanen, i dag, eller logge noe.",
+    "Jag är här. Säg till om du vill ha veckoplanen, idag, eller logga något.",
+  );
+}
+
 export function adaptedKeep(lang: Lang, title: string): string {
   return pick(
     lang,
@@ -900,13 +909,21 @@ export function agentError(lang: Lang, err: unknown): string {
   );
 }
 
-/** True when the coach reply is a known LLM-failure fallback (not a real answer). */
-export function isAgentFailureReply(text: string): boolean {
+/** Key / credit / model-name failures — say this once, then the journal answer. */
+export function isHardLlmFailureReply(text: string): boolean {
   const t = text.trim();
   return (
     /modellnavnet er ugyldig|model name is invalid|modellnamnet är ogiltigt/i.test(t) ||
     /LLM-nøkkelen ble avvist|LLM key was rejected|LLM-nyckeln avvisades/i.test(t) ||
-    /tom for kreditt|out of credit|tomt på kredit/i.test(t) ||
+    /tom for kreditt|out of credit|tomt på kredit/i.test(t)
+  );
+}
+
+/** True when the coach reply is a known LLM-failure fallback (not a real answer). */
+export function isAgentFailureReply(text: string): boolean {
+  const t = text.trim();
+  return (
+    isHardLlmFailureReply(t) ||
     /rate-begrenset|rate-limited|rate-begränsad/i.test(t) ||
     /modell-tilkoblingen hakket|model connection hiccuped|modellanslutningen hakade/i.test(t) ||
     /fikk ikke laget et skikkelig svar|couldn't put together a proper reply|fick inte till ett ordentligt svar/i.test(t) ||
