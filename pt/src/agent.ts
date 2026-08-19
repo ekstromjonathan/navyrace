@@ -8,6 +8,7 @@ import { pingResearchHold, research as runResearch } from "./research.ts";
 import { agendaForSnapshot, loadAgenda } from "./fallback.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
+import { COACH_CONTRACT } from "./coach-contract.ts";
 import { inferReminderTopic } from "./reminder-topic.ts";
 import type { Lang } from "./locale.ts";
 import type { Plan, PlanSession, TrackKind, UserRow } from "./types.ts";
@@ -273,10 +274,10 @@ function systemPrompt(lang: Lang, opts: { onboarding: boolean; firstContact: boo
   if (opts.firstContact) {
     onboard =
       lang === "en"
-        ? `First message ever. Match the welcome: casual, not a PT pitch. (1) “I'm ${env.coachName}. Your new coach.” (2) “I want to help you become a better version of yourself.” (3) one line that you keep track of whatever they send — workouts, habits, reminders. (4) one open question: what they want to keep on top of. No feature list, no week-1 funnel, no “save this number”.`
+        ? `First message ever. Match the welcome: casual, not a PT pitch. (1) “I'm ${env.coachName}. Your new AI coach.” (2) “I want to help you become a better version of yourself.” (3) one line that you keep track of whatever they send — workouts, habits, reminders. (4) one open question: what they want to keep on top of. No feature list, no week-1 funnel, no “save this number”.`
         : lang === "sv"
-          ? `Första meddelandet någonsin. Samma välkomst: ledig, inte ett PT-pitch. (1) «Jag är ${env.coachName}. Din nya coach.» (2) «Jag vill hjälpa dig att bli en bättre version av dig själv.» (3) en rad att du håller koll på det de skickar — pass, vanor, påminnelser. (4) en öppen fråga: vad de vill hålla koll på. Ingen funktionslista, ingen vecka-1-tratt, inte «spara numret».`
-          : `Første melding noensinne. Samme velkomst: uformell, ikke et PT-pitch. (1) «Jeg er ${env.coachName}. Din nye coach.» (2) «Jeg vil hjelpe deg å bli en bedre versjon av deg selv.» (3) én linje at du holder styr på det de sender — økter, vaner, påminnelser. (4) ett åpent spørsmål: hva de har lyst å holde styr på. Ingen funksjonsliste, ingen uke-1-trakt, ikke «lagre nummeret».`;
+          ? `Första meddelandet någonsin. Samma välkomst: ledig, inte ett PT-pitch. (1) «Jag är ${env.coachName}. Din nya AI-coach.» (2) «Jag vill hjälpa dig att bli en bättre version av dig själv.» (3) en rad att du håller koll på det de skickar — pass, vanor, påminnelser. (4) en öppen fråga: vad de vill hålla koll på. Ingen funktionslista, ingen vecka-1-tratt, inte «spara numret».`
+          : `Første melding noensinne. Samme velkomst: uformell, ikke et PT-pitch. (1) «Jeg er ${env.coachName}. Din nye AI-coach.» (2) «Jeg vil hjelpe deg å bli en bedre versjon av deg selv.» (3) én linje at du holder styr på det de sender — økter, vaner, påminnelser. (4) ett åpent spørsmål: hva de har lyst å holde styr på. Ingen funksjonsliste, ingen uke-1-trakt, ikke «lagre nummeret».`;
   } else if (opts.onboarding) {
     onboard =
       lang === "en"
@@ -291,6 +292,8 @@ function systemPrompt(lang: Lang, opts: { onboarding: boolean; firstContact: boo
 Language: Reply only in ${language}. The user started in this language. Never switch. ${confirm}
 
 You care. Meet the person in the message they actually sent. Explain the plan in plain words when they doubt it. Do not dump today's workout as a non-answer.
+
+${COACH_CONTRACT}
 
 ## Memory (critical)
 - Journal facts/notes/entries are durable truth. Recent chat is evidence of what they already said. agenda.yesterday/today is what happened vs what was planned.

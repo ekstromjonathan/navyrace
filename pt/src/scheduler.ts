@@ -13,18 +13,19 @@ const TICK_MS = 30_000;
 export async function reminderBody(user: UserRow, reminder: ReminderRow): Promise<string> {
   const raw = journal.factsOf(user).uiLang;
   const lang = isLang(raw) ? raw : isLang(user.locale) ? user.locale : "nb";
-  if (reminder.url) return copy.reminderPingVideo(lang, reminder.url);
-  if (reminder.slug !== "train") return copy.reminderPingRoutine(lang, reminder.title || reminder.slug);
+  const safe = (body: string) => copy.safeUnsolicitedReminder(lang, body);
+  if (reminder.url) return safe(copy.reminderPingVideo(lang, reminder.url));
+  if (reminder.slug !== "train") return safe(copy.reminderPingRoutine(lang, reminder.title || reminder.slug));
   const training = await journal.activeTraining(user.id);
-  if (!training) return copy.reminderPingNoPlan(lang);
+  if (!training) return safe(copy.reminderPingNoPlan(lang));
   const view = await journal.todayView(user);
-  if (view.kind === "complete") return copy.reminderPingDone(lang, training.name);
+  if (view.kind === "complete") return safe(copy.reminderPingDone(lang, training.name));
   if (view.kind === "rest" || view.kind === "logged") {
-    return copy.reminderPingRest(lang, copy.restDayTips(lang, view.weekday));
+    return safe(copy.reminderPingRest(lang, copy.restDayTips(lang, view.weekday)));
   }
-  if (view.kind !== "session") return copy.reminderPingNoPlan(lang);
+  if (view.kind !== "session") return safe(copy.reminderPingNoPlan(lang));
   const line = copy.sessionHeading(lang, view.session, view.load);
-  return copy.reminderPingToday(lang, line);
+  return safe(copy.reminderPingToday(lang, line));
 }
 
 export async function isReminderDue(reminder: ReminderRow, user: UserRow, now: Date): Promise<boolean> {

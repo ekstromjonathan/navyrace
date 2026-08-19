@@ -336,10 +336,24 @@ function parseSessionDay(lower: string): "today" | "yesterday" | null {
 export function parseSessionLog(text: string): Extract<HeuristicIntent, { kind: "session_log" }> | null {
   const trimmed = text.trim();
   if (!trimmed || trimmed.length > 500) return null;
-  const lower = trimmed.toLowerCase();
+  const lower = trimmed.toLowerCase().replace(/[’‘]/g, "'");
 
   // Don't steal habit/recovery lines that already matched above; those return earlier.
   if (/^(lett|passe|brutalt|hoppet|easy|ok|okay|brutal|skipped)$/i.test(trimmed)) return null;
+
+  const negatesCompletion =
+    /\b(?:har\s+)?(?:ikke|aldri)\s+(?:trent|trente|gjort|fullført|fullfort|ferdig|tatt\s+økt(?:a|en)?)\b/iu.test(
+      lower,
+    ) ||
+    /\b(?:trente|trent|gjorde|fullførte|fullforte|ble\s+ferdig)\s+(?:ikke|aldri)(?!\s+bare)\b/iu.test(
+      lower,
+    ) ||
+    /\b(?:(?:did|have|has)(?:n't| not)|never)\s+(?:train(?:ed)?|work(?:ed)?\s+out|finish(?:ed)?|complete(?:d)?|do)\b/iu.test(
+      lower,
+    ) ||
+    /\b(?:har\s+)?inte\s+(?:tränat|tränade|gjort|slutfört|klar)\b/iu.test(lower) ||
+    /\b(?:tränade|tränat|gjorde|slutförde|blev\s+klar)\s+inte(?!\s+bara)\b/iu.test(lower);
+  if (negatesCompletion) return null;
 
   const claimsPlanned =
     /\b(dagens\s+økt|dagens\s+okt|dagens\s+pass|today'?s\s+(workout|session)|planlagte?\s+økt|denne\s+økt(a|en)?)\b/i.test(

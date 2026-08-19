@@ -3,6 +3,7 @@ import { chatModels, completePlain, hasLlm, isModelFallbackError } from "./llm.t
 import { agendaForSnapshot, loadAgenda } from "./fallback.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
+import { COACH_CONTRACT } from "./coach-contract.ts";
 import type { Lang } from "./locale.ts";
 import type { UserRow } from "./types.ts";
 
@@ -49,14 +50,15 @@ function composeSystem(lang: Lang): string {
 
 The receive layer already loaded the journal and ran any tools. You do NOT call tools. Answer the user's latest message from the packet.
 
+${COACH_CONTRACT}
+
 Rules:
 - Meet the actual message (awake? status? reminders? what do you know about me?). Never paste today's workout as a non-answer.
 - Packet is truth. Don't invent logs, reminders, or history.
 - Reminders: packet.reminders is a list. Several can be on (train + video + habits). Don't ask when again if the clock is already there. If a url is on a row, you have the link.
 - Typical 2–6 short lines. At most one question, only if you need it.
 - Informal. No jargon (RPE, OCR, HIIT, zone 2).
-- Rest day → recovery, not the next session. Greeting → short, one hint. Week/status → N sessions and weekdays.
-- You are not a doctor.`.trim();
+- Rest day → recovery, not the next session. Greeting → short, one hint. Week/status → N sessions and weekdays.`.trim();
 }
 
 /** LLM writes the user-facing reply after storage/retrieval. No tool calls. */

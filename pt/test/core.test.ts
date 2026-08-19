@@ -205,6 +205,11 @@ describe("parser", () => {
     const extra = parseMessage("Trente tennis i tillegg til programmet i dag");
     assert.equal(extra.kind, "session_log");
     if (extra.kind === "session_log") assert.equal(extra.extra, true);
+    assert.equal(parseMessage("Jeg trente ikke i går. Føler jeg har rota det til.").kind, "unknown");
+    assert.equal(parseMessage("Jeg har ikke gjort dagens økt").kind, "unknown");
+    assert.equal(parseMessage("I didn't work out yesterday").kind, "unknown");
+    assert.equal(parseMessage("Jag har inte tränat idag").kind, "unknown");
+    assert.equal(parseMessage("Jeg trente ikke bare løping, men styrke også i dag").kind, "session_log");
     assert.equal(
       parseMessage("Ok, takk. Men jeg trente løping i går? Bør vi løpe i dag også?").kind,
       "unknown",
@@ -296,6 +301,28 @@ describe("parser", () => {
       assert.equal(stopClock.hour, 8);
     }
     assert.equal(parseMessage("Hva har du logget til nå?").kind, "unknown");
+  });
+
+  it("keeps sensitive routine details off unsolicited lock-screen copy", async () => {
+    const { reminderPingRoutine, safeUnsolicitedReminder } = await import("../src/copy.ts");
+    assert.match(reminderPingRoutine("nb", "meditasjon"), /meditasjon/i);
+    for (const title of [
+      "medisinen min",
+      "kneskade rehab",
+      "knesmerter",
+      "insulin 10 enheter",
+      "medications",
+      "knäskada",
+      "lese bok",
+    ]) {
+      const generic = reminderPingRoutine("nb", title);
+      assert.match(generic, /rutinen din/i);
+      assert.equal(generic.includes(title), false);
+    }
+    assert.equal(
+      safeUnsolicitedReminder("nb", "Trening i dag: rehab for kneskade"),
+      "Påminnelse fra coachen — åpne iMessage.",
+    );
   });
 
   it("extracts waitlist names and owner yes/no", async () => {
@@ -434,7 +461,7 @@ describe("invite welcome", () => {
     assert.equal(firstName(null), null);
     const nb = inviteWelcome("nb", "Inger Elise Kjøndal Ekström", "lodd.ai");
     assert.match(nb, /^Hei Inger —/);
-    assert.match(nb, /din nye coach/i);
+    assert.match(nb, /din nye AI-coach/i);
     assert.match(nb, /bedre versjon av deg selv/);
     assert.match(nb, /økter/i);
     assert.match(nb, /vaner/i);
@@ -445,7 +472,7 @@ describe("invite welcome", () => {
     assert.equal(/https?:\/\//i.test(nb), false);
     assert.equal(/linq/i.test(nb), false);
     const en = inviteWelcome("en", "Inger", "lodd.ai");
-    assert.match(en, /your new coach/i);
+    assert.match(en, /your new AI coach/i);
     assert.match(en, /habits/i);
     assert.equal(/linqapp\.com/i.test(en), false);
   });

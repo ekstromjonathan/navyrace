@@ -10,6 +10,9 @@ import {
 } from "./calendar.ts";
 import type {
   ChatTurn,
+  CoachEventKind,
+  CoachEventRow,
+  CoachEventSource,
   InviteRow,
   Pending,
   Plan,
@@ -25,6 +28,7 @@ import type {
   ReminderFilter,
 } from "./types.ts";
 import { titleForSlug } from "./reminder-topic.ts";
+import { encodeCoachEventMetadata } from "./coach-events.ts";
 
 type SqlValue = string | number | bigint | null | Uint8Array;
 
@@ -64,6 +68,52 @@ export function releaseEvent(eventId: string): void {
 
 export function releaseMessage(messageId: string): void {
   run("DELETE FROM processed_messages WHERE linq_message_id = ?", messageId);
+}
+
+export function recordCoachEvent(input: {
+  userId: string;
+  kind: CoachEventKind;
+  source: CoachEventSource;
+  refId?: string | null;
+  dedupeKey?: string | null;
+  metadata?: Record<string, unknown>;
+}): CoachEventRow {
+  const metadata = encodeCoachEventMetadata(input.metadata);
+  const id = randomUUID();
+  const createdAt = nowIso();
+  const info = run(
+    `INSERT INTO coach_events
+       (id, user_id, kind, source, ref_id, dedupe_key, metadata, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
+    id,
+    input.userId,
+    input.kind,
+    input.source,
+    input.refId ?? null,
+    input.dedupeKey ?? null,
+    metadata,
+    createdAt,
+  );
+  if (Number(info.changes) === 0 && input.dedupeKey) {
+    const existing = row<CoachEventRow>(
+      "SELECT * FROM coach_events WHERE user_id = ? AND dedupe_key = ?",
+      input.userId,
+      input.dedupeKey,
+    );
+    if (existing) return existing;
+    throw new Error("coach event conflict did not resolve to an existing row");
+  }
+  return row<CoachEventRow>("SELECT * FROM coach_events WHERE id = ?", id)!;
+}
+
+export function listCoachEvents(userId: string, limit = 50): CoachEventRow[] {
+  const n = Math.max(1, Math.min(200, Math.round(limit)));
+  return rows<CoachEventRow>(
+    "SELECT * FROM coach_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+    userId,
+    n,
+  );
 }
 
 export function getUser(id: string): UserRow | undefined {

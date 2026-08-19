@@ -10,6 +10,9 @@ import {
 } from "./calendar.ts";
 import type {
   ChatTurn,
+  CoachEventKind,
+  CoachEventRow,
+  CoachEventSource,
   InviteRow,
   Pending,
   Plan,
@@ -25,6 +28,7 @@ import type {
   ReminderFilter,
 } from "./types.ts";
 import { titleForSlug } from "./reminder-topic.ts";
+import { encodeCoachEventMetadata } from "./coach-events.ts";
 import type { ArchivedEntry } from "./journal-sqlite.ts";
 
 type SbError = { code?: string; message: string } | null;
@@ -98,6 +102,19 @@ function asReminder(row: Record<string, unknown>): ReminderRow {
   };
 }
 
+function asCoachEvent(row: Record<string, unknown>): CoachEventRow {
+  return {
+    id: String(row.id),
+    user_id: String(row.user_id),
+    kind: row.kind as CoachEventKind,
+    source: row.source as CoachEventSource,
+    ref_id: row.ref_id == null ? null : String(row.ref_id),
+    dedupe_key: row.dedupe_key == null ? null : String(row.dedupe_key),
+    metadata: jsonText(row.metadata, "{}"),
+    created_at: String(row.created_at),
+  };
+}
+
 export async function claimEvent(eventId: string): Promise<boolean> {
   const { error } = await getSupabase().from("webhook_events").insert({ event_id: eventId, received_at: nowIso() });
   if (isUniqueViolation(error)) return false;
@@ -122,6 +139,52 @@ export async function releaseEvent(eventId: string): Promise<void> {
 export async function releaseMessage(messageId: string): Promise<void> {
   const { error } = await getSupabase().from("processed_messages").delete().eq("linq_message_id", messageId);
   throwIf(error);
+}
+
+export async function recordCoachEvent(input: {
+  userId: string;
+  kind: CoachEventKind;
+  source: CoachEventSource;
+  refId?: string | null;
+  dedupeKey?: string | null;
+  metadata?: Record<string, unknown>;
+}): Promise<CoachEventRow> {
+  encodeCoachEventMetadata(input.metadata);
+  const body = {
+    id: randomUUID(),
+    user_id: input.userId,
+    kind: input.kind,
+    source: input.source,
+    ref_id: input.refId ?? null,
+    dedupe_key: input.dedupeKey ?? null,
+    metadata: input.metadata ?? {},
+    created_at: nowIso(),
+  };
+  const { data, error } = await getSupabase().from("coach_events").insert(body).select("*").single();
+  if (isUniqueViolation(error) && input.dedupeKey) {
+    const { data: existing, error: existingError } = await getSupabase()
+      .from("coach_events")
+      .select("*")
+      .eq("user_id", input.userId)
+      .eq("dedupe_key", input.dedupeKey)
+      .maybeSingle();
+    throwIf(existingError);
+    if (existing) return asCoachEvent(existing as Record<string, unknown>);
+  }
+  throwIf(error);
+  return asCoachEvent(data as Record<string, unknown>);
+}
+
+export async function listCoachEvents(userId: string, limit = 50): Promise<CoachEventRow[]> {
+  const n = Math.max(1, Math.min(200, Math.round(limit)));
+  const { data, error } = await getSupabase()
+    .from("coach_events")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(n);
+  throwIf(error);
+  return (data ?? []).map((r) => asCoachEvent(r as Record<string, unknown>));
 }
 
 export async function getUser(id: string): Promise<UserRow | undefined> {

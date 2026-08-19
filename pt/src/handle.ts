@@ -26,6 +26,8 @@ import { startedOnOf, assignSessionDays } from "./calendar.ts";
 import { consecutiveConflict, coachFallback, loadAgenda, plannedSessionOf } from "./fallback.ts";
 import { composeFromPacket, gatherPacket } from "./compose.ts";
 import { inferReminderTopic } from "./reminder-topic.ts";
+import { detectSafetyRoute, isSafetyFollowup } from "./safety.ts";
+import { detectPrivacyRequest } from "./privacy.ts";
 import type { Inbound, InviteRow, ReminderRow, UserRow } from "./types.ts";
 
 type ReplyResult = { text: string; effect?: string };
@@ -62,7 +64,14 @@ async function reply(
     if (linq.isOptOutRejected(err)) return;
     throw err;
   }
-  if (opts?.userId) await journal.logMessage(opts.userId, "pt", clipped);
+  if (opts?.userId) {
+    try {
+      await journal.logMessage(opts.userId, "pt", clipped);
+    } catch (err) {
+      /* The user already received the reply. Never emit a second error reply because telemetry failed. */
+      console.error("outbound message log failed", opts.userId, err);
+    }
+  }
 }
 
 async function withTyping<T>(chatId: string, fn: () => Promise<T>): Promise<T> {
@@ -350,6 +359,7 @@ async function commitAdaptChoice(
 async function handlePending(user: UserRow, lang: Lang, body: string): Promise<string | ReplyResult | null> {
   const pending = await journal.pendingOf(user);
   if (!pending) return null;
+  if (isSafetyFollowup(body)) return null;
 
   if (pending.type === "activate_confirm") {
     if (isActivatePhrase(body)) {
@@ -833,15 +843,78 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
     }
 
     const chat = await journal.recentChat(current.id, 20, inbound.messageId);
+    const firstContact = chat.length === 0;
+    const disclose = (text: string) =>
+      firstContact ? copy.withAiCoachDisclosure(lang, env.coachName, text) : text;
     const previousUser = [...chat].reverse().find((m) => m.role === "user" && m.body.trim() !== inbound.body.trim());
     const lastPt = [...chat].reverse().find((m) => m.role === "pt")?.body ?? null;
     const work: Inbound = isDidYouHearMe(inbound.body) && previousUser
       ? { ...inbound, body: previousUser.body }
       : inbound;
 
+    const safety = detectSafetyRoute(work.body);
+    if (safety) {
+      const text =
+        safety.kind === "mental_crisis"
+          ? copy.safetyMentalCrisis(lang)
+          : copy.safetyMedicalUrgent(lang, safety.kind);
+      await reply(inbound.chatId, text, {
+        replyTo: inbound.messageId,
+        userId: current.id,
+      });
+      try {
+        await journal.recordCoachEvent({
+          userId: current.id,
+          kind: "safety_routed",
+          source: "system",
+          refId: inbound.messageId,
+          dedupeKey: `safety:${inbound.messageId}`,
+          metadata: { route: safety.kind, signal: safety.signal },
+        });
+      } catch (err) {
+        /* Safety guidance is primary; analytics must never suppress it. */
+        console.error("safety event record failed", current.id, err);
+      }
+      await maybeCard(current, inbound.chatId);
+      return;
+    }
+
+    const privacyRequest = detectPrivacyRequest(work.body);
+    if (privacyRequest) {
+      await journal.recordCoachEvent({
+        userId: current.id,
+        kind: "privacy_requested",
+        source: "user",
+        refId: inbound.messageId,
+        dedupeKey: `privacy:${inbound.messageId}`,
+        metadata: { request: privacyRequest },
+      });
+      await reply(inbound.chatId, disclose(copy.privacyRequestReceived(lang, privacyRequest)), {
+        replyTo: inbound.messageId,
+        userId: current.id,
+      });
+      if (!isAllowlisted(inbound.phone)) {
+        try {
+          const owner = await ownerUser();
+          if (owner) {
+            const who = current.display_name || current.phone_e164 || current.chat_id;
+            await reply(owner.chat_id, copy.privacyOwnerAlert(ownerLang(owner), privacyRequest, who), {
+              userId: owner.id,
+            });
+          }
+        } catch (err) {
+          /* Durable event is the request queue; owner ping is best-effort. */
+          console.error("privacy owner notification failed", current.id, err);
+        }
+      }
+      await maybeCard(current, inbound.chatId);
+      return;
+    }
+
     const pendingOut = asReply(await handlePending(current, lang, work.body));
     if (pendingOut) {
-      await reply(inbound.chatId, pendingOut.text, {
+      const text = disclose(pendingOut.text);
+      await reply(inbound.chatId, text, {
         replyTo: inbound.messageId,
         userId: current.id,
         effect: pendingOut.effect,
@@ -856,8 +929,9 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
 
     const heuristicOut = asReply(await applyHeuristic(current, lang, work, { onboarding }));
     if (heuristicOut) {
-      await maybePendingAdapt(current, heuristicOut.text);
-      await reply(inbound.chatId, heuristicOut.text, {
+      const text = disclose(heuristicOut.text);
+      await maybePendingAdapt(current, text);
+      await reply(inbound.chatId, text, {
         replyTo: inbound.messageId,
         userId: current.id,
         effect: heuristicOut.effect,
@@ -876,8 +950,9 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       composeFromPacket(lang, packet, { onboarding }),
     );
     if (composed) {
-      await maybePendingAdapt(current, composed);
-      await reply(inbound.chatId, composed, { replyTo: inbound.messageId, userId: current.id });
+      const text = disclose(composed);
+      await maybePendingAdapt(current, text);
+      await reply(inbound.chatId, text, { replyTo: inbound.messageId, userId: current.id });
       await maybeCard(current, inbound.chatId);
       return;
     }
@@ -921,8 +996,9 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
         }
       }
     }
-    await maybePendingAdapt(current, agent.text);
-    await reply(inbound.chatId, agent.text, {
+    const agentText = disclose(agent.text);
+    await maybePendingAdapt(current, agentText);
+    await reply(inbound.chatId, agentText, {
       replyTo: inbound.messageId,
       userId: current.id,
       effect: agent.celebrate ? "confetti" : undefined,

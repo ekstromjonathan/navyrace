@@ -76,6 +76,51 @@ describe("journal", () => {
     assert.equal(await journal.claimEvent("e1"), true);
   });
 
+  it("records structured coach outcomes without duplicating retries", async () => {
+    const user = await journal.upsertUser("chat-quality-events", "+4740343210");
+    const first = await journal.recordCoachEvent({
+      userId: user.id,
+      kind: "safety_routed",
+      source: "system",
+      refId: "m-safety-1",
+      dedupeKey: "safety:m-safety-1",
+      metadata: { route: "cardiorespiratory", signal: "chest-discomfort" },
+    });
+    const duplicate = await journal.recordCoachEvent({
+      userId: user.id,
+      kind: "safety_routed",
+      source: "system",
+      refId: "m-safety-1",
+      dedupeKey: "safety:m-safety-1",
+      metadata: { route: "cardiorespiratory", signal: "chest-discomfort" },
+    });
+    assert.equal(duplicate.id, first.id);
+    const events = await journal.listCoachEvents(user.id);
+    assert.equal(events.length, 1);
+    assert.deepEqual(JSON.parse(events[0]?.metadata ?? "{}"), {
+      route: "cardiorespiratory",
+      signal: "chest-discomfort",
+    });
+    const other = await journal.upsertUser("chat-quality-events-2", "+4740343212");
+    const sameKeyOtherUser = await journal.recordCoachEvent({
+      userId: other.id,
+      kind: "safety_routed",
+      source: "system",
+      dedupeKey: "safety:m-safety-1",
+      metadata: { route: "serious_injury", signal: "cannot-bear-weight" },
+    });
+    assert.notEqual(sameKeyOtherUser.id, first.id, "dedupe keys are scoped per user");
+    await assert.rejects(
+      journal.recordCoachEvent({
+        userId: user.id,
+        kind: "action_proposed",
+        source: "coach",
+        metadata: { message: "raw conversation must not be copied here" },
+      }),
+      /raw-text key/i,
+    );
+  });
+
   it("keeps a rolling chat log and prunes old turns", async () => {
     const chatUser = await journal.upsertUser("chat-log", "+4740343295");
     await journal.logMessage(chatUser.id, "user", "hvilken økt?", "m-q");

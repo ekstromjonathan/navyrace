@@ -3,6 +3,9 @@ import * as sqlite from "./journal-sqlite.ts";
 import * as supabase from "./journal-supabase.ts";
 import { missingForPlan, readyForPlan } from "./plan-facts.ts";
 import type {
+  CoachEventKind,
+  CoachEventRow,
+  CoachEventSource,
   InviteRow,
   Pending,
   Plan,
@@ -65,6 +68,21 @@ export async function releaseEvent(eventId: string): Promise<void> {
 
 export async function releaseMessage(messageId: string): Promise<void> {
   return asAsync(api().releaseMessage(messageId));
+}
+
+export async function recordCoachEvent(input: {
+  userId: string;
+  kind: CoachEventKind;
+  source: CoachEventSource;
+  refId?: string | null;
+  dedupeKey?: string | null;
+  metadata?: Record<string, unknown>;
+}): Promise<CoachEventRow> {
+  return asAsync(api().recordCoachEvent(input));
+}
+
+export async function listCoachEvents(userId: string, limit = 50): Promise<CoachEventRow[]> {
+  return asAsync(api().listCoachEvents(userId, limit));
 }
 
 export async function getUser(id: string): Promise<UserRow | undefined> {

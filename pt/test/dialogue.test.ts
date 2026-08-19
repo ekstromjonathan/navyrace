@@ -346,4 +346,115 @@ describe("dialogue replay", () => {
     assert.equal(after.some((r) => r.slug === "meditasjon"), false);
     assert.equal(after.some((r) => r.slug === "train" && r.hour === 8), true);
   });
+
+  it("routes an exercise red flag before pending or the LLM", async () => {
+    const user = await journal.upsertUser("chat-dialogue-safety", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb" });
+    await journal.touchContactCard(user.id);
+    await journal.setPending(user.id, {
+      type: "question",
+      field: "equipment",
+      askedAt: new Date().toISOString(),
+    });
+    const before = outbound.length;
+    await handleInbound({
+      eventId: "e-dialogue-safety-1",
+      messageId: "m-dialogue-safety-1",
+      chatId: "chat-dialogue-safety",
+      phone: "+4740343295",
+      body: "Jeg fikk trykk i brystet under intervallene",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal(outbound.length, before + 1, "one reply per inbound");
+    assert.match(lastOut(), /stopp økta/i);
+    assert.match(lastOut(), /113/);
+    assert.equal(/OPENROUTER|modell/i.test(lastOut()), false);
+    assert.equal((await journal.pendingOf(user))?.type, "question", "safety does not erase pending context");
+    const events = await journal.listCoachEvents(user.id);
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.kind, "safety_routed");
+    assert.equal(events[0]?.metadata.includes("trykk i brystet"), false, "event metadata has no raw message");
+
+    await handleInbound({
+      eventId: "e-dialogue-safety-2",
+      messageId: "m-dialogue-safety-2",
+      chatId: "chat-dialogue-safety",
+      phone: "+4740343295",
+      body: "Jeg er på legevakta nå",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal((await journal.pendingOf(user))?.type, "question");
+    const fresh = await journal.getUser(user.id);
+    assert.equal(journal.factsOf(fresh ?? user).equipment, undefined, "safety status is not stored as equipment");
+  });
+
+  it("does not log or celebrate a negated workout report", async () => {
+    const user = await journal.upsertUser("chat-dialogue-lapse", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb" });
+    await journal.touchContactCard(user.id);
+    const before = outbound.length;
+    await handleInbound({
+      eventId: "e-dialogue-lapse-1",
+      messageId: "m-dialogue-lapse-1",
+      chatId: "chat-dialogue-lapse",
+      phone: "+4740343295",
+      body: "Jeg trente ikke i går. Føler jeg har rota det til.",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal(outbound.length, before + 1);
+    assert.equal((await journal.recentEntries(user.id, 10)).length, 0);
+    assert.equal(/logget|økt i boks|ferdig/i.test(lastOut()), false);
+    assert.equal(/lat|ingen unnskyldning|skuffet/i.test(lastOut()), false);
+  });
+
+  it("discloses AI on the first deterministic coach reply", async () => {
+    const before = outbound.length;
+    await handleInbound({
+      eventId: "e-dialogue-disclosure-1",
+      messageId: "m-dialogue-disclosure-1",
+      chatId: "chat-dialogue-disclosure",
+      phone: "+4740343295",
+      body: "Minn meg på meditasjon hver dag kl 7",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal(outbound.length, before + 1);
+    assert.match(lastOut(), /^Jeg er .+, AI-coachen din\./i);
+    assert.equal((lastOut().match(/AI-coach/gi) ?? []).length, 1);
+    assert.match(lastOut(), /07:00/);
+  });
+
+  it("registers explicit privacy requests before pending or the LLM", async () => {
+    const before = outbound.length;
+    await handleInbound({
+      eventId: "e-dialogue-privacy-1",
+      messageId: "m-dialogue-privacy-1",
+      chatId: "chat-dialogue-privacy",
+      phone: "+4740343295",
+      body: "Eksporter alle dataene mine",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal(outbound.length, before + 1);
+    assert.match(lastOut(), /AI-coach/i);
+    assert.match(lastOut(), /registrert|manuell/i);
+    const user = await journal.upsertUser("chat-dialogue-privacy", "+4740343295");
+    const privacyEvents = (await journal.listCoachEvents(user.id)).filter(
+      (event) => event.kind === "privacy_requested",
+    );
+    assert.ok(privacyEvents.some((event) => event.ref_id === "m-dialogue-privacy-1"));
+  });
 });
