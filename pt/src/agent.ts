@@ -1,10 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.ts";
 import { resolveOnceOn, addLocalDays, dayAnchorIso, todayInTz } from "./db.ts";
 import { assignSessionDays, startedOnOf } from "./calendar.ts";
 import { adaptAfterLog } from "./adapt.ts";
 import { isExtraWording } from "./activity.ts";
-import { completePlain } from "./llm.ts";
+import { chatModels, completeChat, completePlain, hasLlm, type LlmMessage, type LlmToolDef } from "./llm.ts";
 import { pingResearchHold, research as runResearch } from "./research.ts";
 import { agendaForSnapshot, loadAgenda } from "./fallback.ts";
 import * as journal from "./journal.ts";
@@ -12,18 +11,18 @@ import * as copy from "./copy.ts";
 import type { Lang } from "./locale.ts";
 import type { Plan, PlanSession, TrackKind, UserRow } from "./types.ts";
 
-const TOOLS: Anthropic.Messages.Tool[] = [
+const TOOLS: LlmToolDef[] = [
   {
     name: "get_snapshot",
     description:
       "Les journalen: facts, missingForPlan, spor, dagens kalenderøkt (eller hviledag), agenda (i går vs i dag vs uka), logger, notater, påminnelser. Kall tidlig. today/agenda.today er DENNE ukedagen — ikke neste uloggede økt fra en annen dag.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    parameters: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "recall_chat",
     description:
       "Hent eldre meldinger fra dialogen (tilbake i tid). Bruk når brukeren sier de allerede har svart, «se i loggen», eller når facts mangler men de kan ha fortalt det før.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         limit: { type: "number", description: "1–40, default 20" },
@@ -35,7 +34,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     name: "log_entry",
     description:
       "Logg noe brukeren gjorde. Når de har trent — også hvis det IKKE matcher planen — kall dette med en gang. kind=training, note=hva de faktisk gjorde. Utelatt sessionRef fylles med dagens plan-id (tennis/padling teller som dagens økt). sessionRef=extra:YYYY-MM-DD KUN ved i tillegg / hviledag. Kommende dager justeres automatisk. day=today|yesterday — hvis usikkert: IKKE gjett, spør «i dag eller i går?» først.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         slug: { type: "string" },
@@ -60,7 +59,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     name: "add_note",
     description:
       "Kort PT-notat du vil huske (smerte, liv, mønster, avklaring). Oppdater når noe endrer seg. Maks 1–2 setninger.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         kind: { type: "string" },
@@ -74,7 +73,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     name: "set_fact",
     description:
       "Lagre/oppdater viktig brukerinfo med en gang de forteller det: goal, level (erfaring), identity, why, daysPerWeek (tall), equipment (liste), weightKg, injuries. Kall før du spør neste spørsmål. Oppdater hvis de endrer mening.",
-    input_schema: {
+    parameters: {
       type: "object",
       additionalProperties: true,
       properties: {},
@@ -83,7 +82,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "create_track",
     description: "Opprett et spor. Training opprettes som draft.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         kind: { type: "string", enum: ["training", "nutrition", "habit", "recovery", "custom"] },
@@ -98,7 +97,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     name: "propose_plan",
     description:
       "Lag treningsutkast (draft) via programmer-hatten. Kall så snart missingForPlan er tom — ikke spør «skal jeg lage?» hvis de allerede har bedt om program eller sagt ja. Presenter uke 1 med korte detaljer per økt (ikke bare titler), si at det justeres etter hvordan øktene føles, og at de låser med ja/ok/kjør.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         trackId: { type: "string" },
@@ -142,7 +141,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "request_archive",
     description: "Start arkivering av et spor. Sletter ingenting. Brukeren må bekrefte med «arkiver og lag nytt».",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: { trackId: { type: "string" } },
       required: ["trackId"],
@@ -152,7 +151,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     name: "archive_entry",
     description:
       "Arkiver én logg. Sletting/fjerning = arkivering, aldri hard delete. Ingen dobbeltbekreftelse. Bruk entryId fra snapshot, eller siste live logg (valgfri slug / kind).",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         entryId: { type: "string" },
@@ -166,7 +165,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     name: "request_activate",
     description:
       "Be om myk bekreftelse for å låse et draft-program. Brukeren kan svare ja / ok / kjør — ikke krev eksakt frase. Arkivering er den eneste handlingen som krever eksakt bekreftelse.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: { trackId: { type: "string" } },
       required: ["trackId"],
@@ -176,7 +175,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     name: "adapt_plan",
     description:
       "Eksplisitt omskrivning av kommende økter på det AKTIVE programmet (uten å arkivere). log_entry justerer allerede neste dager automatisk — bruk dette når du vil bytte en konkret økt (f.eks. fartslek → styrke) eller når de spør om to like dager på rad uten å ha logget akkurat nå. Behold målet.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         reason: { type: "string" },
@@ -213,7 +212,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     name: "research",
     description:
       "Når du trenger å sjekke noe du ikke er sikker på (øktvalg, belastning, en lenke de sendte). Sender først «bra spørsmål, la meg sjekke litt» til brukeren, så slår du opp, og svaret ditt etterpå er den egentlige coachen.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         query: { type: "string" },
@@ -226,7 +225,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
     name: "set_reminder",
     description:
       "Sett trenings- eller videopåminnelse (brukerens tidssone). Default kl 08:00. scope=once for i kveld/i dag/tonight; scope=daily for hver dag eller når uvisst. url=full lenke når brukeren deler video/link og vil minnes. Ingen ekstra bekreftelse — bare sett og bekreft kort.",
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         hour: { type: "number", description: "0–23, default 8" },
@@ -246,7 +245,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "cancel_reminder",
     description: "Skru av treningspåminnelse (daglig eller engangs).",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    parameters: { type: "object", properties: {}, additionalProperties: false },
   },
 ];
 
@@ -312,9 +311,11 @@ You care. Meet the person in the message they actually sent. Explain the plan in
 - If you need to look something up (load, a video they sent, a training question you're not sure about), call research. It pings them first (“bra spørsmål, la meg sjekke litt”), then you answer with what you found. Don't pretend you checked if you didn't.
 
 ## Style
-- Max 4–6 lines. One next action. At most one question.
+- You are a sharp coach over iMessage, not a form and not a template. Read the last messages and answer THAT — reminders, “are you there”, status, doubt, a joke — not a canned workout dump.
+- Typical length 2–6 short lines. Longer only if they asked for the week or details. At most one question, and only if you actually need it.
+- If they already set a reminder and then send a link, attach the URL — don't ask when again. If they ask which reminders are on, list snapshot.reminders (clock + link). If they are unsure after a swap/easy offer, YOU pick (usually ease today) and say so.
 - Plain, informal words. No jargon (RPE, OCR, HIIT, zone 2) — say how hard it felt, obstacle race, intervals, easy conversational pace.
-- Sound like a friend who knows training and actually likes them. Short ack, then move forward. No spam. Include a link in replies only when the user shared one and asked for a reminder ping. Confetti is reserved for a completed session — not greetings.
+- Sound like a friend who knows training and actually likes them. No spam. Include a link in replies only when the user shared one and asked for a reminder ping. Confetti is reserved for a completed session — not greetings.
 - You are not a doctor. On pain: log it, ease load, refer out if it lasts.
 - Don't invent history. Don't delete active programs — request_archive. Don't hard-delete logs — archive_entry.
 - Reminders via set_reminder when they ask. Infer once (i kveld/i dag) vs daily — no confirmation gate. Pass url when they share a video/link. Video/link pings fire even if they already logged training that day. Training pings skip if a session is already logged. One-shot disables after firing.
@@ -332,37 +333,27 @@ function extractJsonObject(text: string): unknown {
 
 async function generatePlanWithSmart(user: UserRow, input: Record<string, unknown>): Promise<Plan> {
   const hinted = Array.isArray(input.sessions) ? (input.sessions as Plan["sessions"]) : [];
-  const client = llmClient();
-  if (!client || !env.smartModel) {
+  if (!hasLlm() || !env.smartModel) {
     return {
       weeks: input.weeks != null ? Number(input.weeks) : undefined,
       daysPerWeek: input.daysPerWeek != null ? Number(input.daysPerWeek) : undefined,
       sessions: hinted,
     };
   }
-  const res = await client.messages.create({
+  const text = await completePlain({
     model: env.smartModel,
-    max_tokens: 4096,
+    maxTokens: 4096,
     system: `Du er programmer-hatten til ${env.coachName}. Skriv KUN JSON:
 {"weeks":number,"daysPerWeek":number,"sessions":[{"id":"w1d0","week":1,"day":0,"title":string,"loadKey":string,"load":number,"unit":string,"est":string,"items":[{"name":string,"detail":string}]}]}
 Regler: utstyr og skader i facts styrer øvelsene. loadKey grupperer like økter så innsats-tilbakemelding (lett/passe/brutalt) kan justere neste. 3–6 økter per uke. day er ukedag 0=mandag … 6=søndag — samme ukedager hver uke, hviledager har ingen økt. id som w{uke}d{ukedag}. Enkelt språk i titler og detaljer — ingen forkortelser. Ikke prosa.`,
-    messages: [
-      {
-        role: "user",
-        content: JSON.stringify({
-          facts: journal.factsOf(user),
-          notes: await journal.recentNotes(user.id, 8),
-          brief: input.brief ?? null,
-          weeks: input.weeks ?? null,
-          daysPerWeek: input.daysPerWeek ?? null,
-        }),
-      },
-    ],
+    user: JSON.stringify({
+      facts: journal.factsOf(user),
+      notes: await journal.recentNotes(user.id, 8),
+      brief: input.brief ?? null,
+      weeks: input.weeks ?? null,
+      daysPerWeek: input.daysPerWeek ?? null,
+    }),
   });
-  const text = res.content
-    .filter((c): c is Anthropic.Messages.TextBlock => c.type === "text")
-    .map((c) => c.text)
-    .join("\n");
   const parsed = extractJsonObject(text) as Plan;
   if (!Array.isArray(parsed.sessions) || parsed.sessions.length < 1) {
     throw new Error("programmer returned no sessions");
@@ -772,20 +763,59 @@ function isTransientLlmError(err: unknown): boolean {
   return /429|rate.?limit|5\d\d|timeout|timed out|ECONNRESET|fetch failed|overloaded/i.test(msg);
 }
 
-async function createWithRetry(
-  client: Anthropic,
-  params: Anthropic.Messages.MessageCreateParamsNonStreaming,
-): Promise<Anthropic.Messages.Message> {
-  try {
-    return await client.messages.create(params);
-  } catch (err) {
-    if (!isTransientLlmError(err)) throw err;
-    await new Promise((r) => setTimeout(r, 600));
-    return await client.messages.create(params);
-  }
-}
-
 export type AgentResult = { text: string; celebrate?: boolean };
+
+async function runToolLoop(
+  user: UserRow,
+  messageId: string,
+  opts: { lang: Lang; onboarding: boolean; chatId?: string; firstContact: boolean },
+  model: string,
+  messages: LlmMessage[],
+): Promise<AgentResult> {
+  let celebrate = false;
+  const working = messages.map((m) => ({ ...m }));
+  for (let i = 0; i < 8; i++) {
+    let turn;
+    try {
+      turn = await completeChat({
+        model,
+        maxTokens: 1100,
+        tools: TOOLS,
+        messages: working,
+      });
+    } catch (err) {
+      if (!isTransientLlmError(err)) throw err;
+      await new Promise((r) => setTimeout(r, 600));
+      turn = await completeChat({
+        model,
+        maxTokens: 1100,
+        tools: TOOLS,
+        messages: working,
+      });
+    }
+    if (!turn.toolCalls.length) {
+      return { text: (turn.content.trim() || "Ok.").slice(0, 1200), celebrate };
+    }
+    working.push({
+      role: "assistant",
+      content: turn.content,
+      toolCalls: turn.toolCalls,
+    });
+    for (const tu of turn.toolCalls) {
+      const content = await runTool(user, opts.lang, tu.name, tu.arguments, messageId, opts.chatId);
+      if (tu.name === "log_entry") {
+        try {
+          const parsed = JSON.parse(content) as { celebrate?: boolean };
+          if (parsed.celebrate) celebrate = true;
+        } catch {
+          /* ignore */
+        }
+      }
+      working.push({ role: "tool", toolCallId: tu.id, content });
+    }
+  }
+  return { text: copy.agentStopped(opts.lang), celebrate };
+}
 
 export async function runAgent(
   user: UserRow,
@@ -793,8 +823,7 @@ export async function runAgent(
   messageId: string,
   opts: { lang: Lang; onboarding: boolean; chatId?: string },
 ): Promise<AgentResult> {
-  const client = llmClient();
-  if (!client) {
+  if (!hasLlm()) {
     return { text: copy.noLlm(opts.lang) };
   }
   try {
@@ -812,67 +841,37 @@ export async function runAgent(
     } catch {
       agendaBlock = "{}";
     }
-    const messages: Anthropic.Messages.MessageParam[] = [
+    const messages: LlmMessage[] = [
+      { role: "system", content: systemPrompt(opts.lang, { onboarding: opts.onboarding, firstContact }) },
       {
         role: "user",
         content: `Recent messages (what they already said — use recall_chat if you need older turns):\n${chatLines}\n\nJournal:\n${JSON.stringify({ ...journalSnap, fresh: opts.onboarding, firstContact, locale: opts.lang })}\n\nAgenda (yesterday vs today vs week — use this before dumping today's workout):\n${agendaBlock}\n\nUser message:\n${body}`,
       },
     ];
 
-    let celebrate = false;
-    for (let i = 0; i < 8; i++) {
-      const res = await createWithRetry(client, {
-        model: env.model,
-        max_tokens: 1100,
-        system: systemPrompt(opts.lang, { onboarding: opts.onboarding, firstContact }),
-        tools: TOOLS,
-        messages,
-      });
-      const toolUses = res.content.filter((c): c is Anthropic.Messages.ToolUseBlock => c.type === "tool_use");
-      const texts = res.content.filter((c): c is Anthropic.Messages.TextBlock => c.type === "text").map((c) => c.text);
-      if (res.stop_reason === "end_turn" || toolUses.length === 0) {
-        return { text: (texts.join("\n").trim() || "Ok.").slice(0, 1200), celebrate };
+    const models = chatModels();
+    let lastErr: unknown;
+    for (const model of models) {
+      try {
+        return await runToolLoop(user, messageId, { ...opts, firstContact }, model, messages);
+      } catch (err) {
+        lastErr = err;
+        console.error("agent model failed", model, err instanceof Error ? err.message : err);
       }
-      messages.push({ role: "assistant", content: res.content });
-      const results: Anthropic.Messages.ToolResultBlockParam[] = [];
-      for (const tu of toolUses) {
-        const content = await runTool(
-          user,
-          opts.lang,
-          tu.name,
-          (tu.input ?? {}) as Record<string, unknown>,
-          messageId,
-          opts.chatId,
-        );
-        if (tu.name === "log_entry") {
-          try {
-            const parsed = JSON.parse(content) as { celebrate?: boolean };
-            if (parsed.celebrate) celebrate = true;
-          } catch {
-            /* ignore */
-          }
-        }
-        results.push({
-          type: "tool_result",
-          tool_use_id: tu.id,
-          content,
-        });
-      }
-      messages.push({ role: "user", content: results });
     }
-    return { text: copy.agentStopped(opts.lang), celebrate };
+    throw lastErr ?? new Error("agent failed");
   } catch (err) {
     console.error("agent failed", err instanceof Error ? err.message : err);
     try {
       const snap = await journal.snapshot(user);
       const agenda = agendaForSnapshot(await loadAgenda(user));
       const plain = await completePlain({
-        model: env.model,
+        model: env.chatModel,
         maxTokens: 500,
         system: `${systemPrompt(opts.lang, { onboarding: opts.onboarding, firstContact: false })}
 
 No tools this turn. Answer the user's message from the journal and agenda. Do not dump today's full workout unless they asked for it. If they want a quieter day or a swap, say clearly what today becomes.`,
-        user: `Journal: ${JSON.stringify({ facts: snap.facts, today: snap.today, pending: snap.pending })}\nAgenda: ${JSON.stringify(agenda)}\nUser: ${body}`,
+        user: `Journal: ${JSON.stringify({ facts: snap.facts, today: snap.today, pending: snap.pending, reminders: snap.reminders })}\nAgenda: ${JSON.stringify(agenda)}\nUser: ${body}`,
       });
       const text = plain.trim().slice(0, 1200);
       if (text && !copy.isAgentFailureReply(text) && text.length > 8) {
@@ -883,19 +882,4 @@ No tools this turn. Answer the user's message from the journal and agenda. Do no
     }
     return { text: copy.agentError(opts.lang, err) };
   }
-}
-
-function llmClient(): Anthropic | null {
-  if (env.openrouterKey) {
-    return new Anthropic({
-      apiKey: env.openrouterKey,
-      baseURL: "https://openrouter.ai/api",
-      defaultHeaders: {
-        "HTTP-Referer": "https://github.com/ekstromjonathan/navyrace",
-        "X-Title": `${env.coachName} PT`,
-      },
-    });
-  }
-  if (env.anthropicKey) return new Anthropic({ apiKey: env.anthropicKey });
-  return null;
 }

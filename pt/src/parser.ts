@@ -33,6 +33,7 @@ export type HeuristicIntent =
   | { kind: "archive"; confident: true }
   | { kind: "reminder_set"; confident: true; hour: number; minute: number; scope: "daily" | "once"; url: string | null }
   | { kind: "reminder_cancel"; confident: true }
+  | { kind: "reminder_list"; confident: true }
   | { kind: "video_link"; confident: true; url: string }
   | { kind: "archive_entry"; confident: true; slug?: string; trackKind?: "training" }
   | { kind: "unknown"; confident: false };
@@ -49,8 +50,13 @@ function glasses(raw: string): number {
   return num(raw);
 }
 
+function tidyGlitch(text: string): string {
+  /* iMessage sometimes appends a stray capital V ("inneV", "VåkenV"). */
+  return text.replace(/([A-Za-zÆØÅæøå])V$/u, "$1").trim();
+}
+
 export function parseMessage(body: string): HeuristicIntent {
-  const text = body.trim();
+  const text = tidyGlitch(body.trim());
   if (!text) return { kind: "unknown", confident: false };
 
   const lower = text.toLowerCase();
@@ -102,6 +108,15 @@ export function parseMessage(body: string): HeuristicIntent {
 
   if (url && text.replace(url, "").trim().length < 24) {
     return { kind: "video_link", confident: true, url };
+  }
+
+  if (
+    /\b(hvilke (reminders?|påminnelser)|hva (for )?(påminnelser|reminders)|hvilken påminnelse|hva minner du|reminders? (ligger|inne)|list(e)? (mine )?(påminnelser|reminders))\b/i.test(
+      lower,
+    ) ||
+    /^(påminnelser|reminders)\??$/i.test(lower)
+  ) {
+    return { kind: "reminder_list", confident: true };
   }
 
   if (
@@ -227,7 +242,7 @@ export function parseMessage(body: string): HeuristicIntent {
 
 /** User answered a swap-vs-easy offer (or volunteered it). */
 export function parseAdaptChoice(text: string): "swap" | "ease" | "keep" | null {
-  const t = text.trim();
+  const t = tidyGlitch(text.trim());
   if (!t || t.length > 280) return null;
   const lower = t.toLowerCase();
   if (/^(bytte|bytt|swap)([.!]*)?$/i.test(t)) return "swap";
@@ -242,13 +257,16 @@ export function parseAdaptChoice(text: string): "swap" | "ease" | "keep" | null 
     return "ease";
   }
   if (/^(kjør|behold|som planlagt|keep it|kjøre planen)([.!]*)?$/i.test(t)) return "keep";
+  if (/^(usikker|vet ikke|vet ikkje|du (får |kan )?bestemme|som du vil|whatever)\??[.!\s]*$/i.test(t)) {
+    return "ease";
+  }
   return null;
 }
 
 export function isAliveCheck(text: string): boolean {
-  const t = text.trim();
+  const t = tidyGlitch(text.trim());
   if (!t || t.length > 48) return false;
-  return /^(er du (våken|der|derinne)\??|våken\??|you there\??|are you (there|awake)\??)$/i.test(t);
+  return /^(er du (våken|der|derinne)\??|våkenv?\??|you there\??|are you (there|awake)\??)$/i.test(t);
 }
 
 /** They already answered and the coach repeated itself. */
@@ -349,6 +367,31 @@ export function parseClock(text: string): { hour: number; minute: number; explic
     }
   }
   return { hour: 8, minute: 0, explicit: false };
+}
+
+/** Clock reply while waiting for a video-reminder time — no “minn meg” required. */
+export function parseTimeReply(text: string): { hour: number; minute: number; scope: "daily" | "once" } | null {
+  const t = tidyGlitch(text.trim());
+  if (!t || t.length > 80) return null;
+  const parsed = parseMessage(t);
+  if (parsed.kind === "reminder_set") {
+    return { hour: parsed.hour, minute: parsed.minute, scope: parsed.scope };
+  }
+  const lower = t.toLowerCase();
+  const clock = parseClock(lower);
+  if (clock.explicit) {
+    return { hour: clock.hour, minute: clock.minute, scope: detectReminderScope(lower) };
+  }
+  const bare =
+    lower.match(/^kl\.?\s*(\d{1,2})(?:[:.](\d{2}))?(?:\s*(hver dag|daglig|every day|i kveld|i dag))?[!?.]*$/i) ||
+    lower.match(/^(\d{1,2})(?:[:.](\d{2}))?(?:\s*(hver dag|daglig|every day|i kveld|tonight|i dag))?[!?.]*$/);
+  if (!bare) return null;
+  const hour = Number(bare[1]);
+  const minute = bare[2] != null ? Number(bare[2]) : 0;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  const rest = bare[3] ?? "";
+  const scope = /i kveld|i dag|tonight/i.test(rest) ? "once" : detectReminderScope(lower);
+  return { hour, minute, scope };
 }
 
 /** Infer daily vs one-shot from wording — no confirmation gate. */

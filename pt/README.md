@@ -22,9 +22,9 @@ User rows store `chat_id` + `phone_e164`. Tracks, entries, notes, `message_log`,
 
 ## Model
 
-OpenRouter. Floor: `PT_MODEL` (e.g. `x-ai/grok-4.3`). Programmer hat: `PT_MODEL_SMART` (`x-ai/grok-4.6`) writes draft plans only.
+OpenRouter **Chat Completions** (`/v1/chat/completions`) with tools. Grok is not an Anthropic model — we do not call `/v1/messages`. Conversation uses `PT_MODEL_SMART` (`x-ai/grok-4.6`) when set, otherwise `PT_MODEL` (`x-ai/grok-4.3`). Programmer hat uses the smart model for draft plans.
 
-Obvious logs skip the model. Drafts go live after a normal yes/ok/kjør (soft confirm).
+Obvious logs (water, plunge, session done, reminders with a clock) skip the model. Questions, greetings, and open chat go to Grok. Drafts go live after a normal yes/ok/kjør (soft confirm).
 
 ## Memory
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseMessage, isDidYouHearMe, parseAdaptChoice } from "../src/parser.ts";
+import { parseMessage, isDidYouHearMe, parseAdaptChoice, parseTimeReply } from "../src/parser.ts";
 import { isOptOut, isLinqKeywordOptOut } from "../src/optout.ts";
 import { isActivatePhrase, isActivateCancel, isArchivePhrase } from "../src/gates.ts";
 import { normalizeEvent } from "../src/webhook.ts";
@@ -43,6 +43,10 @@ describe("parser", () => {
     assert.equal(parseMessage("Hvor er vi nå denne uka?").kind, "program");
     assert.equal(parseMessage("Hva er status nå?").kind, "program");
     assert.equal(parseMessage("Er du våken?").kind, "alive");
+    assert.equal(parseMessage("Våken?").kind, "alive");
+    assert.equal(parseMessage("VåkenV").kind, "alive");
+    assert.equal(parseMessage("Hvilke reminders ligger inne?").kind, "reminder_list");
+    assert.equal(parseMessage("Hvilke reminders ligger inneV").kind, "reminder_list");
     assert.equal(parseMessage("Bytte").kind, "adapt_choice");
     assert.equal(parseMessage("Holde det veldig rolig").kind, "adapt_choice");
     assert.equal(parseMessage("Tenker vi kan ta en rolig dag og tilpasse programmet der etter").kind, "adapt_choice");
@@ -205,6 +209,8 @@ describe("parser", () => {
     assert.equal(isDidYouHearMe("Svarte nettopp på det?"), true);
     assert.equal(parseAdaptChoice("Bytte"), "swap");
     assert.equal(parseAdaptChoice("Holde det veldig rolig"), "ease");
+    assert.equal(parseAdaptChoice("Usikker"), "ease");
+    assert.equal(parseAdaptChoice("som du vil"), "ease");
   });
 
   it("parses daily training reminders", () => {
@@ -279,6 +285,14 @@ describe("parser", () => {
     if (linkOnly.kind === "video_link") {
       assert.equal(linkOnly.url, yt);
     }
+    const clockReply = parseTimeReply("22 hver dag");
+    assert.ok(clockReply);
+    assert.equal(clockReply?.hour, 22);
+    assert.equal(clockReply?.minute, 0);
+    assert.equal(clockReply?.scope, "daily");
+    const bare = parseTimeReply("kl 22");
+    assert.equal(bare?.hour, 22);
+    assert.equal(bare?.scope, "daily");
   });
 
   it("extracts URLs from text", async () => {

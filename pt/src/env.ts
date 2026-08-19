@@ -62,13 +62,18 @@ export const env = {
     const raw = optional("PT_MODEL", "");
     if (env.openrouterKey) {
       if (raw.includes("/")) return raw;
-      if (raw === "claude-sonnet-4-6" || raw === "") return "anthropic/claude-sonnet-4.6";
+      if (raw === "claude-sonnet-4-6") return "anthropic/claude-sonnet-4.6";
+      if (raw === "") return "x-ai/grok-4.3";
       return raw;
     }
     return raw || "claude-sonnet-4-6";
   },
   get smartModel() {
     return optional("PT_MODEL_SMART");
+  },
+  /** Conversational coach: smart model when set, otherwise the floor model. */
+  get chatModel() {
+    return env.smartModel || env.model;
   },
   get provider() {
     return env.openrouterKey ? "openrouter" : env.anthropicKey ? "anthropic" : "none";

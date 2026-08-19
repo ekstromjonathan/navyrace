@@ -1,5 +1,5 @@
 import { env, isAllowlisted } from "./env.ts";
-import { parseMessage, parseAdaptChoice, isDidYouHearMe } from "./parser.ts";
+import { parseMessage, parseAdaptChoice, parseTimeReply, isDidYouHearMe } from "./parser.ts";
 import { isOptOut } from "./optout.ts";
 import {
   isActivatePhrase,
@@ -12,6 +12,7 @@ import {
 } from "./gates.ts";
 import { extractApplicantName, isInviteNo, isInviteYes } from "./invite.ts";
 import { runAgent } from "./agent.ts";
+import { hasLlm } from "./llm.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
 import * as linq from "./linq.ts";
@@ -392,10 +393,10 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
       await journal.setPending(user.id, null);
       return copy.reminderScopeCancelled(lang);
     }
-    const parsed = parseMessage(body);
-    if (parsed.kind === "reminder_set") {
+    const timed = parseTimeReply(body);
+    if (timed) {
       await journal.setPending(user.id, null);
-      return commitReminderSet(user, lang, parsed.hour, parsed.minute, parsed.scope, pending.url);
+      return commitReminderSet(user, lang, timed.hour, timed.minute, timed.scope, pending.url);
     }
     return copy.videoLinkAsk(lang);
   }
@@ -552,9 +553,21 @@ async function commitReminderSet(
     : copy.reminderConfirm(lang, hour, minute, user.tz);
 }
 
-async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Promise<string | ReplyResult | null> {
+async function applyHeuristic(
+  user: UserRow,
+  lang: Lang,
+  inbound: Inbound,
+  opts?: { onboarding?: boolean },
+): Promise<string | ReplyResult | null> {
   const parsed = parseMessage(inbound.body);
   if (!parsed.confident) return null;
+
+  /* Conversational turns go to the model (or the welcome) — heuristics stay for actions. */
+  const conversational =
+    parsed.kind === "greeting" || parsed.kind === "today" || parsed.kind === "program" || parsed.kind === "alive";
+  if (conversational && (hasLlm() || opts?.onboarding)) {
+    return null;
+  }
 
   if (parsed.kind === "greeting") {
     const text = await formatGreeting(user, lang);
@@ -568,6 +581,13 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
 
   if (parsed.kind === "alive") return copy.fallbackAlive(lang);
 
+  if (parsed.kind === "reminder_list") {
+    const reminders = (await journal.listReminders(user.id))
+      .filter((r) => r.enabled === 1)
+      .map((r) => ({ hour: r.hour, minute: r.minute, url: r.url }));
+    return copy.fallbackReminders(lang, reminders);
+  }
+
   if (parsed.kind === "adapt_choice") {
     try {
       const agenda = await loadAgenda(user);
@@ -580,6 +600,11 @@ async function applyHeuristic(user: UserRow, lang: Lang, inbound: Inbound): Prom
   }
 
   if (parsed.kind === "video_link") {
+    const live = (await journal.listReminders(user.id)).find((r) => r.enabled === 1);
+    if (live) {
+      const scope = live.once_on ? "once" : "daily";
+      return commitReminderSet(user, lang, live.hour, live.minute, scope, parsed.url);
+    }
     await journal.setPending(user.id, {
       type: "video_reminder_time",
       url: parsed.url,
@@ -792,22 +817,20 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       return;
     }
 
-    if (!onboarding) {
-      const heuristicOut = asReply(await applyHeuristic(current, lang, work));
-      if (heuristicOut) {
-        await maybePendingAdapt(current, heuristicOut.text);
-        await reply(inbound.chatId, heuristicOut.text, {
-          replyTo: inbound.messageId,
-          userId: current.id,
-          effect: heuristicOut.effect,
-        });
-        const parsed = parseMessage(work.body);
-        if (parsed.kind === "rpe" && parsed.quality !== "hoppet") {
-          await linq.reactLove(inbound.messageId);
-        }
-        await maybeCard(current, inbound.chatId);
-        return;
+    const heuristicOut = asReply(await applyHeuristic(current, lang, work, { onboarding }));
+    if (heuristicOut) {
+      await maybePendingAdapt(current, heuristicOut.text);
+      await reply(inbound.chatId, heuristicOut.text, {
+        replyTo: inbound.messageId,
+        userId: current.id,
+        effect: heuristicOut.effect,
+      });
+      const parsed = parseMessage(work.body);
+      if (parsed.kind === "rpe" && parsed.quality !== "hoppet") {
+        await linq.reactLove(inbound.messageId);
       }
+      await maybeCard(current, inbound.chatId);
+      return;
     }
 
     let agent = await withTyping(inbound.chatId, () =>

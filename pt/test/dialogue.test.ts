@@ -3,8 +3,8 @@ process.env.PT_DB_PATH = `${process.env.TMPDIR || "/tmp"}/mai-pt-dialogue-${proc
 process.env.PT_TODAY = "2026-08-18";
 process.env.LINQ_API_TOKEN = "test-token";
 process.env.LINQ_ALLOWLIST = "+4740343295";
-delete process.env.OPENROUTER_API_KEY;
-delete process.env.ANTHROPIC_API_KEY;
+process.env.OPENROUTER_API_KEY = "";
+process.env.ANTHROPIC_API_KEY = "";
 
 const outbound: string[] = [];
 const origFetch = globalThis.fetch;
@@ -124,5 +124,66 @@ describe("dialogue replay", () => {
     await handleInbound(inbound("Kan gjerne ta en rolig dag i dag", 7));
     assert.equal(isConsecutiveLoop(lastOut()), false);
     assert.match(lastOut(), /letter|allerede letter/i);
+  });
+
+  it("lists reminders, attaches a late URL, and does not re-ask the clock", async () => {
+    const user = await journal.upsertUser("chat-dialogue-jon", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb" });
+    await journal.touchContactCard(user.id);
+
+    await handleInbound(inbound("Ny kveldsrutine: minn meg på denne hver kveld kl 22", 20));
+    assert.match(lastOut(), /22:00/);
+    assert.equal(/når skal jeg minne/i.test(lastOut()), false);
+
+    await handleInbound(inbound("https://youtu.be/XTbJZXXccpE", 21));
+    assert.match(lastOut(), /22:00/);
+    assert.match(lastOut(), /youtu/);
+    assert.equal(/når skal jeg minne/i.test(lastOut()), false);
+
+    await handleInbound(inbound("Hvilke reminders ligger inneV", 22));
+    assert.match(lastOut(), /22:00/);
+    assert.match(lastOut(), /youtu/);
+    assert.equal(isConsecutiveLoop(lastOut()), false);
+  });
+
+  it("accepts 22 hver dag while waiting for a video time", async () => {
+    const user = await journal.upsertUser("chat-dialogue-video", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb" });
+    await journal.touchContactCard(user.id);
+
+    await handleInbound({
+      eventId: "e-dialogue-30",
+      messageId: "m-dialogue-30",
+      chatId: "chat-dialogue-video",
+      phone: "+4740343295",
+      body: "https://youtu.be/abc999",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.match(lastOut(), /når skal jeg minne/i);
+
+    await handleInbound({
+      eventId: "e-dialogue-31",
+      messageId: "m-dialogue-31",
+      chatId: "chat-dialogue-video",
+      phone: "+4740343295",
+      body: "22 hver dag",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.match(lastOut(), /22:00/);
+    assert.match(lastOut(), /youtu/);
+  });
+
+  it("picks an easy day when they say usikker after a swap offer", async () => {
+    const user = await journal.upsertUser("chat-dialogue-jon", "+4740343295");
+    await journal.setPending(user.id, { type: "adapt_choice", askedAt: new Date().toISOString() });
+    await handleInbound(inbound("Usikker", 40));
+    assert.match(lastOut(), /letter|allerede letter|bytter/i);
+    assert.equal(isConsecutiveLoop(lastOut()), false);
   });
 });

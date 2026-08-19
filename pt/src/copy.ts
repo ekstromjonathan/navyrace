@@ -627,7 +627,7 @@ export function fallbackReminders(
   }
   const lines = reminders.map((r) => {
     const clock = hhmm(r.hour, r.minute);
-    return r.url ? `${clock} + link` : clock;
+    return r.url ? `${clock} — ${r.url}` : clock;
   });
   return pick(
     lang,

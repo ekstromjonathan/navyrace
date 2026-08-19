@@ -131,7 +131,7 @@ function wantsLog(body: string): boolean {
 }
 
 function wantsReminders(body: string): boolean {
-  return /\b(minner du|påminnelse|hva minner)\b/i.test(body);
+  return /\b(minner du|påminnelse|påminnelser|hva minner|reminders?)\b/i.test(body);
 }
 
 function consecutiveQuestion(body: string): boolean {
