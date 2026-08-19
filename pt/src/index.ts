@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { env } from "./env.ts";
+import { llmStatus } from "./llm.ts";
 import { initJournal, journalBackend } from "./db.ts";
 import { verifySignature } from "./webhook.ts";
 import { handlePayload } from "./handle.ts";
@@ -84,6 +85,7 @@ app.get("/health", async (c) =>
     pendingInvites: (await journal.listPendingInvites()).length,
     linq: env.hasLinqToken,
     spa: Boolean(staticRoot),
+    llm: await llmStatus(),
   }),
 );
 

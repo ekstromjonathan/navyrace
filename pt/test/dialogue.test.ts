@@ -186,4 +186,83 @@ describe("dialogue replay", () => {
     assert.match(lastOut(), /letter|allerede letter|bytter/i);
     assert.equal(isConsecutiveLoop(lastOut()), false);
   });
+
+  it("does not trap later messages on a stale video-time pending", async () => {
+    const user = await journal.upsertUser("chat-dialogue-jon", "+4740343295");
+    await journal.upsertReminder(user.id, "train", 22, 0, { onceOn: null });
+    await journal.setPending(user.id, {
+      type: "video_reminder_time",
+      url: "https://youtu.be/stuck999",
+      askedAt: new Date().toISOString(),
+    });
+    await handleInbound(inbound("Våken?", 50));
+    assert.equal(/når skal jeg minne/i.test(lastOut()), false);
+    assert.match(lastOut(), /jeg er her/i);
+    assert.equal(await journal.pendingOf(user), null);
+    const rem = (await journal.listReminders(user.id)).find((r) => r.enabled === 1);
+    assert.match(String(rem?.url ?? ""), /stuck999/);
+  });
+
+  it("gives the week plan, not rest-day copy, for Gi meg ukeplanen min", async () => {
+    const user = await journal.upsertUser("chat-dialogue-week", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb", daysPerWeek: 4, goal: "kroppen skal ikke være et hinder" });
+    await journal.touchContactCard(user.id);
+    const draft = await journal.createTrack({
+      userId: user.id,
+      kind: "training",
+      slug: "program-week",
+      name: "Uke",
+      status: "draft",
+      plan: {
+        weeks: 1,
+        daysPerWeek: 4,
+        startedOn: "2026-08-17",
+        sessions: [
+          { id: "w1d1", week: 1, title: "Styrke", loadKey: "styrke" },
+          { id: "w1d2", week: 1, title: "Løping med fartslek", loadKey: "loping" },
+          { id: "w1d3", week: 1, title: "Klatring", loadKey: "klatring" },
+          { id: "w1d4", week: 1, title: "Kajakk", loadKey: "padling" },
+        ],
+      },
+    });
+    await journal.activateTrack(draft.id);
+
+    await handleInbound({
+      eventId: "e-dialogue-60",
+      messageId: "m-dialogue-60",
+      chatId: "chat-dialogue-week",
+      phone: "+4740343295",
+      body: "Gi meg ukeplanen min",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.match(lastOut(), /4 økter/);
+    assert.match(lastOut(), /mandag|tirsdag|onsdag|torsdag|fredag/i);
+    assert.equal(/Modellen svarte ikke/.test(lastOut()), false);
+    assert.equal(/er hviledag/i.test(lastOut()), false);
+  });
+
+  it("answers Skjer'a with a short greeting, not a workout dump", async () => {
+    const user = await journal.upsertUser("chat-dialogue-week", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb" });
+    await journal.touchContactCard(user.id);
+
+    await handleInbound({
+      eventId: "e-dialogue-61",
+      messageId: "m-dialogue-61",
+      chatId: "chat-dialogue-week",
+      phone: "+4740343295",
+      body: "Skjer’a?",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.match(lastOut(), /^Hei/i);
+    assert.equal(/Modellen svarte ikke/.test(lastOut()), false);
+    assert.equal(/• /.test(lastOut()), false);
+    assert.equal(isConsecutiveLoop(lastOut()), false);
+  });
 });

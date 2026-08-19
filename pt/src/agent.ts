@@ -3,7 +3,7 @@ import { resolveOnceOn, addLocalDays, dayAnchorIso, todayInTz } from "./db.ts";
 import { assignSessionDays, startedOnOf } from "./calendar.ts";
 import { adaptAfterLog } from "./adapt.ts";
 import { isExtraWording } from "./activity.ts";
-import { chatModels, completeChat, completePlain, hasLlm, type LlmMessage, type LlmToolDef } from "./llm.ts";
+import { chatModels, completeChat, completePlain, hasLlm, isModelFallbackError, type LlmMessage, type LlmToolDef } from "./llm.ts";
 import { pingResearchHold, research as runResearch } from "./research.ts";
 import { agendaForSnapshot, loadAgenda } from "./fallback.ts";
 import * as journal from "./journal.ts";
@@ -779,7 +779,7 @@ async function runToolLoop(
     try {
       turn = await completeChat({
         model,
-        maxTokens: 1100,
+        maxTokens: 2000,
         tools: TOOLS,
         messages: working,
       });
@@ -788,7 +788,7 @@ async function runToolLoop(
       await new Promise((r) => setTimeout(r, 600));
       turn = await completeChat({
         model,
-        maxTokens: 1100,
+        maxTokens: 2000,
         tools: TOOLS,
         messages: working,
       });
@@ -857,6 +857,7 @@ export async function runAgent(
       } catch (err) {
         lastErr = err;
         console.error("agent model failed", model, err instanceof Error ? err.message : err);
+        if (!isModelFallbackError(err)) break;
       }
     }
     throw lastErr ?? new Error("agent failed");
@@ -867,14 +868,14 @@ export async function runAgent(
       const agenda = agendaForSnapshot(await loadAgenda(user));
       const plain = await completePlain({
         model: env.chatModel,
-        maxTokens: 500,
+        maxTokens: 1200,
         system: `${systemPrompt(opts.lang, { onboarding: opts.onboarding, firstContact: false })}
 
 No tools this turn. Answer the user's message from the journal and agenda. Do not dump today's full workout unless they asked for it. If they want a quieter day or a swap, say clearly what today becomes.`,
         user: `Journal: ${JSON.stringify({ facts: snap.facts, today: snap.today, pending: snap.pending, reminders: snap.reminders })}\nAgenda: ${JSON.stringify(agenda)}\nUser: ${body}`,
       });
       const text = plain.trim().slice(0, 1200);
-      if (text && !copy.isAgentFailureReply(text) && text.length > 8) {
+      if (text && !copy.isAgentFailureReply(text)) {
         return { text };
       }
     } catch (plainErr) {

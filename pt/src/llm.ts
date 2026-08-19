@@ -29,6 +29,116 @@ export function hasLlm(): boolean {
   return Boolean(env.openrouterKey || env.anthropicKey);
 }
 
+export type LlmLastError = {
+  at: string;
+  model: string;
+  status: number | null;
+  snippet: string;
+};
+
+let lastLlmError: LlmLastError | null = null;
+
+export function llmHealth(): { ok: boolean; lastError: LlmLastError | null } {
+  return { ok: lastLlmError == null, lastError: lastLlmError };
+}
+
+export type LlmKeyStatus = {
+  ok: boolean;
+  status: number | null;
+  expiresAt: string | null;
+  expired: boolean;
+  limitRemaining: number | null;
+  checkedAt: string;
+};
+
+let keyCache: { at: number; value: LlmKeyStatus } | null = null;
+const KEY_PROBE_TTL_MS = 60_000;
+
+/** Cheap GET /api/v1/key — cached so Railway healthchecks do not hammer OpenRouter. */
+export async function probeOpenRouterKey(opts?: { force?: boolean }): Promise<LlmKeyStatus | null> {
+  if (!env.openrouterKey) return null;
+  if (!opts?.force && keyCache && Date.now() - keyCache.at < KEY_PROBE_TTL_MS) return keyCache.value;
+  const checkedAt = new Date().toISOString();
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/key", {
+      headers: { Authorization: `Bearer ${env.openrouterKey}` },
+      signal: AbortSignal.timeout(4_000),
+    });
+    let expiresAt: string | null = null;
+    let limitRemaining: number | null = null;
+    try {
+      const json = JSON.parse(await res.text()) as {
+        data?: { expires_at?: string | null; limit_remaining?: number | null };
+      };
+      expiresAt = json.data?.expires_at ?? null;
+      const remaining = json.data?.limit_remaining;
+      limitRemaining = typeof remaining === "number" ? remaining : null;
+    } catch {
+      /* body is not JSON */
+    }
+    const expired = Boolean(expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) < Date.now());
+    const value: LlmKeyStatus = {
+      ok: res.ok && !expired,
+      status: res.status,
+      expiresAt,
+      expired,
+      limitRemaining,
+      checkedAt,
+    };
+    keyCache = { at: Date.now(), value };
+    return value;
+  } catch {
+    const value: LlmKeyStatus = {
+      ok: false,
+      status: null,
+      expiresAt: null,
+      expired: false,
+      limitRemaining: null,
+      checkedAt,
+    };
+    keyCache = { at: Date.now(), value };
+    return value;
+  }
+}
+
+export async function llmStatus(): Promise<{
+  ok: boolean;
+  lastError: LlmLastError | null;
+  key: LlmKeyStatus | null;
+}> {
+  const last = llmHealth();
+  const key = await probeOpenRouterKey();
+  return {
+    ok: last.ok && (key == null || key.ok),
+    lastError: last.lastError,
+    key,
+  };
+}
+
+function noteLlmOk(): void {
+  lastLlmError = null;
+}
+
+function noteLlmError(model: string, status: number | null, snippet: string): void {
+  lastLlmError = {
+    at: new Date().toISOString(),
+    model,
+    status,
+    snippet: snippet.replace(/\s+/g, " ").trim().slice(0, 240),
+  };
+}
+
+/** Fallback to PT_MODEL only when the first model is rejected — not on timeout. */
+export function isModelFallbackError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/429|rate.?limit|timeout|timed out|aborted|ECONNRESET|fetch failed|overloaded|5\d\d/i.test(msg)) {
+    return false;
+  }
+  return /openrouter 40[0-4]\b|401|402|403|404|unauthorized|invalid.?api.?key|authentication_error|credit balance|insufficient.?credits|deprecated|not_found_error|model.*(not found|unavailable)/i.test(
+    msg,
+  );
+}
+
 export function parseToolArgs(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     return raw as Record<string, unknown>;
@@ -96,7 +206,8 @@ async function completeOpenRouter(opts: {
 }): Promise<LlmTurn> {
   const body: Record<string, unknown> = {
     model: opts.model,
-    max_tokens: opts.maxTokens ?? 1100,
+    max_tokens: opts.maxTokens ?? 2000,
+    reasoning: { effort: "low", exclude: true },
     messages: opts.messages.map(toOpenAiMessage),
   };
   if (opts.tools?.length) {
@@ -110,23 +221,36 @@ async function completeOpenRouter(opts: {
     }));
     body.tool_choice = "auto";
   }
-  const res = await fetch(OPENROUTER, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.openrouterKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://github.com/ekstromjonathan/navyrace",
-      "X-Title": `${env.coachName} PT`,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(25_000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(OPENROUTER, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.openrouterKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/ekstromjonathan/navyrace",
+        "X-Title": `${env.coachName} PT`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch (err) {
+    const snippet = err instanceof Error ? err.message : String(err);
+    const timedOut = /timeout|aborted|abort/i.test(snippet);
+    noteLlmError(opts.model, null, timedOut ? "timeout" : snippet);
+    throw err;
+  }
   const text = await res.text();
-  if (!res.ok) throw new Error(`openrouter ${res.status}: ${text.slice(0, 240)}`);
-  const json = JSON.parse(text) as {
+  if (!res.ok) {
+    noteLlmError(opts.model, res.status, text);
+    throw new Error(`openrouter ${res.status}: ${text.slice(0, 240)}`);
+  }
+  let json: {
     choices?: {
       message?: {
         content?: string | Array<{ type?: string; text?: string }>;
+        reasoning?: string | Array<{ type?: string; text?: string }>;
+        reasoning_content?: string;
         tool_calls?: {
           id?: string;
           function?: { name?: string; arguments?: string };
@@ -135,14 +259,28 @@ async function completeOpenRouter(opts: {
     }[];
     error?: { message?: string };
   };
-  if (json.error?.message) throw new Error(`openrouter: ${json.error.message}`);
+  try {
+    json = JSON.parse(text) as typeof json;
+  } catch {
+    noteLlmError(opts.model, res.status, text);
+    throw new Error(`openrouter invalid json: ${text.slice(0, 240)}`);
+  }
+  if (json.error?.message) {
+    noteLlmError(opts.model, res.status, json.error.message);
+    throw new Error(`openrouter: ${json.error.message}`);
+  }
   const msg = json.choices?.[0]?.message;
-  const content = flattenContent(msg?.content);
+  const content = assistantText(msg);
   const toolCalls: LlmToolCall[] = (msg?.tool_calls ?? []).map((tc, i) => ({
     id: tc.id || `call_${i}`,
     name: String(tc.function?.name || ""),
     arguments: parseToolArgs(tc.function?.arguments),
   })).filter((tc) => tc.name);
+  if (!content && !toolCalls.length) {
+    noteLlmError(opts.model, res.status, "empty content");
+    throw new Error("openrouter empty content");
+  }
+  noteLlmOk();
   return { content, toolCalls };
 }
 
@@ -165,11 +303,25 @@ function toOpenAiMessage(m: LlmMessage): Record<string, unknown> {
 }
 
 function flattenContent(content: string | Array<{ type?: string; text?: string }> | undefined): string {
-  if (typeof content === "string") return content;
+  if (typeof content === "string") return content.trim();
   if (Array.isArray(content)) {
-    return content.map((c) => (typeof c?.text === "string" ? c.text : "")).join("\n").trim();
+    return content
+      .map((c) => (typeof c?.text === "string" ? c.text : ""))
+      .join("\n")
+      .trim();
   }
   return "";
+}
+
+function assistantText(msg: {
+  content?: string | Array<{ type?: string; text?: string }>;
+  reasoning?: string | Array<{ type?: string; text?: string }>;
+  reasoning_content?: string;
+} | undefined): string {
+  const content = flattenContent(msg?.content);
+  if (content) return content;
+  const reasoning = flattenContent(msg?.reasoning) || flattenContent(msg?.reasoning_content);
+  return reasoning;
 }
 
 async function completeAnthropic(opts: {

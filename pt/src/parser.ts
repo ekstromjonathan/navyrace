@@ -133,7 +133,9 @@ export function parseMessage(body: string): HeuristicIntent {
     /^(vad är programmet|vilket program)\??$/i.test(lower) ||
     /^(hvor (er|står) vi( nå)?( denne uka)?|hvor er jeg i (uka|uken|programmet)|status (på )?(uka|uken|programmet)|hvor er vi nå denne uka|hva er status( nå)?|what's (my )?status)\??$/i.test(
       lower,
-    )
+    ) ||
+    /\bukeplanen\b/i.test(lower) ||
+    /\b(gi meg|vis meg|send meg)\s+(ukeplan(en)?( min)?|planen min)\b/i.test(lower)
   ) {
     return { kind: "program", confident: true };
   }
@@ -265,8 +267,10 @@ export function parseAdaptChoice(text: string): "swap" | "ease" | "keep" | null 
 
 export function isAliveCheck(text: string): boolean {
   const t = tidyGlitch(text.trim());
-  if (!t || t.length > 48) return false;
-  return /^(er du (våken|der|derinne)\??|våkenv?\??|you there\??|are you (there|awake)\??)$/i.test(t);
+  if (!t || t.length > 64) return false;
+  return /^(er du (våken|der|derinne)\??|våkenv?\??|you there\??|are you (there|awake)\??|svarer (modellen|du|grok)( nå)?\??)$/i.test(
+    t,
+  );
 }
 
 /** They already answered and the coach repeated itself. */
@@ -280,6 +284,8 @@ export function isDidYouHearMe(text: string): boolean {
 export function isBareGreeting(text: string): boolean {
   const t = text.trim().replace(/^[!?.\s]+|[!?.\s]+$/g, "");
   if (!t || t.length > 40) return false;
+  const folded = t.replace(/[''`´’]/g, "").replace(/\s+/g, "").toLowerCase();
+  if (folded === "skjera" || folded === "skjeraa") return true;
   return /^(?:hei|heia|heisann|hallo|hallois|hey+|hi+|yo|tja|tjena|hej|god\s*(?:morgen|morgon|formiddag|kveld|kväll|natt)|morning|evening|sup)(?:\s+(?:hei|heia|heisann|hallo|hey|hi|hej))*$/i.test(
     t,
   );

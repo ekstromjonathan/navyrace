@@ -20,11 +20,37 @@ Without those env vars the process falls back to local SQLite (`PT_DB_PATH`) so 
 
 User rows store `chat_id` + `phone_e164`. Tracks, entries, notes, `message_log`, and reminders all reference `users.id`.
 
+## Data layer
+
+Production journal is **Supabase** schema `pt` (project `lodd.ai`). SQLite is tests-only.
+
+| Table | Role |
+|---|---|
+| `users` | chat_id, phone, facts (goal/days/gear), **pending** (sticky ask), locale |
+| `tracks` | programs (draft/active/archived) + plan JSON |
+| `entries` | logs (training, water, …) — never hard-deleted |
+| `notes` | short PT memory |
+| `reminders` | daily/once ping + optional url |
+| `message_log` | last ~50 turns (working memory, not truth) |
+| `webhook_events` / `processed_messages` | idempotency |
+| `invites` | unknown numbers until owner says ja |
+
+## Receive pipeline
+
+Inbound iMessage is **not** handed raw to the LLM.
+
+1. **Mottak** — admit / opt-out / invite, persist the user line.
+2. **Rute** — if pending is a *real* answer (klokke, ja/kjør, lett/passe), commit it. If pending is stale (e.g. waiting for a video time but they asked «er du våken?»), attach the URL to an existing reminder and **continue**.
+3. **Verktøy / lagring / henting** — log, set reminder, ease/swap, then load the journal packet (facts, today, week, reminders, recent chat).
+4. **LLM svarer** — Grok writes from that packet. **No tool calls** on the talk path. Programmer-hat tools stay for onboarding drafts.
+
+Keys you already have (no extras): `OPENROUTER_API_KEY`, `PT_MODEL` / `PT_MODEL_SMART`, `SUPABASE_URL` + `SUPABASE_SECRET_KEY`, `LINQ_API_TOKEN`. Anthropic is optional fallback only. `/health` should show `provider: openrouter`, `chatModel: x-ai/grok-4.6`, `journal: supabase`.
+
 ## Model
 
-OpenRouter **Chat Completions** (`/v1/chat/completions`) with tools. Grok is not an Anthropic model — we do not call `/v1/messages`. Conversation uses `PT_MODEL_SMART` (`x-ai/grok-4.6`) when set, otherwise `PT_MODEL` (`x-ai/grok-4.3`). Programmer hat uses the smart model for draft plans.
+OpenRouter **Chat Completions**. Conversation: `PT_MODEL_SMART` (`x-ai/grok-4.6`) when set, else `PT_MODEL` (`x-ai/grok-4.3`). The talk path does not use Anthropic `/v1/messages` or tool-calling — those failed on Grok and made every reply a canned loop.
 
-Obvious logs (water, plunge, session done, reminders with a clock) skip the model. Questions, greetings, and open chat go to Grok. Drafts go live after a normal yes/ok/kjør (soft confirm).
+Obvious logs (water, plunge, session done, reminders with a clock) still skip the model and confirm immediately. Questions go through the packet → Grok. Drafts lock with ja/ok/kjør.
 
 ## Memory
 

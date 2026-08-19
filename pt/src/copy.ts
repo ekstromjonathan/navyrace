@@ -761,6 +761,15 @@ export function fallbackAlive(lang: Lang): string {
   );
 }
 
+export function fallbackOpen(lang: Lang): string {
+  return pick(
+    lang,
+    "I'm here. Ask for the week plan, today, or log something.",
+    "Jeg er her. Si ifra om du vil ha ukeplanen, i dag, eller logge noe.",
+    "Jag är här. Säg till om du vill ha veckoplanen, idag, eller logga något.",
+  );
+}
+
 export function adaptedKeep(lang: Lang, title: string): string {
   return pick(
     lang,
@@ -860,12 +869,12 @@ export function agentError(lang: Lang, err: unknown): string {
       "Jag hörde dig, men modellnamnet är ogiltigt hos OpenRouter. Byt PT_MODEL i pt/.env.",
     );
   }
-  if (/401|unauthorized|invalid.?api.?key|authentication_error|no cookie auth/i.test(msg)) {
+  if (/401|unauthorized|invalid.?api.?key|authentication_error|no cookie auth|expir/i.test(msg)) {
     return pick(
       lang,
-      "I heard you, but the LLM key was rejected. Check OPENROUTER_API_KEY on the host.",
-      "Jeg hørte deg, men LLM-nøkkelen ble avvist. Sjekk OPENROUTER_API_KEY på hosten.",
-      "Jag hörde dig, men LLM-nyckeln avvisades. Kolla OPENROUTER_API_KEY på hosten.",
+      "I heard you, but the LLM key was rejected or expired. Check OPENROUTER_API_KEY on the host.",
+      "Jeg hørte deg, men LLM-nøkkelen ble avvist eller er utløpt. Sjekk OPENROUTER_API_KEY på hosten.",
+      "Jag hörde dig, men LLM-nyckeln avvisades eller har gått ut. Kolla OPENROUTER_API_KEY på hosten.",
     );
   }
   if (/402|credit balance|too low|purchase credits|insufficient.?credits/i.test(msg)) {
@@ -900,13 +909,21 @@ export function agentError(lang: Lang, err: unknown): string {
   );
 }
 
-/** True when the coach reply is a known LLM-failure fallback (not a real answer). */
-export function isAgentFailureReply(text: string): boolean {
+/** Key / credit / model-name failures — say this once, then the journal answer. */
+export function isHardLlmFailureReply(text: string): boolean {
   const t = text.trim();
   return (
     /modellnavnet er ugyldig|model name is invalid|modellnamnet är ogiltigt/i.test(t) ||
     /LLM-nøkkelen ble avvist|LLM key was rejected|LLM-nyckeln avvisades/i.test(t) ||
-    /tom for kreditt|out of credit|tomt på kredit/i.test(t) ||
+    /tom for kreditt|out of credit|tomt på kredit/i.test(t)
+  );
+}
+
+/** True when the coach reply is a known LLM-failure fallback (not a real answer). */
+export function isAgentFailureReply(text: string): boolean {
+  const t = text.trim();
+  return (
+    isHardLlmFailureReply(t) ||
     /rate-begrenset|rate-limited|rate-begränsad/i.test(t) ||
     /modell-tilkoblingen hakket|model connection hiccuped|modellanslutningen hakade/i.test(t) ||
     /fikk ikke laget et skikkelig svar|couldn't put together a proper reply|fick inte till ett ordentligt svar/i.test(t) ||
