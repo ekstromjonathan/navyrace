@@ -25,7 +25,8 @@ import { adaptAfterLog, applyAdaptChoice } from "./adapt.ts";
 import { startedOnOf, assignSessionDays } from "./calendar.ts";
 import { consecutiveConflict, coachFallback, loadAgenda, plannedSessionOf } from "./fallback.ts";
 import { composeFromPacket, gatherPacket } from "./compose.ts";
-import type { Inbound, InviteRow, UserRow } from "./types.ts";
+import { inferReminderTopic } from "./reminder-topic.ts";
+import type { Inbound, InviteRow, ReminderRow, UserRow } from "./types.ts";
 
 type ReplyResult = { text: string; effect?: string };
 
@@ -400,12 +401,10 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
       return commitReminderSet(user, lang, timed.hour, timed.minute, timed.scope, pending.url);
     }
     /* Not a clock — never trap the dialogue on “når skal jeg minne deg?”. Attach the URL if a ping already exists. */
-    const live = (await journal.listReminders(user.id)).find((r) => r.enabled === 1);
-    if (live) {
-      await journal.upsertReminder(user.id, "train", live.hour, live.minute, {
-        onceOn: live.once_on,
-        url: pending.url,
-      });
+    const live = (await journal.listReminders(user.id)).filter((r) => r.enabled === 1);
+    const target = pickAttachTarget(live);
+    if (target) {
+      await attachUrlToReminder(target, pending.url);
     } else {
       await journal.addNote({ userId: user.id, trackId: null, kind: "video", body: pending.url.slice(0, 240) });
     }
@@ -420,13 +419,13 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
       return copy.reminderScopeCancelled(lang);
     }
     if (isReminderDailyReply(body)) {
-      await journal.upsertReminder(user.id, "train", pending.hour, pending.minute, { onceOn: null });
+      await journal.upsertReminder(user.id, "train", pending.hour, pending.minute, { onceOn: null, title: "trening" });
       await journal.setPending(user.id, null);
       return copy.reminderConfirm(lang, pending.hour, pending.minute, user.tz);
     }
     if (isReminderOnceReply(body) || isActivatePhrase(body)) {
       const onceOn = resolveOnceOn(user.tz, pending.hour, pending.minute);
-      await journal.upsertReminder(user.id, "train", pending.hour, pending.minute, { onceOn });
+      await journal.upsertReminder(user.id, "train", pending.hour, pending.minute, { onceOn, title: "trening" });
       await journal.setPending(user.id, null);
       return copy.reminderConfirmOnce(lang, pending.hour, pending.minute, onceOn, user.tz);
     }
@@ -543,6 +542,17 @@ async function formatWeek(user: UserRow, lang: Lang): Promise<string> {
   }
 }
 
+function pickAttachTarget(live: ReminderRow[]): ReminderRow | null {
+  return live.find((r) => r.slug === "video" || r.url) ?? (live.length === 1 ? live[0] : null);
+}
+
+async function attachUrlToReminder(target: ReminderRow, url: string): Promise<ReminderRow> {
+  const slug = target.slug === "train" ? "video" : target.slug;
+  const title = !target.title || target.title === "trening" ? "video" : target.title;
+  const rec = await journal.patchReminder(target.id, { url, slug, title });
+  return rec ?? target;
+}
+
 async function commitReminderSet(
   user: UserRow,
   lang: Lang,
@@ -550,19 +560,23 @@ async function commitReminderSet(
   minute: number,
   scope: "daily" | "once",
   url: string | null,
+  topic?: { slug: string; title: string },
 ): Promise<string> {
+  const inferred = topic ?? inferReminderTopic("", url);
+  const slug = inferred.slug;
+  const title = inferred.title;
   const urlOpt = url ? { url } : { url: null as string | null };
   if (scope === "once") {
     const onceOn = resolveOnceOn(user.tz, hour, minute);
-    await journal.upsertReminder(user.id, "train", hour, minute, { onceOn, ...urlOpt });
+    await journal.upsertReminder(user.id, slug, hour, minute, { onceOn, title, ...urlOpt });
     return url
-      ? copy.reminderConfirmOnceWithUrl(lang, hour, minute, onceOn, user.tz, url)
-      : copy.reminderConfirmOnce(lang, hour, minute, onceOn, user.tz);
+      ? copy.reminderConfirmOnceWithUrl(lang, hour, minute, onceOn, user.tz, url, title)
+      : copy.reminderConfirmOnce(lang, hour, minute, onceOn, user.tz, title);
   }
-  await journal.upsertReminder(user.id, "train", hour, minute, { onceOn: null, ...urlOpt });
+  await journal.upsertReminder(user.id, slug, hour, minute, { onceOn: null, title, ...urlOpt });
   return url
-    ? copy.reminderConfirmWithUrl(lang, hour, minute, user.tz, url)
-    : copy.reminderConfirm(lang, hour, minute, user.tz);
+    ? copy.reminderConfirmWithUrl(lang, hour, minute, user.tz, url, title)
+    : copy.reminderConfirm(lang, hour, minute, user.tz, title);
 }
 
 async function applyHeuristic(
@@ -596,7 +610,7 @@ async function applyHeuristic(
   if (parsed.kind === "reminder_list") {
     const reminders = (await journal.listReminders(user.id))
       .filter((r) => r.enabled === 1)
-      .map((r) => ({ hour: r.hour, minute: r.minute, url: r.url }));
+      .map((r) => ({ hour: r.hour, minute: r.minute, url: r.url, title: r.title, onceOn: r.once_on }));
     return copy.fallbackReminders(lang, reminders);
   }
 
@@ -612,10 +626,14 @@ async function applyHeuristic(
   }
 
   if (parsed.kind === "video_link") {
-    const live = (await journal.listReminders(user.id)).find((r) => r.enabled === 1);
-    if (live) {
-      const scope = live.once_on ? "once" : "daily";
-      return commitReminderSet(user, lang, live.hour, live.minute, scope, parsed.url);
+    const live = (await journal.listReminders(user.id)).filter((r) => r.enabled === 1);
+    const target = pickAttachTarget(live);
+    if (target) {
+      const rec = await attachUrlToReminder(target, parsed.url);
+      if (rec.once_on) {
+        return copy.reminderConfirmOnceWithUrl(lang, rec.hour, rec.minute, rec.once_on, user.tz, parsed.url, rec.title);
+      }
+      return copy.reminderConfirmWithUrl(lang, rec.hour, rec.minute, user.tz, parsed.url, rec.title);
     }
     await journal.setPending(user.id, {
       type: "video_reminder_time",
@@ -626,12 +644,19 @@ async function applyHeuristic(
   }
 
   if (parsed.kind === "reminder_set") {
-    return commitReminderSet(user, lang, parsed.hour, parsed.minute, parsed.scope, parsed.url);
+    return commitReminderSet(user, lang, parsed.hour, parsed.minute, parsed.scope, parsed.url, {
+      slug: parsed.slug,
+      title: parsed.title,
+    });
   }
 
   if (parsed.kind === "reminder_cancel") {
-    const had = await journal.disableReminder(user.id, "train");
-    return copy.reminderCancel(lang, Boolean(had));
+    const disabled = await journal.disableReminders(user.id, {
+      slug: parsed.slug,
+      hour: parsed.hour,
+      minute: parsed.minute,
+    });
+    return copy.reminderCancel(lang, disabled.length);
   }
 
   if (parsed.kind === "activate") {

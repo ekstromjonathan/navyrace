@@ -22,7 +22,9 @@ import type {
   TrackStatus,
   UserFacts,
   UserRow,
+  ReminderFilter,
 } from "./types.ts";
+import { titleForSlug } from "./reminder-topic.ts";
 
 type SqlValue = string | number | bigint | null | Uint8Array;
 
@@ -648,6 +650,8 @@ export function snapshot(user: UserRow) {
     recentNotes: recentNotes(user.id, 8),
     recentChat: recentChat(user.id, 24),
     reminders: listReminders(user.id).filter((r) => r.enabled === 1).map((r) => ({
+      slug: r.slug,
+      title: r.title,
       kind: r.kind,
       hour: r.hour,
       minute: r.minute,
@@ -664,23 +668,31 @@ export function hhmm(hour: number, minute: number): string {
 
 export function upsertReminder(
   userId: string,
-  kind: ReminderKind,
+  slug: string,
   hour: number,
   minute: number,
-  opts?: { onceOn?: string | null; url?: string | null },
+  opts?: { onceOn?: string | null; url?: string | null; title?: string },
 ): ReminderRow {
   const h = Math.min(23, Math.max(0, Math.round(hour)));
   const m = Math.min(59, Math.max(0, Math.round(minute)));
   const onceOn = opts?.onceOn === undefined ? null : opts.onceOn;
   const url = opts && "url" in opts ? (opts.url ?? null) : undefined;
-  const existing = row<ReminderRow>("SELECT * FROM reminders WHERE user_id = ? AND kind = ?", userId, kind);
+  const cleanSlug = (slug || "train").trim().slice(0, 40) || "train";
+  const title = (opts?.title?.trim() || titleForSlug(cleanSlug)).slice(0, 48);
+  const existing = row<ReminderRow>(
+    "SELECT * FROM reminders WHERE user_id = ? AND slug = ? AND hour = ? AND minute = ? AND ifnull(once_on,'') = ifnull(?, '')",
+    userId,
+    cleanSlug,
+    h,
+    m,
+    onceOn,
+  );
   const ts = nowIso();
   if (existing) {
     if (url !== undefined) {
       run(
-        "UPDATE reminders SET hour = ?, minute = ?, enabled = 1, once_on = ?, url = ?, updated_at = ? WHERE id = ?",
-        h,
-        m,
+        "UPDATE reminders SET title = ?, enabled = 1, once_on = ?, url = ?, updated_at = ? WHERE id = ?",
+        title,
         onceOn,
         url,
         ts,
@@ -688,9 +700,8 @@ export function upsertReminder(
       );
     } else {
       run(
-        "UPDATE reminders SET hour = ?, minute = ?, enabled = 1, once_on = ?, updated_at = ? WHERE id = ?",
-        h,
-        m,
+        "UPDATE reminders SET title = ?, enabled = 1, once_on = ?, updated_at = ? WHERE id = ?",
+        title,
         onceOn,
         ts,
         existing.id,
@@ -700,11 +711,12 @@ export function upsertReminder(
   }
   const id = randomUUID();
   run(
-    `INSERT INTO reminders (id, user_id, kind, hour, minute, enabled, once_on, url, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+    `INSERT INTO reminders (id, user_id, kind, slug, title, hour, minute, enabled, once_on, url, created_at, updated_at)
+     VALUES (?, ?, 'train', ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
     id,
     userId,
-    kind,
+    cleanSlug,
+    title,
     h,
     m,
     onceOn,
@@ -723,11 +735,45 @@ export function listReminders(userId: string): ReminderRow[] {
   return rows<ReminderRow>("SELECT * FROM reminders WHERE user_id = ? ORDER BY hour, minute", userId);
 }
 
-export function disableReminder(userId: string, kind: ReminderKind = "train"): ReminderRow | undefined {
-  const existing = row<ReminderRow>("SELECT * FROM reminders WHERE user_id = ? AND kind = ?", userId, kind);
+export function disableReminders(userId: string, filter: ReminderFilter = {}): ReminderRow[] {
+  const live = listReminders(userId).filter((r) => r.enabled === 1);
+  const hits = live.filter((r) => reminderMatches(r, filter));
+  const ts = nowIso();
+  for (const r of hits) {
+    run("UPDATE reminders SET enabled = 0, updated_at = ? WHERE id = ?", ts, r.id);
+  }
+  return hits.map((r) => getReminder(r.id)!).filter(Boolean);
+}
+
+export function disableReminder(userId: string, slug?: string): ReminderRow | undefined {
+  return disableReminders(userId, slug ? { slug } : {})[0];
+}
+
+export function patchReminder(
+  id: string,
+  patch: { url?: string | null; slug?: string; title?: string },
+): ReminderRow | undefined {
+  const existing = getReminder(id);
   if (!existing) return undefined;
-  run("UPDATE reminders SET enabled = 0, updated_at = ? WHERE id = ?", nowIso(), existing.id);
-  return getReminder(existing.id);
+  const url = patch.url !== undefined ? patch.url : existing.url;
+  const slug = (patch.slug?.trim() || existing.slug).slice(0, 40);
+  const title = (patch.title?.trim() || existing.title).slice(0, 48);
+  run(
+    "UPDATE reminders SET url = ?, slug = ?, title = ?, updated_at = ? WHERE id = ?",
+    url,
+    slug,
+    title,
+    nowIso(),
+    id,
+  );
+  return getReminder(id);
+}
+
+function reminderMatches(r: ReminderRow, filter: ReminderFilter): boolean {
+  if (filter.slug && r.slug !== filter.slug) return false;
+  if (filter.hour != null && r.hour !== filter.hour) return false;
+  if (filter.minute != null && r.minute !== filter.minute) return false;
+  return true;
 }
 
 export function markReminderFired(id: string, day: string): void {

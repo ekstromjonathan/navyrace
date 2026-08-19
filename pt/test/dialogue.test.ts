@@ -265,4 +265,85 @@ describe("dialogue replay", () => {
     assert.equal(/• /.test(lastOut()), false);
     assert.equal(isConsecutiveLoop(lastOut()), false);
   });
+
+  it("keeps several reminders at once, daily and one-shot", async () => {
+    const user = await journal.upsertUser("chat-dialogue-multi-rem", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb" });
+    await journal.touchContactCard(user.id);
+
+    await handleInbound({
+      eventId: "e-dialogue-70",
+      messageId: "m-dialogue-70",
+      chatId: "chat-dialogue-multi-rem",
+      phone: "+4740343295",
+      body: "Minn meg på å trene hver dag kl 8",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.match(lastOut(), /08:00/);
+
+    await handleInbound({
+      eventId: "e-dialogue-71",
+      messageId: "m-dialogue-71",
+      chatId: "chat-dialogue-multi-rem",
+      phone: "+4740343295",
+      body: "Minn meg på meditasjon hver dag kl 7",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.match(lastOut(), /07:00/);
+    assert.match(lastOut(), /meditasjon/i);
+
+    await handleInbound({
+      eventId: "e-dialogue-72",
+      messageId: "m-dialogue-72",
+      chatId: "chat-dialogue-multi-rem",
+      phone: "+4740343295",
+      body: "Kan du minne meg på å trene kl 19 i kveld",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.match(lastOut(), /19:00/);
+
+    await handleInbound({
+      eventId: "e-dialogue-73",
+      messageId: "m-dialogue-73",
+      chatId: "chat-dialogue-multi-rem",
+      phone: "+4740343295",
+      body: "Hvilke påminnelser",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.match(lastOut(), /08:00/);
+    assert.match(lastOut(), /07:00/);
+    assert.match(lastOut(), /19:00/);
+    assert.match(lastOut(), /meditasjon/i);
+
+    const live = (await journal.listReminders(user.id)).filter((r) => r.enabled === 1);
+    assert.equal(live.length, 3);
+
+    await handleInbound({
+      eventId: "e-dialogue-74",
+      messageId: "m-dialogue-74",
+      chatId: "chat-dialogue-multi-rem",
+      phone: "+4740343295",
+      body: "slutt å minne meg på meditasjon",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    const after = (await journal.listReminders(user.id)).filter((r) => r.enabled === 1);
+    assert.equal(after.length, 2);
+    assert.equal(after.some((r) => r.slug === "meditasjon"), false);
+    assert.equal(after.some((r) => r.slug === "train" && r.hour === 8), true);
+  });
 });

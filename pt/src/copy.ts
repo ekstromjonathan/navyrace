@@ -149,23 +149,46 @@ export function optOutReply(lang: Lang): string {
   );
 }
 
-export function reminderConfirm(lang: Lang, hour: number, minute: number, tz: string): string {
+export function reminderConfirm(
+  lang: Lang,
+  hour: number,
+  minute: number,
+  tz: string,
+  title = "trening",
+): string {
   const t = hhmm(hour, minute);
+  const about = title === "trening" ? pick(lang, "training reminder", "treningspåminnelse", "träningspåminnelse") : title;
+  const skip =
+    title === "trening"
+      ? pick(
+          lang,
+          " I'll skip the day if you already logged a session.",
+          " Jeg hopper over dagen hvis du allerede har logget økt.",
+          " Jag hoppar över dagen om du redan har loggat pass.",
+        )
+      : "";
   return pick(
     lang,
-    `Ok — daily training reminder at ${t} (${tz}). I'll skip the day if you already logged a session. Say “stop reminding me” to turn it off.`,
-    `Ok — daglig treningspåminnelse kl ${t} (${tz}). Jeg hopper over dagen hvis du allerede har logget økt. Si «slutt å minne meg» for å skru av.`,
-    `Ok — daglig träningspåminnelse kl ${t} (${tz}). Jag hoppar över dagen om du redan har loggat pass. Säg «sluta påminna mig» för att stänga av.`,
+    `Ok — daily ${about} at ${t} (${tz}).${skip} Say “stop reminding me” to turn it off.`,
+    `Ok — daglig ${about} kl ${t} (${tz}).${skip} Si «slutt å minne meg» for å skru av.`,
+    `Ok — daglig ${about} kl ${t} (${tz}).${skip} Säg «sluta påminna mig» för att stänga av.`,
   );
 }
 
-export function reminderConfirmOnce(lang: Lang, hour: number, minute: number, onceOn: string, tz: string): string {
+export function reminderConfirmOnce(
+  lang: Lang,
+  hour: number,
+  minute: number,
+  onceOn: string,
+  tz: string,
+  title = "påminnelse",
+): string {
   const t = hhmm(hour, minute);
   return pick(
     lang,
-    `Ok — one reminder on ${onceOn} at ${t} (${tz}). Say “stop reminding me” to cancel.`,
-    `Ok — én påminnelse ${onceOn} kl ${t} (${tz}). Si «slutt å minne meg» for å avbryte.`,
-    `Ok — en påminnelse ${onceOn} kl ${t} (${tz}). Säg «sluta påminna mig» för att avbryta.`,
+    `Ok — one ${title} on ${onceOn} at ${t} (${tz}). Say “stop reminding me” to cancel.`,
+    `Ok — én ${title} ${onceOn} kl ${t} (${tz}). Si «slutt å minne meg» for å avbryte.`,
+    `Ok — en ${title} ${onceOn} kl ${t} (${tz}). Säg «sluta påminna mig» för att avbryta.`,
   );
 }
 
@@ -175,13 +198,14 @@ export function reminderConfirmWithUrl(
   minute: number,
   tz: string,
   url: string,
+  title = "video",
 ): string {
   const t = hhmm(hour, minute);
   return pick(
     lang,
-    `Ok — daily reminder at ${t} (${tz}) with your link:\n${url}\nSay “stop reminding me” to turn it off.`,
-    `Ok — daglig påminnelse kl ${t} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å skru av.`,
-    `Ok — daglig påminnelse kl ${t} (${tz}) med länken:\n${url}\nSäg «sluta påminna mig» för att stänga av.`,
+    `Ok — daily ${title} at ${t} (${tz}) with your link:\n${url}\nSay “stop reminding me” to turn it off.`,
+    `Ok — daglig ${title} kl ${t} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å skru av.`,
+    `Ok — daglig ${title} kl ${t} (${tz}) med länken:\n${url}\nSäg «sluta påminna mig» för att stänga av.`,
   );
 }
 
@@ -192,13 +216,14 @@ export function reminderConfirmOnceWithUrl(
   onceOn: string,
   tz: string,
   url: string,
+  title = "video",
 ): string {
   const t = hhmm(hour, minute);
   return pick(
     lang,
-    `Ok — one reminder on ${onceOn} at ${t} (${tz}) with your link:\n${url}\nSay “stop reminding me” to cancel.`,
-    `Ok — én påminnelse ${onceOn} kl ${t} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å avbryte.`,
-    `Ok — en påminnelse ${onceOn} kl ${t} (${tz}) med länken:\n${url}\nSäg «sluta påminna mig» för att avbryta.`,
+    `Ok — one ${title} on ${onceOn} at ${t} (${tz}) with your link:\n${url}\nSay “stop reminding me” to cancel.`,
+    `Ok — én ${title} ${onceOn} kl ${t} (${tz}) med lenken:\n${url}\nSi «slutt å minne meg» for å avbryte.`,
+    `Ok — en ${title} ${onceOn} kl ${t} (${tz}) med länken:\n${url}\nSäg «sluta påminna mig» för att avbryta.`,
   );
 }
 
@@ -282,9 +307,17 @@ export function reminderScopeCancelled(lang: Lang): string {
   return pick(lang, "Ok, no reminder set.", "Ok, ingen påminnelse satt.", "Ok, ingen påminnelse satt.");
 }
 
-export function reminderCancel(lang: Lang, had: boolean): string {
-  if (had) {
-    return pick(lang, "Ok, no more training reminders.", "Ok, ingen flere treningspåminnelser.", "Ok, inga fler träningspåminnelser.");
+export function reminderCancel(lang: Lang, count: number): string {
+  if (count > 1) {
+    return pick(
+      lang,
+      `Ok, turned off ${count} reminders.`,
+      `Ok, skrur av ${count} påminnelser.`,
+      `Ok, stänger av ${count} påminnelser.`,
+    );
+  }
+  if (count === 1) {
+    return pick(lang, "Ok, that reminder is off.", "Ok, den påminnelsen er av.", "Ok, den påminnelsen är av.");
   }
   return pick(
     lang,
@@ -620,20 +653,25 @@ export function fallbackAck(lang: Lang): string {
 
 export function fallbackReminders(
   lang: Lang,
-  reminders: { hour: number; minute: number; url: string | null }[],
+  reminders: { hour: number; minute: number; url: string | null; title?: string; onceOn?: string | null }[],
 ): string {
   if (!reminders.length) {
     return pick(lang, "No reminder is on right now.", "Ingen påminnelse er på nå.", "Ingen påminnelse är på nu.");
   }
   const lines = reminders.map((r) => {
     const clock = hhmm(r.hour, r.minute);
-    return r.url ? `${clock} — ${r.url}` : clock;
+    const label = r.title?.trim() || "";
+    const scope = r.onceOn
+      ? pick(lang, `once ${r.onceOn}`, `én gang ${r.onceOn}`, `en gång ${r.onceOn}`)
+      : pick(lang, "daily", "hver dag", "varje dag");
+    const head = label ? `${clock} ${label} (${scope})` : `${clock} (${scope})`;
+    return r.url ? `${head} — ${r.url}` : head;
   });
   return pick(
     lang,
-    `Reminders on: ${lines.join("; ")}.`,
-    `Påminnelser: ${lines.join("; ")}.`,
-    `Påminnelser: ${lines.join("; ")}.`,
+    `Reminders on:\n${lines.join("\n")}`,
+    `Påminnelser:\n${lines.join("\n")}`,
+    `Påminnelser:\n${lines.join("\n")}`,
   );
 }
 
@@ -828,6 +866,15 @@ export function reminderPingVideo(lang: Lang, url: string): string {
     [`Reminder — time to watch this:`, url].join("\n"),
     [`Påminnelse — tid for å se dette:`, url].join("\n"),
     [`Påminnelse — dags att se det här:`, url].join("\n"),
+  );
+}
+
+export function reminderPingRoutine(lang: Lang, title: string): string {
+  return pick(
+    lang,
+    `Reminder: ${title}.`,
+    `Påminnelse: ${title}.`,
+    `Påminnelse: ${title}.`,
   );
 }
 

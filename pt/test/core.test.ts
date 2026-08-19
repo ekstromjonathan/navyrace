@@ -228,6 +228,7 @@ describe("parser", () => {
       assert.equal(set.hour, 8);
       assert.equal(set.minute, 0);
       assert.equal(set.scope, "daily");
+      assert.equal(set.slug, "train");
     }
     const half = parseMessage("minn meg kl 7.30");
     assert.equal(half.kind, "reminder_set");
@@ -257,6 +258,43 @@ describe("parser", () => {
     }
     assert.equal(parseMessage("remind me to train at 8").kind, "reminder_set");
     assert.equal(parseMessage("stop reminding me").kind, "reminder_cancel");
+    const med = parseMessage("Minn meg på meditasjon hver dag kl 7");
+    assert.equal(med.kind, "reminder_set");
+    if (med.kind === "reminder_set") {
+      assert.equal(med.hour, 7);
+      assert.equal(med.slug, "meditasjon");
+      assert.equal(med.scope, "daily");
+    }
+    const evening = parseMessage("minn meg på denne hver kveld kl 22");
+    assert.equal(evening.kind, "reminder_set");
+    if (evening.kind === "reminder_set") {
+      assert.equal(evening.hour, 22);
+      assert.equal(evening.scope, "daily");
+      assert.equal(evening.slug, "train");
+    }
+    const kveld = parseMessage("Ny kveldsrutine: minn meg på denne hver kveld kl 22");
+    assert.equal(kveld.kind, "reminder_set");
+    if (kveld.kind === "reminder_set") {
+      assert.equal(kveld.slug, "train");
+      assert.equal(kveld.scope, "daily");
+      assert.equal(kveld.hour, 22);
+    }
+    const stretch = parseMessage("minn meg på stretching hver dag kl 21");
+    assert.equal(stretch.kind, "reminder_set");
+    if (stretch.kind === "reminder_set") {
+      assert.equal(stretch.slug, "stretching");
+      assert.equal(stretch.hour, 21);
+    }
+    const stopVideo = parseMessage("slutt å minne meg på videoen");
+    assert.equal(stopVideo.kind, "reminder_cancel");
+    if (stopVideo.kind === "reminder_cancel") {
+      assert.equal(stopVideo.slug, "video");
+    }
+    const stopClock = parseMessage("ikke minn meg kl 8");
+    assert.equal(stopClock.kind, "reminder_cancel");
+    if (stopClock.kind === "reminder_cancel") {
+      assert.equal(stopClock.hour, 8);
+    }
     assert.equal(parseMessage("Hva har du logget til nå?").kind, "unknown");
   });
 
@@ -287,6 +325,7 @@ describe("parser", () => {
     if (withTime.kind === "reminder_set") {
       assert.equal(withTime.hour, 19);
       assert.equal(withTime.url, yt);
+      assert.equal(withTime.slug, "video");
     }
     const linkOnly = parseMessage(yt);
     assert.equal(linkOnly.kind, "video_link");

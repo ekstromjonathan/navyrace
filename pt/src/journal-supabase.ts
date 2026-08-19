@@ -22,7 +22,9 @@ import type {
   TrackStatus,
   UserFacts,
   UserRow,
+  ReminderFilter,
 } from "./types.ts";
+import { titleForSlug } from "./reminder-topic.ts";
 import type { ArchivedEntry } from "./journal-sqlite.ts";
 
 type SbError = { code?: string; message: string } | null;
@@ -72,10 +74,19 @@ function asTrack(row: Record<string, unknown>): TrackRow {
 }
 
 function asReminder(row: Record<string, unknown>): ReminderRow {
+  const slug = row.slug == null || String(row.slug).trim() === "" ? String(row.kind || "train") : String(row.slug);
+  const title =
+    row.title == null || String(row.title).trim() === ""
+      ? slug === "train"
+        ? "trening"
+        : slug.replace(/-/g, " ")
+      : String(row.title);
   return {
     id: String(row.id),
     user_id: String(row.user_id),
-    kind: row.kind as ReminderKind,
+    kind: (row.kind as ReminderKind) || "train",
+    slug,
+    title,
     hour: Number(row.hour),
     minute: Number(row.minute ?? 0),
     enabled: row.enabled === true || row.enabled === 1 || row.enabled === "1" ? 1 : 0,
@@ -841,6 +852,8 @@ export async function snapshot(user: UserRow) {
     reminders: (await listReminders(user.id))
       .filter((r) => r.enabled === 1)
       .map((r) => ({
+        slug: r.slug,
+        title: r.title,
         kind: r.kind,
         hour: r.hour,
         minute: r.minute,
@@ -857,26 +870,33 @@ export function hhmm(hour: number, minute: number): string {
 
 export async function upsertReminder(
   userId: string,
-  kind: ReminderKind,
+  slug: string,
   hour: number,
   minute: number,
-  opts?: { onceOn?: string | null; url?: string | null },
+  opts?: { onceOn?: string | null; url?: string | null; title?: string },
 ): Promise<ReminderRow> {
   const h = Math.min(23, Math.max(0, Math.round(hour)));
   const m = Math.min(59, Math.max(0, Math.round(minute)));
   const onceOn = opts?.onceOn === undefined ? null : opts.onceOn;
   const url = opts && "url" in opts ? (opts.url ?? null) : undefined;
+  const cleanSlug = (slug || "train").trim().slice(0, 40) || "train";
+  const title = (opts?.title?.trim() || titleForSlug(cleanSlug)).slice(0, 48);
   const sb = getSupabase();
-  const { data: existing, error: findErr } = await sb
-    .from("reminders")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("kind", kind)
-    .maybeSingle();
+  let find = sb.from("reminders").select("*").eq("user_id", userId).eq("slug", cleanSlug).eq("hour", h).eq("minute", m);
+  find = onceOn == null ? find.is("once_on", null) : find.eq("once_on", onceOn);
+  const { data: existing, error: findErr } = await find.maybeSingle();
   throwIf(findErr);
   const ts = nowIso();
   if (existing) {
-    const patch: Record<string, unknown> = { hour: h, minute: m, enabled: true, once_on: onceOn, updated_at: ts };
+    const patch: Record<string, unknown> = {
+      hour: h,
+      minute: m,
+      slug: cleanSlug,
+      title,
+      enabled: true,
+      once_on: onceOn,
+      updated_at: ts,
+    };
     if (url !== undefined) patch.url = url;
     const { data, error } = await sb
       .from("reminders")
@@ -893,7 +913,9 @@ export async function upsertReminder(
     .insert({
       id,
       user_id: userId,
-      kind,
+      kind: "train",
+      slug: cleanSlug,
+      title,
       hour: h,
       minute: m,
       enabled: true,
@@ -925,26 +947,56 @@ export async function listReminders(userId: string): Promise<ReminderRow[]> {
   return (data ?? []).map((r) => asReminder(r as Record<string, unknown>));
 }
 
+export async function disableReminders(userId: string, filter: ReminderFilter = {}): Promise<ReminderRow[]> {
+  const live = (await listReminders(userId)).filter((r) => r.enabled === 1);
+  const hits = live.filter((r) => reminderMatches(r, filter));
+  const out: ReminderRow[] = [];
+  for (const r of hits) {
+    const { data, error } = await getSupabase()
+      .from("reminders")
+      .update({ enabled: false, updated_at: nowIso() })
+      .eq("id", r.id)
+      .select("*")
+      .single();
+    throwIf(error);
+    out.push(asReminder(data as Record<string, unknown>));
+  }
+  return out;
+}
+
 export async function disableReminder(
   userId: string,
-  kind: ReminderKind = "train",
+  slug?: string,
 ): Promise<ReminderRow | undefined> {
-  const { data: existing, error: findErr } = await getSupabase()
-    .from("reminders")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("kind", kind)
-    .maybeSingle();
-  throwIf(findErr);
+  const rows = await disableReminders(userId, slug ? { slug } : {});
+  return rows[0];
+}
+
+export async function patchReminder(
+  id: string,
+  patch: { url?: string | null; slug?: string; title?: string },
+): Promise<ReminderRow | undefined> {
+  const existing = await getReminder(id);
   if (!existing) return undefined;
+  const body: Record<string, unknown> = { updated_at: nowIso() };
+  if (patch.url !== undefined) body.url = patch.url;
+  if (patch.slug?.trim()) body.slug = patch.slug.trim().slice(0, 40);
+  if (patch.title?.trim()) body.title = patch.title.trim().slice(0, 48);
   const { data, error } = await getSupabase()
     .from("reminders")
-    .update({ enabled: false, updated_at: nowIso() })
-    .eq("id", (existing as { id: string }).id)
+    .update(body)
+    .eq("id", id)
     .select("*")
     .single();
   throwIf(error);
   return asReminder(data as Record<string, unknown>);
+}
+
+function reminderMatches(r: ReminderRow, filter: ReminderFilter): boolean {
+  if (filter.slug && r.slug !== filter.slug) return false;
+  if (filter.hour != null && r.hour !== filter.hour) return false;
+  if (filter.minute != null && r.minute !== filter.minute) return false;
+  return true;
 }
 
 export async function markReminderFired(id: string, day: string): Promise<void> {

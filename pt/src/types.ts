@@ -152,6 +152,8 @@ export type ReminderRow = {
   id: string;
   user_id: string;
   kind: ReminderKind;
+  slug: string;
+  title: string;
   hour: number;
   minute: number;
   enabled: number;
@@ -162,6 +164,12 @@ export type ReminderRow = {
   url: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ReminderFilter = {
+  slug?: string;
+  hour?: number;
+  minute?: number;
 };
 
 export type ChatTurn = {

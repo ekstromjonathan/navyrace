@@ -95,4 +95,31 @@ describe("scheduler", () => {
     assert.ok(mine);
     assert.match(mine ?? "", /Påminnelse|Reminder/);
   });
+
+  it("fires a habit reminder even if they already trained", async () => {
+    const habitUser = await journal.upsertUser("chat-habit-sched", "+4740343301");
+    const training = await journal.createTrack({
+      userId: habitUser.id,
+      kind: "training",
+      slug: "program-habit",
+      name: "Test",
+      status: "active",
+      plan: { sessions: [{ id: "w1d1", title: "Styrke", loadKey: "str", load: 3, unit: "runder" }] },
+    });
+    await journal.logEntry({
+      trackId: training.id,
+      userId: habitUser.id,
+      sessionRef: "w1d1",
+      source: "heuristic",
+      occurredAt: "2026-08-15T06:00:00.000Z",
+    });
+    await journal.upsertReminder(habitUser.id, "meditasjon", 8, 0, { title: "meditasjon" });
+    const sent: string[] = [];
+    const n = await fireDueReminders(at805, async (_chat, body) => {
+      sent.push(body);
+    });
+    assert.ok(n >= 1);
+    const mine = sent.find((s) => /meditasjon/i.test(s));
+    assert.ok(mine);
+  });
 });

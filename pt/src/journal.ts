@@ -10,6 +10,7 @@ import type {
   Quantity,
   ReminderKind,
   ReminderRow,
+  ReminderFilter,
   TrackKind,
   TrackRow,
   TrackStatus,
@@ -279,12 +280,12 @@ export async function snapshot(user: UserRow) {
 
 export async function upsertReminder(
   userId: string,
-  kind: ReminderKind,
+  slug: string,
   hour: number,
   minute: number,
-  opts?: { onceOn?: string | null; url?: string | null },
+  opts?: { onceOn?: string | null; url?: string | null; title?: string },
 ): Promise<ReminderRow> {
-  return asAsync(api().upsertReminder(userId, kind, hour, minute, opts));
+  return asAsync(api().upsertReminder(userId, slug, hour, minute, opts));
 }
 
 export async function getReminder(id: string): Promise<ReminderRow | undefined> {
@@ -295,11 +296,25 @@ export async function listReminders(userId: string): Promise<ReminderRow[]> {
   return asAsync(api().listReminders(userId));
 }
 
+export async function disableReminders(
+  userId: string,
+  filter: ReminderFilter = {},
+): Promise<ReminderRow[]> {
+  return asAsync(api().disableReminders(userId, filter));
+}
+
 export async function disableReminder(
   userId: string,
-  kind: ReminderKind = "train",
+  slug?: string,
 ): Promise<ReminderRow | undefined> {
-  return asAsync(api().disableReminder(userId, kind));
+  return asAsync(api().disableReminder(userId, slug));
+}
+
+export async function patchReminder(
+  id: string,
+  patch: { url?: string | null; slug?: string; title?: string },
+): Promise<ReminderRow | undefined> {
+  return asAsync(api().patchReminder(id, patch));
 }
 
 export async function markReminderFired(id: string, day: string): Promise<void> {
