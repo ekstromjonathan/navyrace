@@ -108,6 +108,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS reminders_identity
 
 CREATE INDEX IF NOT EXISTS reminders_enabled ON reminders(enabled, hour, minute);
 
+-- Structured product outcomes. Never duplicate raw chat bodies in metadata.
+CREATE TABLE IF NOT EXISTS coach_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('user', 'coach', 'system', 'integration')),
+  ref_id TEXT,
+  dedupe_key TEXT UNIQUE,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS coach_events_user_time ON coach_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS coach_events_kind_time ON coach_events(kind, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS webhook_events (
   event_id TEXT PRIMARY KEY,
   received_at TEXT NOT NULL

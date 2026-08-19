@@ -346,4 +346,36 @@ describe("dialogue replay", () => {
     assert.equal(after.some((r) => r.slug === "meditasjon"), false);
     assert.equal(after.some((r) => r.slug === "train" && r.hour === 8), true);
   });
+
+  it("routes an exercise red flag before pending or the LLM", async () => {
+    const user = await journal.upsertUser("chat-dialogue-safety", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb" });
+    await journal.touchContactCard(user.id);
+    await journal.setPending(user.id, {
+      type: "question",
+      field: "equipment",
+      askedAt: new Date().toISOString(),
+    });
+    const before = outbound.length;
+    await handleInbound({
+      eventId: "e-dialogue-safety-1",
+      messageId: "m-dialogue-safety-1",
+      chatId: "chat-dialogue-safety",
+      phone: "+4740343295",
+      body: "Jeg fikk trykk i brystet under intervallene",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal(outbound.length, before + 1, "one reply per inbound");
+    assert.match(lastOut(), /stopp økta/i);
+    assert.match(lastOut(), /113/);
+    assert.equal(/OPENROUTER|modell/i.test(lastOut()), false);
+    assert.equal((await journal.pendingOf(user))?.type, "question", "safety does not erase pending context");
+    const events = await journal.listCoachEvents(user.id);
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.kind, "safety_routed");
+    assert.equal(events[0]?.metadata.includes("trykk i brystet"), false, "event metadata has no raw message");
+  });
 });

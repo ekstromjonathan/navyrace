@@ -10,6 +10,9 @@ import {
 } from "./calendar.ts";
 import type {
   ChatTurn,
+  CoachEventKind,
+  CoachEventRow,
+  CoachEventSource,
   InviteRow,
   Pending,
   Plan,
@@ -64,6 +67,47 @@ export function releaseEvent(eventId: string): void {
 
 export function releaseMessage(messageId: string): void {
   run("DELETE FROM processed_messages WHERE linq_message_id = ?", messageId);
+}
+
+export function recordCoachEvent(input: {
+  userId: string;
+  kind: CoachEventKind;
+  source: CoachEventSource;
+  refId?: string | null;
+  dedupeKey?: string | null;
+  metadata?: Record<string, unknown>;
+}): CoachEventRow {
+  const metadata = JSON.stringify(input.metadata ?? {});
+  if (metadata.length > 2048) throw new Error("coach event metadata exceeds 2048 characters");
+  const id = randomUUID();
+  const createdAt = nowIso();
+  const info = run(
+    `INSERT OR IGNORE INTO coach_events
+       (id, user_id, kind, source, ref_id, dedupe_key, metadata, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    id,
+    input.userId,
+    input.kind,
+    input.source,
+    input.refId ?? null,
+    input.dedupeKey ?? null,
+    metadata,
+    createdAt,
+  );
+  if (Number(info.changes) === 0 && input.dedupeKey) {
+    const existing = row<CoachEventRow>("SELECT * FROM coach_events WHERE dedupe_key = ?", input.dedupeKey);
+    if (existing) return existing;
+  }
+  return row<CoachEventRow>("SELECT * FROM coach_events WHERE id = ?", id)!;
+}
+
+export function listCoachEvents(userId: string, limit = 50): CoachEventRow[] {
+  const n = Math.max(1, Math.min(200, Math.round(limit)));
+  return rows<CoachEventRow>(
+    "SELECT * FROM coach_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+    userId,
+    n,
+  );
 }
 
 export function getUser(id: string): UserRow | undefined {

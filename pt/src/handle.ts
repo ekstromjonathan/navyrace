@@ -26,6 +26,7 @@ import { startedOnOf, assignSessionDays } from "./calendar.ts";
 import { consecutiveConflict, coachFallback, loadAgenda, plannedSessionOf } from "./fallback.ts";
 import { composeFromPacket, gatherPacket } from "./compose.ts";
 import { inferReminderTopic } from "./reminder-topic.ts";
+import { detectSafetyRoute } from "./safety.ts";
 import type { Inbound, InviteRow, ReminderRow, UserRow } from "./types.ts";
 
 type ReplyResult = { text: string; effect?: string };
@@ -838,6 +839,28 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
     const work: Inbound = isDidYouHearMe(inbound.body) && previousUser
       ? { ...inbound, body: previousUser.body }
       : inbound;
+
+    const safety = detectSafetyRoute(work.body);
+    if (safety) {
+      await journal.recordCoachEvent({
+        userId: current.id,
+        kind: "safety_routed",
+        source: "system",
+        refId: inbound.messageId,
+        dedupeKey: `safety:${inbound.messageId}`,
+        metadata: { route: safety.kind, signal: safety.signal },
+      });
+      const text =
+        safety.kind === "mental_crisis"
+          ? copy.safetyMentalCrisis(lang)
+          : copy.safetyMedicalUrgent(lang, safety.kind);
+      await reply(inbound.chatId, text, {
+        replyTo: inbound.messageId,
+        userId: current.id,
+      });
+      await maybeCard(current, inbound.chatId);
+      return;
+    }
 
     const pendingOut = asReply(await handlePending(current, lang, work.body));
     if (pendingOut) {

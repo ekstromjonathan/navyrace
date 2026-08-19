@@ -870,11 +870,47 @@ export function reminderPingVideo(lang: Lang, url: string): string {
 }
 
 export function reminderPingRoutine(lang: Lang, title: string): string {
+  const sensitive =
+    /\b(medisin(?:er)?|medication|medicine|tablett(?:er)?|pille(?:r)?|skade|injury|smerte|pain|vekt|weight|kg|diagnos(?:e)?|blodtrykk|blood pressure)\b/iu.test(
+      title,
+    );
+  const safeTitle = sensitive
+    ? pick(lang, "your routine", "rutinen din", "din rutin")
+    : title;
   return pick(
     lang,
-    `Reminder: ${title}.`,
-    `Påminnelse: ${title}.`,
-    `Påminnelse: ${title}.`,
+    `Reminder: ${safeTitle}.`,
+    `Påminnelse: ${safeTitle}.`,
+    `Påminnelse: ${safeTitle}.`,
+  );
+}
+
+export function safetyMedicalUrgent(
+  lang: Lang,
+  kind: "cardiorespiratory" | "serious_injury",
+): string {
+  if (kind === "serious_injury") {
+    return pick(
+      lang,
+      "Stop the session and don't load the injured area. Get urgent medical assessment. If the injury is severe or you are in immediate danger, call local emergency services (113 in Norway).",
+      "Stopp økta og ikke belast det skadde området. Få rask medisinsk vurdering. Er skaden alvorlig eller du er i umiddelbar fare, ring 113.",
+      "Avbryt passet och belasta inte det skadade området. Sök medicinsk bedömning snabbt. Är skadan allvarlig eller du är i omedelbar fara, ring 112.",
+    );
+  }
+  return pick(
+    lang,
+    "Stop the session now. Chest pain, fainting, or breathlessness at rest should not be coached through by message. If this is happening now or feels severe, call local emergency services (113 in Norway). Otherwise, get medical assessment before hard training.",
+    "Stopp økta nå. Brystsmerter, besvimelse eller tungpust i ro skal ikke coaches videre på melding. Skjer dette nå eller er kraftig, ring 113. Ellers: få medisinsk vurdering før hard trening.",
+    "Avbryt passet nu. Bröstsmärta, svimning eller andfåddhet i vila ska inte coachas vidare i meddelanden. Pågår det nu eller känns allvarligt, ring 112. Annars: sök medicinsk bedömning före hård träning.",
+  );
+}
+
+export function safetyMentalCrisis(lang: Lang): string {
+  return pick(
+    lang,
+    "I'm glad you said it. Don't stay alone with this. If you may hurt yourself now, call local emergency services (113 in Norway) or go to emergency care. In Norway you can also call Mental Helse at 116 123.",
+    "Jeg er glad du sa det. Ikke vær alene med dette. Hvis du kan skade deg selv nå, ring 113 eller dra til legevakt. Du kan også ringe Mental Helse på 116 123.",
+    "Jag är glad att du sa det. Var inte ensam med det här. Om du kan skada dig själv nu, ring 112 eller sök akutvård. I Sverige kan du också ringa Självmordslinjen på 90101.",
   );
 }
 

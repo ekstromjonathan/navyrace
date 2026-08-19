@@ -298,6 +298,14 @@ describe("parser", () => {
     assert.equal(parseMessage("Hva har du logget til nå?").kind, "unknown");
   });
 
+  it("keeps sensitive routine details off unsolicited lock-screen copy", async () => {
+    const { reminderPingRoutine } = await import("../src/copy.ts");
+    assert.match(reminderPingRoutine("nb", "meditasjon"), /meditasjon/i);
+    const sensitive = reminderPingRoutine("nb", "medisin for kneskade");
+    assert.match(sensitive, /rutinen din/i);
+    assert.equal(/medisin|kneskade/i.test(sensitive), false);
+  });
+
   it("extracts waitlist names and owner yes/no", async () => {
     const { extractApplicantName, isInviteYes, isInviteNo } = await import("../src/invite.ts");
     assert.equal(extractApplicantName("Hei, jeg heter Inger"), "Inger");

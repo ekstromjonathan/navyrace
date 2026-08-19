@@ -8,6 +8,7 @@ import { pingResearchHold, research as runResearch } from "./research.ts";
 import { agendaForSnapshot, loadAgenda } from "./fallback.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
+import { COACH_CONTRACT } from "./coach-contract.ts";
 import { inferReminderTopic } from "./reminder-topic.ts";
 import type { Lang } from "./locale.ts";
 import type { Plan, PlanSession, TrackKind, UserRow } from "./types.ts";
@@ -291,6 +292,8 @@ function systemPrompt(lang: Lang, opts: { onboarding: boolean; firstContact: boo
 Language: Reply only in ${language}. The user started in this language. Never switch. ${confirm}
 
 You care. Meet the person in the message they actually sent. Explain the plan in plain words when they doubt it. Do not dump today's workout as a non-answer.
+
+${COACH_CONTRACT}
 
 ## Memory (critical)
 - Journal facts/notes/entries are durable truth. Recent chat is evidence of what they already said. agenda.yesterday/today is what happened vs what was planned.

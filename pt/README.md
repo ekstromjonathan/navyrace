@@ -14,7 +14,7 @@ SUPABASE_SECRET_KEY=sb_secret_...   # Settings → API Keys → Secret keys (nev
 
 Supabase renamed keys: new projects show **Secret keys** (`sb_secret_…`) instead of a `service_role` JWT. Same privileges (bypasses RLS). Find them under [Settings → API Keys](https://supabase.com/dashboard/project/_/settings/api-keys) — use the **API Keys** tab (create if needed), or **Legacy API Keys** for the old JWT.
 
-Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0010_pt_reminder_routines.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
+Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0011_pt_coach_quality.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
 
 Without those env vars the process falls back to local SQLite (`PT_DB_PATH`) so unit tests stay offline.
 
@@ -141,6 +141,14 @@ These are the choices from recent PT work (#16–#19). Prefer them unless the pr
 7. **Onboarding** — Casual coach: “your new coach”, help them become a better version of themselves, then that you track whatever they send (workouts, habits, reminders), then one open question. No week-1 funnel, no feature tour. Later turns follow what they answered.
 8. **Calendar days** — Sessions belong to weekdays (`day` 0=Mon…6=Sun). Rest days: recovery tips, never the next session. Bare hei/hallo: short dialogue + one-line hint, not the workout dump. Completed sessions: celebrate (Linq screen effect `confetti`).
 9. **The plan is a starting point** — Locked program + lived training. Two of the same family in a row → explain and offer to swap, then *act* on bytte/rolig. Research: ping *«bra spørsmål, la meg sjekke litt»*, then answer.
+10. **Coach contract + deterministic safety** — `coach-contract.ts` is shared by composer and agent: journal-grounded, autonomy-supportive, one useful next step, no shame or medical certainty. `safety.ts` intercepts only narrow explicit red flags before pending/LLM, sends one emergency-oriented reply, preserves pending context, and records a structured `coach_events` row without copying the raw message.
+
+## Quality and privacy foundation
+
+- `test/coach-quality.test.ts` keeps product-level golden scenarios for lapse recovery, pain, low time, ambivalence, pride, resistance, memory repair, rest days, reminders, and model failure. It checks behavioral invariants rather than exact prose.
+- `pt.coach_events` stores compact outcomes (`kind`, `source`, references, small JSON metadata). Raw message bodies belong only in the rolling `message_log`; never duplicate them into analytics metadata.
+- `/vilkar/` describes the AI/wellness boundary, categories of data used, model/provider processing, emergency limits, and how a user requests access, correction, export, or deletion.
+- The deterministic router is deliberately narrow. Ordinary soreness and non-urgent pain stay in the coaching flow; a model must never diagnose or declare it safe to continue.
 
 ## iMessage rules baked in
 

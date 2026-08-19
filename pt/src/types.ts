@@ -172,6 +172,32 @@ export type ReminderFilter = {
   minute?: number;
 };
 
+export type CoachEventKind =
+  | "action_proposed"
+  | "action_accepted"
+  | "action_deferred"
+  | "action_declined"
+  | "workout_opened"
+  | "workout_completed"
+  | "reminder_snoozed"
+  | "reminder_ignored"
+  | "memory_corrected"
+  | "safety_routed";
+
+export type CoachEventSource = "user" | "coach" | "system" | "integration";
+
+export type CoachEventRow = {
+  id: string;
+  user_id: string;
+  kind: CoachEventKind;
+  source: CoachEventSource;
+  ref_id: string | null;
+  dedupe_key: string | null;
+  /** Structured JSON only; never copy raw message bodies here. */
+  metadata: string;
+  created_at: string;
+};
+
 export type ChatTurn = {
   role: "user" | "pt";
   body: string;
