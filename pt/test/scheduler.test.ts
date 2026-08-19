@@ -129,7 +129,7 @@ describe("scheduler", () => {
       title: "kneskade rehab",
     });
     const body = await reminderBody(privateUser, privateReminder);
-    assert.equal(body, "Påminnelse fra coachen — åpne iMessage.");
+    assert.equal(body, "Påminnelse: rutinen din.");
     assert.equal(/kne|skade|rehab/i.test(body), false);
   });
 });
