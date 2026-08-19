@@ -394,6 +394,28 @@ describe("dialogue replay", () => {
     assert.equal(journal.factsOf(fresh ?? user).equipment, undefined, "safety status is not stored as equipment");
   });
 
+  it("does not log or celebrate a negated workout report", async () => {
+    const user = await journal.upsertUser("chat-dialogue-lapse", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb" });
+    await journal.touchContactCard(user.id);
+    const before = outbound.length;
+    await handleInbound({
+      eventId: "e-dialogue-lapse-1",
+      messageId: "m-dialogue-lapse-1",
+      chatId: "chat-dialogue-lapse",
+      phone: "+4740343295",
+      body: "Jeg trente ikke i går. Føler jeg har rota det til.",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal(outbound.length, before + 1);
+    assert.equal((await journal.recentEntries(user.id, 10)).length, 0);
+    assert.equal(/logget|økt i boks|ferdig/i.test(lastOut()), false);
+    assert.equal(/lat|ingen unnskyldning|skuffet/i.test(lastOut()), false);
+  });
+
   it("discloses AI on the first deterministic coach reply", async () => {
     const before = outbound.length;
     await handleInbound({

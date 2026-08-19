@@ -205,6 +205,11 @@ describe("parser", () => {
     const extra = parseMessage("Trente tennis i tillegg til programmet i dag");
     assert.equal(extra.kind, "session_log");
     if (extra.kind === "session_log") assert.equal(extra.extra, true);
+    assert.equal(parseMessage("Jeg trente ikke i går. Føler jeg har rota det til.").kind, "unknown");
+    assert.equal(parseMessage("Jeg har ikke gjort dagens økt").kind, "unknown");
+    assert.equal(parseMessage("I didn't work out yesterday").kind, "unknown");
+    assert.equal(parseMessage("Jag har inte tränat idag").kind, "unknown");
+    assert.equal(parseMessage("Jeg trente ikke bare løping, men styrke også i dag").kind, "session_log");
     assert.equal(
       parseMessage("Ok, takk. Men jeg trente løping i går? Bør vi løpe i dag også?").kind,
       "unknown",
