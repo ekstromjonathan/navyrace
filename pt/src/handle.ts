@@ -24,6 +24,7 @@ import { isExtraWording, inferModality, modalityLabel } from "./activity.ts";
 import { adaptAfterLog, applyAdaptChoice } from "./adapt.ts";
 import { startedOnOf, assignSessionDays } from "./calendar.ts";
 import { consecutiveConflict, coachFallback, loadAgenda, plannedSessionOf } from "./fallback.ts";
+import { composeFromPacket, gatherPacket } from "./compose.ts";
 import type { Inbound, InviteRow, UserRow } from "./types.ts";
 
 type ReplyResult = { text: string; effect?: string };
@@ -398,7 +399,18 @@ async function handlePending(user: UserRow, lang: Lang, body: string): Promise<s
       await journal.setPending(user.id, null);
       return commitReminderSet(user, lang, timed.hour, timed.minute, timed.scope, pending.url);
     }
-    return copy.videoLinkAsk(lang);
+    /* Not a clock — never trap the dialogue on “når skal jeg minne deg?”. Attach the URL if a ping already exists. */
+    const live = (await journal.listReminders(user.id)).find((r) => r.enabled === 1);
+    if (live) {
+      await journal.upsertReminder(user.id, "train", live.hour, live.minute, {
+        onceOn: live.once_on,
+        url: pending.url,
+      });
+    } else {
+      await journal.addNote({ userId: user.id, trackId: null, kind: "video", body: pending.url.slice(0, 240) });
+    }
+    await journal.setPending(user.id, null);
+    return null;
   }
 
   if (pending.type === "reminder_scope") {
@@ -829,6 +841,18 @@ export async function handleInbound(inbound: Inbound): Promise<void> {
       if (parsed.kind === "rpe" && parsed.quality !== "hoppet") {
         await linq.reactLove(inbound.messageId);
       }
+      await maybeCard(current, inbound.chatId);
+      return;
+    }
+
+    /* Receive: journal is already loaded. Compose the reply from that packet — no tool-calling. */
+    const packet = await gatherPacket(current, work.body);
+    const composed = await withTyping(inbound.chatId, () =>
+      composeFromPacket(lang, packet, { onboarding }),
+    );
+    if (composed) {
+      await maybePendingAdapt(current, composed);
+      await reply(inbound.chatId, composed, { replyTo: inbound.messageId, userId: current.id });
       await maybeCard(current, inbound.chatId);
       return;
     }

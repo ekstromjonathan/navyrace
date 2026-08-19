@@ -186,4 +186,20 @@ describe("dialogue replay", () => {
     assert.match(lastOut(), /letter|allerede letter|bytter/i);
     assert.equal(isConsecutiveLoop(lastOut()), false);
   });
+
+  it("does not trap later messages on a stale video-time pending", async () => {
+    const user = await journal.upsertUser("chat-dialogue-jon", "+4740343295");
+    await journal.upsertReminder(user.id, "train", 22, 0, { onceOn: null });
+    await journal.setPending(user.id, {
+      type: "video_reminder_time",
+      url: "https://youtu.be/stuck999",
+      askedAt: new Date().toISOString(),
+    });
+    await handleInbound(inbound("Våken?", 50));
+    assert.equal(/når skal jeg minne/i.test(lastOut()), false);
+    assert.match(lastOut(), /jeg er her/i);
+    assert.equal(await journal.pendingOf(user), null);
+    const rem = (await journal.listReminders(user.id)).find((r) => r.enabled === 1);
+    assert.match(String(rem?.url ?? ""), /stuck999/);
+  });
 });

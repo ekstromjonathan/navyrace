@@ -127,7 +127,7 @@ function wantsProgram(body: string): boolean {
 }
 
 function wantsLog(body: string): boolean {
-  return /\b(hva (har du )?(logget|lagret)|hva husker du|informasjon om meg)\b/i.test(body);
+  return /\b(hva (har du )?(logget|lagret)|hva (husker|vet|ver) du|informasjon om meg|om meg)\b/i.test(body);
 }
 
 function wantsReminders(body: string): boolean {
