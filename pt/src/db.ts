@@ -118,8 +118,9 @@ export function localParts(tz = env.tz, at: Date | string = new Date()): { date:
   };
 }
 
-export function todayInTz(tz = env.tz, at: Date | string = new Date()): string {
-  return localParts(tz, at).date;
+export function todayInTz(tz = env.tz, at?: Date | string): string {
+  if (at == null && process.env.PT_TODAY) return process.env.PT_TODAY;
+  return localParts(tz, at ?? new Date()).date;
 }
 
 /** Stable ISO timestamp for a local calendar day (noon UTC — safe for Europe/Oslo date bucketing). */

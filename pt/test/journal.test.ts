@@ -290,6 +290,51 @@ describe("journal", () => {
     assert.equal(journal.planOf(patched)?.sessions.find((s) => s.id === "w1b")?.title, "Roligere intervall");
   });
 
+  it("pendingOf reads the database after setPending on a stale user object", async () => {
+    const u = await journal.upsertUser("chat-pending-stale", "+4740343298");
+    assert.equal(u.pending, null);
+    await journal.setPending(u.id, { type: "adapt_choice", askedAt: new Date().toISOString() });
+    assert.equal((await journal.pendingOf(u))?.type, "adapt_choice");
+  });
+
+  it("treats a training log on that calendar day as filling the slot even with a wrong session_ref", async () => {
+    const { dayAnchorIso, addLocalDays } = await import("../src/db.ts");
+    const { weekdayMon0 } = await import("../src/calendar.ts");
+    const u = await journal.upsertUser("chat-wrong-ref", "+4740343297");
+    const draft = await journal.createTrack({
+      userId: u.id,
+      kind: "training",
+      slug: "program",
+      name: "Uke",
+      status: "draft",
+      plan: {
+        daysPerWeek: 4,
+        weeks: 2,
+        startedOn: "2026-08-10",
+        sessions: [
+          { id: "w2d1", week: 2, title: "Styrke for hele kroppen" },
+          { id: "w2d2", week: 2, title: "Løping med fartslek" },
+          { id: "w2d3", week: 2, title: "Klatring og grep" },
+          { id: "w2d4", week: 2, title: "Kajakk" },
+        ],
+      },
+    });
+    const active = await journal.activateTrack(draft.id);
+    const plan = journal.planOf(active)!;
+    const mon = addLocalDays(plan.startedOn!, -weekdayMon0(plan.startedOn!));
+    const week2mon = addLocalDays(mon, 7);
+    await journal.logEntry({
+      trackId: active.id,
+      userId: u.id,
+      sessionRef: "w1d2",
+      note: "Løp 7k",
+      source: "heuristic",
+      occurredAt: dayAnchorIso(week2mon),
+    });
+    const view = await journal.todayView(u, week2mon);
+    assert.equal(view.kind, "logged");
+  });
+
   it("stores waitlist invites until approved", async () => {
     const invite = await journal.upsertPendingInvite({
       phone: "+4711223344",

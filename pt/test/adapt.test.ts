@@ -10,7 +10,7 @@ import {
   sameFamily,
   stacksHard,
 } from "../src/activity.ts";
-import { adaptAfterLog } from "../src/adapt.ts";
+import { adaptAfterLog, applyAdaptChoice } from "../src/adapt.ts";
 import { assignSessionDays } from "../src/calendar.ts";
 import type { Plan } from "../src/types.ts";
 
@@ -95,5 +95,19 @@ describe("adaptAfterLog", () => {
       actualModality: "racket",
     });
     assert.equal(result.changed, true);
+  });
+
+  it("eases today when they ask for a quiet day", () => {
+    const plan = week2();
+    const today = plan.sessions.find((s) => s.id === "w2d2")!;
+    const result = applyAdaptChoice(plan, "ease", {
+      startedOn: "2026-08-15",
+      yesterdayYmd: "2026-08-17",
+      yesterdayPlanned: plan.sessions.find((s) => s.id === "w2d1") ?? null,
+      yesterdayModality: "run",
+      todaySession: today,
+    });
+    assert.equal(result.changed, true);
+    assert.match(result.plan.sessions.find((s) => s.id === "w2d2")?.title ?? "", /roligere/i);
   });
 });

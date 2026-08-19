@@ -77,6 +77,7 @@ app.get("/health", async (c) =>
     coach: env.coachName,
     provider: env.provider,
     model: env.model,
+    chatModel: env.chatModel,
     smartModel: env.smartModel || null,
     journal: backend || journalBackend(),
     reminders: (await journal.listEnabledReminders()).length,

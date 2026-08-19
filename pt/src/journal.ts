@@ -33,8 +33,9 @@ export function factsOf(user: UserRow): UserFacts {
   return api().factsOf(user);
 }
 
-export function pendingOf(user: UserRow): Pending | null {
-  return api().pendingOf(user);
+export async function pendingOf(user: UserRow): Promise<Pending | null> {
+  const fresh = await asAsync(api().getUser(user.id));
+  return api().pendingOf(fresh ?? user);
 }
 
 export function planOf(track: TrackRow): Plan | null {

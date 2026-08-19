@@ -798,6 +798,9 @@ export async function todayView(user: UserRow, at?: string): Promise<DayView> {
   const startedOn = startedOnOf(training, plan, user.tz);
   const done = await doneSessionRefs(training.id);
   const view = buildDayView(plan, done, today, startedOn);
+  if (view.kind === "session" && (done.has(`extra:${today}`) || (await trainedOnDay(user.id, today, user.tz)))) {
+    return { kind: "logged", weekday: view.weekday, week: view.week, session: view.session };
+  }
   if (view.kind === "session" && view.session.loadKey) {
     const prev = await lastRpeForLoadKey(user.id, view.session.loadKey);
     const adapted = applyLoadAdapt(view.session, prev);

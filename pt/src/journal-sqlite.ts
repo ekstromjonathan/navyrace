@@ -100,7 +100,8 @@ export function factsOf(user: UserRow): UserFacts {
 }
 
 export function pendingOf(user: UserRow): Pending | null {
-  return parseJson<Pending | null>(user.pending, null);
+  const fresh = row<{ pending: string | null }>("SELECT pending FROM users WHERE id = ?", user.id);
+  return parseJson<Pending | null>(fresh?.pending ?? user.pending, null);
 }
 
 export function setPending(userId: string, pending: Pending | null): void {
@@ -612,9 +613,12 @@ export function todayView(user: UserRow, at?: string): DayView {
   if (!plan?.sessions?.length) return { kind: "none" };
   const today = at ?? todayInTz(user.tz);
   const startedOn = startedOnOf(training, plan, user.tz);
-  return buildDayView(plan, doneSessionRefs(training.id), today, startedOn, (loadKey) =>
-    lastRpeForLoadKey(user.id, loadKey),
-  );
+  const done = doneSessionRefs(training.id);
+  const view = buildDayView(plan, done, today, startedOn, (loadKey) => lastRpeForLoadKey(user.id, loadKey));
+  if (view.kind === "session" && (done.has(`extra:${today}`) || trainedOnDay(user.id, today, user.tz))) {
+    return { kind: "logged", weekday: view.weekday, week: view.week, session: view.session };
+  }
+  return view;
 }
 
 export function snapshot(user: UserRow) {

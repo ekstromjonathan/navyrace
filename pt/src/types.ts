@@ -51,6 +51,11 @@ export type Pending =
       askedAt: string;
     }
   | {
+      /** Offered swap vs easy today after stacked days — waiting for bytte / rolig. */
+      type: "adapt_choice";
+      askedAt: string;
+    }
+  | {
       /** Owner: admit or deny a waitlisted sender. */
       type: "invite_approve";
       inviteId: string;

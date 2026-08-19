@@ -22,9 +22,9 @@ User rows store `chat_id` + `phone_e164`. Tracks, entries, notes, `message_log`,
 
 ## Model
 
-OpenRouter. Floor: `PT_MODEL` (e.g. `x-ai/grok-4.3`). Programmer hat: `PT_MODEL_SMART` (`x-ai/grok-4.6`) writes draft plans only.
+OpenRouter **Chat Completions** (`/v1/chat/completions`) with tools. Grok is not an Anthropic model — we do not call `/v1/messages`. Conversation uses `PT_MODEL_SMART` (`x-ai/grok-4.6`) when set, otherwise `PT_MODEL` (`x-ai/grok-4.3`). Programmer hat uses the smart model for draft plans.
 
-Obvious logs skip the model. Drafts go live after a normal yes/ok/kjør (soft confirm).
+Obvious logs (water, plunge, session done, reminders with a clock) skip the model. Questions, greetings, and open chat go to Grok. Drafts go live after a normal yes/ok/kjør (soft confirm).
 
 ## Memory
 
@@ -110,12 +110,12 @@ These are the choices from recent PT work (#16–#19). Prefer them unless the pr
 1. **Confirmation ladder** — Destructive → strict phrase. Lock/activate → soft `ja`/`ok`/`kjør`. Set reminder / log / similar → immediate action + short confirm. Never invent an ask-gate for non-destructive flows. Exception: if a session log has no clear day (`i dag` / `i går` / `nå`), ask once which day — then log.
 2. **Pending is sticky for soft confirms** — Clarifying questions (“more details?”) must not clear `activate_confirm`. Soft cancel only on clear nei/avbryt. `log_day` / `rpe_followup` are sticky until answered or clearly cancelled.
 3. **Infer from wording** — e.g. `i kveld`/`i dag` → one-shot reminder; `hver dag` or bare `minn meg kl 8` → daily. Prefer inference over a second turn.
-4. **Journal over chat dump** — Persist facts/notes/entries; use `message_log` + `recall_chat` for short follow-ups. LLM coach may fail: answer the question from the journal (week shape, yesterday vs today) — never dump today’s workout as a fake reply. Free-form sessions (“gjorde økt”, tennis, padling, “løp 7k”) must `log_entry` even when they diverge from the plan. Different activity **instead of** today’s slot fills `session_ref` with the plan id and `adapt_plan` updates the next days; `extra:YYYY-MM-DD` only when they said *i tillegg* or it was a rest day.
+4. **Journal over chat dump** — Persist facts/notes/entries; use `message_log` + `recall_chat` for short follow-ups. LLM coach may fail: answer the question from the journal (week shape, yesterday vs today) — never dump today’s workout as a fake reply, and never repeat the same offer. If they already answered (`bytte` / `rolig dag` / «svarte nettopp»), do that. If the model is down: one honest line *and* a useful answer. Free-form sessions (“gjorde økt”, tennis, padling, “løp 7k”) must `log_entry` even when they diverge from the plan. Different activity **instead of** today’s slot fills `session_ref` with the plan id and `adapt_plan` updates the next days; `extra:YYYY-MM-DD` only when they said *i tillegg* or it was a rest day.
 5. **Delivery debugging** — Check `/health`, `pt.webhook_events`, `pt.message_log` before assuming Linq is broken. `agentError` copy means the model path failed after inbound was accepted.
 6. **Tone** — Short iMessage replies, one next action, assume training will happen; no mid-chat re-intros or re-asks for fields already in facts. Meet the user. Explain the greia. The coach cares.
 7. **Onboarding** — Casual coach: “your new coach”, help them become a better version of themselves, then that you track whatever they send (workouts, habits, reminders), then one open question. No week-1 funnel, no feature tour. Later turns follow what they answered.
 8. **Calendar days** — Sessions belong to weekdays (`day` 0=Mon…6=Sun). Rest days: recovery tips, never the next session. Bare hei/hallo: short dialogue + one-line hint, not the workout dump. Completed sessions: celebrate (Linq screen effect `confetti`).
-9. **The plan is a starting point** — Locked program + lived training. Two of the same family in a row → explain and offer to swap. Research: ping *«bra spørsmål, la meg sjekke litt»*, then answer.
+9. **The plan is a starting point** — Locked program + lived training. Two of the same family in a row → explain and offer to swap, then *act* on bytte/rolig. Research: ping *«bra spørsmål, la meg sjekke litt»*, then answer.
 
 ## iMessage rules baked in
 

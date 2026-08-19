@@ -627,7 +627,7 @@ export function fallbackReminders(
   }
   const lines = reminders.map((r) => {
     const clock = hhmm(r.hour, r.minute);
-    return r.url ? `${clock} + link` : clock;
+    return r.url ? `${clock} — ${r.url}` : clock;
   });
   return pick(
     lang,
@@ -691,20 +691,13 @@ export function fallbackMeet(
     weekSessions: { weekday: number; title: string }[];
     today: { view: { kind: string } };
   },
-  conflict: { yesterdayMod: string; todaySession: { title: string } } | null,
+  _conflict?: { yesterdayMod: string; todaySession: { title: string } } | null,
 ): string {
-  if (conflict) {
-    return fallbackConsecutive(lang, {
-      agenda,
-      yesterdayMod: conflict.yesterdayMod,
-      todayTitle: conflict.todaySession.title,
-    });
-  }
   if (agenda.today.view.kind === "rest") {
     return restDayTips(lang, Number((agenda.today.view as { weekday?: number }).weekday ?? 0));
   }
   const title =
-    agenda.weekSessions.find(() => true) && agenda.today.view.kind === "session"
+    agenda.today.view.kind === "session"
       ? String((agenda.today.view as { session?: { title?: string } }).session?.title ?? "")
       : "";
   const n = agenda.daysPerWeek || agenda.weekSessions.length;
@@ -717,6 +710,64 @@ export function fallbackMeet(
     );
   }
   return fallbackWeek(lang, agenda);
+}
+
+export function isAdaptOffer(text: string): boolean {
+  return /vi kan bytte i dag|we can swap today|hva føles rett\?|what feels right\?/i.test(text);
+}
+
+export function modelDownLead(lang: Lang): string {
+  return pick(
+    lang,
+    "The model didn't answer just now — I'm going from your journal:",
+    "Modellen svarte ikke akkurat nå — jeg tar det fra det jeg har på deg:",
+    "Modellen svarade inte just nu — jag tar det från det jag har på dig:",
+  );
+}
+
+export function adaptedSwap(lang: Lang, title: string): string {
+  return pick(
+    lang,
+    `Got it — swapping today to “${title}” so you don't stack the same work. Say when you're ready.`,
+    `Skjønner — bytter i dag til «${title}» så du ikke dobler det samme. Si ifra når du er klar.`,
+    `Uppfattat — byter idag till «${title}» så du inte dubblar samma sak. Säg till när du är redo.`,
+  );
+}
+
+export function adaptedEase(lang: Lang, title: string): string {
+  return pick(
+    lang,
+    `Got it — making today easier. “${title}” when you want it. The rest of the week stays.`,
+    `Skjønner — letter i dag. «${title}» når du vil. Resten av uka står.`,
+    `Uppfattat — lättar idag. «${title}» när du vill. Resten av veckan står.`,
+  );
+}
+
+export function adaptedAlreadyEase(lang: Lang, title: string): string {
+  return pick(
+    lang,
+    `Today is already the easy version (“${title}”). The rest of the week stays.`,
+    `I dag er allerede letter («${title}»). Resten av uka står.`,
+    `Idag är redan lättat («${title}»). Resten av veckan står.`,
+  );
+}
+
+export function fallbackAlive(lang: Lang): string {
+  return pick(
+    lang,
+    "Yes — I'm here. Ask about the week, or say swap / easy day.",
+    "Ja. Jeg er her. Spør om uka, eller si bytte / rolig dag.",
+    "Ja. Jag är här. Fråga om veckan, eller säg byt / lugn dag.",
+  );
+}
+
+export function adaptedKeep(lang: Lang, title: string): string {
+  return pick(
+    lang,
+    `Ok — we keep “${title}”. Take it easy in the legs after yesterday.`,
+    `Ok — vi kjører «${title}». Ta det rolig i beina etter i går.`,
+    `Ok — vi kör «${title}». Ta det lugnt i benen efter igår.`,
+  );
 }
 
 export function adaptNote(lang: Lang, prev: string): string {
