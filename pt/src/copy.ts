@@ -869,12 +869,12 @@ export function agentError(lang: Lang, err: unknown): string {
       "Jag hörde dig, men modellnamnet är ogiltigt hos OpenRouter. Byt PT_MODEL i pt/.env.",
     );
   }
-  if (/401|unauthorized|invalid.?api.?key|authentication_error|no cookie auth/i.test(msg)) {
+  if (/401|unauthorized|invalid.?api.?key|authentication_error|no cookie auth|expir/i.test(msg)) {
     return pick(
       lang,
-      "I heard you, but the LLM key was rejected. Check OPENROUTER_API_KEY on the host.",
-      "Jeg hørte deg, men LLM-nøkkelen ble avvist. Sjekk OPENROUTER_API_KEY på hosten.",
-      "Jag hörde dig, men LLM-nyckeln avvisades. Kolla OPENROUTER_API_KEY på hosten.",
+      "I heard you, but the LLM key was rejected or expired. Check OPENROUTER_API_KEY on the host.",
+      "Jeg hørte deg, men LLM-nøkkelen ble avvist eller er utløpt. Sjekk OPENROUTER_API_KEY på hosten.",
+      "Jag hörde dig, men LLM-nyckeln avvisades eller har gått ut. Kolla OPENROUTER_API_KEY på hosten.",
     );
   }
   if (/402|credit balance|too low|purchase credits|insufficient.?credits/i.test(msg)) {

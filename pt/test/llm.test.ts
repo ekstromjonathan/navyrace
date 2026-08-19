@@ -5,7 +5,7 @@ process.env.ANTHROPIC_API_KEY = "";
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { chatModels, completeChat, hasLlm, isModelFallbackError, llmHealth } from "../src/llm.ts";
+import { chatModels, completeChat, hasLlm, isModelFallbackError, llmHealth, probeOpenRouterKey } from "../src/llm.ts";
 import { env } from "../src/env.ts";
 
 describe("openrouter chat completions", { concurrency: 1 }, () => {
@@ -178,6 +178,54 @@ describe("openrouter chat completions", { concurrency: 1 }, () => {
       assert.equal(isModelFallbackError(new Error("openrouter 401: User not found.")), true);
       assert.equal(isModelFallbackError(new Error("timeout")), false);
       assert.equal(isModelFallbackError(new Error("This operation was aborted")), false);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  it("probes OpenRouter key expiry without leaking the secret", async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      assert.match(url, /openrouter\.ai\/api\/v1\/key/);
+      return new Response(
+        JSON.stringify({
+          data: {
+            expires_at: "2026-08-16T00:00:00Z",
+            limit_remaining: 12.5,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+    try {
+      const key = await probeOpenRouterKey({ force: true });
+      assert.equal(key?.status, 200);
+      assert.equal(key?.expired, true);
+      assert.equal(key?.ok, false);
+      assert.equal(key?.expiresAt, "2026-08-16T00:00:00Z");
+      assert.equal(key?.limitRemaining, 12.5);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  it("treats a live OpenRouter key as ok", async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            expires_at: "2027-12-31T23:59:59Z",
+            limit_remaining: 40,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as typeof fetch;
+    try {
+      const key = await probeOpenRouterKey({ force: true });
+      assert.equal(key?.ok, true);
+      assert.equal(key?.expired, false);
     } finally {
       globalThis.fetch = orig;
     }

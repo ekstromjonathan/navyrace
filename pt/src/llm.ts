@@ -42,6 +42,79 @@ export function llmHealth(): { ok: boolean; lastError: LlmLastError | null } {
   return { ok: lastLlmError == null, lastError: lastLlmError };
 }
 
+export type LlmKeyStatus = {
+  ok: boolean;
+  status: number | null;
+  expiresAt: string | null;
+  expired: boolean;
+  limitRemaining: number | null;
+  checkedAt: string;
+};
+
+let keyCache: { at: number; value: LlmKeyStatus } | null = null;
+const KEY_PROBE_TTL_MS = 60_000;
+
+/** Cheap GET /api/v1/key — cached so Railway healthchecks do not hammer OpenRouter. */
+export async function probeOpenRouterKey(opts?: { force?: boolean }): Promise<LlmKeyStatus | null> {
+  if (!env.openrouterKey) return null;
+  if (!opts?.force && keyCache && Date.now() - keyCache.at < KEY_PROBE_TTL_MS) return keyCache.value;
+  const checkedAt = new Date().toISOString();
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/key", {
+      headers: { Authorization: `Bearer ${env.openrouterKey}` },
+      signal: AbortSignal.timeout(4_000),
+    });
+    let expiresAt: string | null = null;
+    let limitRemaining: number | null = null;
+    try {
+      const json = JSON.parse(await res.text()) as {
+        data?: { expires_at?: string | null; limit_remaining?: number | null };
+      };
+      expiresAt = json.data?.expires_at ?? null;
+      const remaining = json.data?.limit_remaining;
+      limitRemaining = typeof remaining === "number" ? remaining : null;
+    } catch {
+      /* body is not JSON */
+    }
+    const expired = Boolean(expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) < Date.now());
+    const value: LlmKeyStatus = {
+      ok: res.ok && !expired,
+      status: res.status,
+      expiresAt,
+      expired,
+      limitRemaining,
+      checkedAt,
+    };
+    keyCache = { at: Date.now(), value };
+    return value;
+  } catch {
+    const value: LlmKeyStatus = {
+      ok: false,
+      status: null,
+      expiresAt: null,
+      expired: false,
+      limitRemaining: null,
+      checkedAt,
+    };
+    keyCache = { at: Date.now(), value };
+    return value;
+  }
+}
+
+export async function llmStatus(): Promise<{
+  ok: boolean;
+  lastError: LlmLastError | null;
+  key: LlmKeyStatus | null;
+}> {
+  const last = llmHealth();
+  const key = await probeOpenRouterKey();
+  return {
+    ok: last.ok && (key == null || key.ok),
+    lastError: last.lastError,
+    key,
+  };
+}
+
 function noteLlmOk(): void {
   lastLlmError = null;
 }
