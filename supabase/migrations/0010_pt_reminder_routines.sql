@@ -19,7 +19,7 @@ alter table pt.reminders alter column title set not null;
 alter table pt.reminders drop constraint if exists reminders_user_id_kind_key;
 
 create unique index if not exists pt_reminders_identity
-  on pt.reminders (user_id, slug, hour, minute, (coalesce(once_on::text, '')));
+  on pt.reminders (user_id, slug, hour, minute, (coalesce(once_on, '-infinity'::date)));
 
 comment on column pt.reminders.slug is
   'Routine identity (train, video, meditasjon, …). Several clocks per slug are allowed.';

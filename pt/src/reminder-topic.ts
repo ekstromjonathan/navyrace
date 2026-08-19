@@ -1,25 +1,90 @@
 export type ReminderTopic = { slug: string; title: string };
 
-const BOILERPLATE =
-  /\b(kan du|could you|please|minn meg|minne meg|påminn meg|påminn mig|påminn mej|påminnelse|påminnelser|remind me|reminder|reminders?|slutt å minne|ikke minn meg|avbryt|skru av|stop reminding|don't remind|sluta påminna|kl\.?|klokken|klockan|at|hver dag|daglig|every day|daily|i kveld|i kväll|ikväll|i dag|idag|tonight|today|this evening|bare i dag|bare i kveld|om å|to|på å|på|om|se|watch|denne|this|lenken|linken|link|videoen|video|ny|kveldsrutine)\b/gi;
+/** JS \\b is ASCII-only; å/ø/æ in «på» / «økt» would not match. */
+const EDGE = String.raw`(?<![\p{L}\p{N}])`;
+const EDGE_END = String.raw`(?![\p{L}\p{N}])`;
+
+const BOILERPLATE = [
+  "kan du",
+  "could you",
+  "please",
+  "minn meg",
+  "minne meg",
+  "påminn meg",
+  "påminn mig",
+  "påminn mej",
+  "påminnelse",
+  "påminnelser",
+  "remind me",
+  "reminders?",
+  "reminder",
+  "slutt å minne",
+  "ikke minn meg",
+  "avbryt",
+  "skru av",
+  "stop reminding",
+  "don't remind",
+  "sluta påminna",
+  String.raw`kl\.?`,
+  "klokken",
+  "klockan",
+  "at",
+  "hver dag",
+  "hver kveld",
+  "daglig",
+  "every day",
+  "daily",
+  "every evening",
+  "i kveld",
+  "i kväll",
+  "ikväll",
+  "i dag",
+  "idag",
+  "tonight",
+  "today",
+  "this evening",
+  "bare i dag",
+  "bare i kveld",
+  "om å",
+  "to",
+  "på å",
+  "på",
+  "om",
+  "se",
+  "watch",
+  "denne",
+  "this",
+  "lenken",
+  "linken",
+  "link",
+  "videoen",
+  "video",
+  "ny",
+  "kveldsrutine",
+].join("|");
+
+function hasTerm(text: string, pattern: string): boolean {
+  return new RegExp(`${EDGE}(?:${pattern})${EDGE_END}`, "iu").test(text);
+}
 
 export function inferReminderTopic(text: string, url: string | null): ReminderTopic {
   if (url) return { slug: "video", title: "video" };
   const t = text.toLowerCase();
-  if (/\b(meditasjon|mediter|meditation)\b/i.test(t)) return { slug: "meditasjon", title: "meditasjon" };
-  if (/\b(vann|water glasses?|glass vann)\b/i.test(t)) return { slug: "vann", title: "vann" };
-  if (/\b(kaldt\s*bad|isbad|cold\s*plunge)\b/i.test(t)) return { slug: "kaldt-bad", title: "kaldt bad" };
-  if (/\b(video|youtube|youtu\.be)\b/i.test(t)) return { slug: "video", title: "video" };
-  if (/\b(trene|trening|økt|okt|workout|train(ing)?)\b/i.test(t)) return { slug: "train", title: "trening" };
+  if (hasTerm(t, "meditasjon|mediter|meditation")) return { slug: "meditasjon", title: "meditasjon" };
+  if (hasTerm(t, String.raw`vann|water glasses?|glass vann`)) return { slug: "vann", title: "vann" };
+  if (hasTerm(t, String.raw`kaldt\s*bad|isbad|cold\s*plunge`)) return { slug: "kaldt-bad", title: "kaldt bad" };
+  if (hasTerm(t, String.raw`videoen|video|youtube|youtu\.be`)) return { slug: "video", title: "video" };
+  if (hasTerm(t, String.raw`trene|trening|økt|okt|workout|train(?:ing)?`)) return { slug: "train", title: "trening" };
 
   const leftover = t
     .replace(/https?:\/\/\S+/gi, " ")
-    .replace(BOILERPLATE, " ")
-    .replace(/\b\d{1,2}(?:[:.]\d{2})?\b/g, " ")
-    .replace(/[^a-zæøå0-9\s-]/gi, " ")
+    .replace(new RegExp(`${EDGE}(?:${BOILERPLATE})${EDGE_END}`, "giu"), " ")
+    .replace(/\d{1,2}(?:[:.]\d{2})?/g, " ")
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const generic = /^(ny|new|den|det|dette|this|en|et|a|an|rutine|routine)$/i;
+  const generic =
+    /^(ny|new|den|det|dette|this|en|et|a|an|på|om|å|og|to|the|for|meg|rutine|routine)$/iu;
   if (leftover.length >= 2 && leftover.length <= 48 && !generic.test(leftover)) {
     const slug = leftover.replace(/\s+/g, "-").slice(0, 40);
     return { slug, title: leftover.slice(0, 48) };

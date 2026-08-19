@@ -5,6 +5,7 @@ import * as copy from "./copy.ts";
 import * as linq from "./linq.ts";
 import { isLang } from "./locale.ts";
 import { skipIfTrained } from "./reminder-topic.ts";
+import type { ReminderRow, UserRow } from "./types.ts";
 
 const CATCHUP_MINUTES = 180;
 const TICK_MS = 30_000;

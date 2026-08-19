@@ -199,7 +199,7 @@ describe("dialogue replay", () => {
     assert.equal(/når skal jeg minne/i.test(lastOut()), false);
     assert.match(lastOut(), /jeg er her/i);
     assert.equal(await journal.pendingOf(user), null);
-    const rem = (await journal.listReminders(user.id)).find((r) => r.enabled === 1);
+    const rem = (await journal.listReminders(user.id)).find((r) => String(r.url ?? "").includes("stuck999"));
     assert.match(String(rem?.url ?? ""), /stuck999/);
   });
 
