@@ -29,7 +29,7 @@ export type CoachAgenda = {
     actual: ActualLog | null;
   };
   weekSessions: { weekday: number; title: string }[];
-  reminders: { hour: number; minute: number; url: string | null }[];
+  reminders: { hour: number; minute: number; url: string | null; title?: string; onceOn?: string | null }[];
   entries: Record<string, unknown>[];
   facts: ReturnType<typeof journal.factsOf>;
   plan: Plan | null;
@@ -76,7 +76,7 @@ export async function loadAgenda(user: UserRow): Promise<CoachAgenda> {
   const entries = await journal.recentEntries(user.id, 12);
   const reminders = (await journal.listReminders(user.id))
     .filter((r) => r.enabled === 1)
-    .map((r) => ({ hour: r.hour, minute: r.minute, url: r.url }));
+    .map((r) => ({ hour: r.hour, minute: r.minute, url: r.url, title: r.title, onceOn: r.once_on }));
   const todayView = await journal.todayView(user, today);
   const yView = await journal.todayView(user, yesterday);
   const week = todayView.kind === "none" ? 1 : todayView.week;

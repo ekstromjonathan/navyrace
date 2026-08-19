@@ -14,7 +14,7 @@ SUPABASE_SECRET_KEY=sb_secret_...   # Settings → API Keys → Secret keys (nev
 
 Supabase renamed keys: new projects show **Secret keys** (`sb_secret_…`) instead of a `service_role` JWT. Same privileges (bypasses RLS). Find them under [Settings → API Keys](https://supabase.com/dashboard/project/_/settings/api-keys) — use the **API Keys** tab (create if needed), or **Legacy API Keys** for the old JWT.
 
-Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0009_pt_invites.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
+Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0010_pt_reminder_routines.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
 
 Without those env vars the process falls back to local SQLite (`PT_DB_PATH`) so unit tests stay offline.
 
@@ -71,13 +71,13 @@ Name is inferred from the first message (`jeg heter Inger`, landing `Hei, jeg he
 
 ## Reminders
 
-If you ask the PT to remind you (e.g. «minn meg på å trene kl 8» or «kl 19 i kveld»), it sets the ping immediately and confirms briefly — no extra confirmation gate. The process sends one iMessage at that local time (`Europe/Oslo`).
+If you ask the PT to remind you (e.g. «minn meg på å trene kl 8» or «kl 19 i kveld»), it sets the ping immediately and confirms briefly — no extra confirmation gate. **Several reminders can be on at once** (morning training, evening video, meditation, one-shot tonight). Identity is routine (`slug`) + clock + daily/once.
 
-- Daily (default, or «hver dag»): skips the day if you already logged a training entry, or if you opted out.
+- Daily (default, «hver dag» / «hver kveld»): training pings skip the day if you already logged a session. Other routines still fire.
 - One-shot (`once_on`, from «i kveld» / «i dag» / «bare i dag»): fires on that local calendar day only, then turns itself off.
-- Video/link (optional `url` on reminder): include a YouTube or other URL — ping sends the link; fires even if you already trained that day.
+- Video/link: include a URL — ping sends the link; fires even if you already trained. A bare link attaches to the only live reminder, or to an existing video reminder; otherwise it asks for a time.
 - Catch-up window is 3 hours (process down at 08:00 can still ping at 10:00, not at 22:00).
-- «slutt å minne meg» turns it off.
+- «slutt å minne meg» turns all off. «slutt å minne meg på videoen» / «ikke minn meg kl 8» turns off that one.
 - Only fires while `npm start` is running.
 
 ## Hosting
@@ -121,9 +121,8 @@ Text `+14044465379` from the allowlisted number.
 | Activate a draft program | Soft confirm: `ja` / `ok` / `kjør` / `run it` (also works as a direct command when a draft exists) |
 | Archive the active program | Exact: `arkiver og lag nytt` / `archive and start new` |
 | Archive one log | `slett siste` / `fjern loggen` / `delete the last log` (no extra confirm) |
-| Daily training reminder | `minn meg på å trene kl 8` / `remind me to train at 8` (or «hver dag») |
-| One-shot reminder | `…kl 19 i kveld` / `bare i dag` / `tonight` — set immediately |
-| Cancel reminder | `slutt å minne meg` / `stop reminding me` |
+| Daily / one-shot reminder | `minn meg på å trene kl 8` / `minn meg på meditasjon hver dag kl 7` / `…kl 19 i kveld` |
+| Cancel reminder | `slutt å minne meg` (all) / `slutt å minne meg på videoen` / `ikke minn meg kl 8` |
 | Video reminder | Send a link + `minn meg kl 19 om å se videoen` — or just the link, then reply with a time |
 | Admit a waitlisted sender | Owner replies `ja` (or `nei`) to the invite ask |
 

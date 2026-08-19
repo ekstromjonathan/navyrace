@@ -4,6 +4,7 @@ import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
 import * as linq from "./linq.ts";
 import { isLang } from "./locale.ts";
+import { skipIfTrained } from "./reminder-topic.ts";
 import type { ReminderRow, UserRow } from "./types.ts";
 
 const CATCHUP_MINUTES = 180;
@@ -13,6 +14,7 @@ export async function reminderBody(user: UserRow, reminder: ReminderRow): Promis
   const raw = journal.factsOf(user).uiLang;
   const lang = isLang(raw) ? raw : isLang(user.locale) ? user.locale : "nb";
   if (reminder.url) return copy.reminderPingVideo(lang, reminder.url);
+  if (reminder.slug !== "train") return copy.reminderPingRoutine(lang, reminder.title || reminder.slug);
   const training = await journal.activeTraining(user.id);
   if (!training) return copy.reminderPingNoPlan(lang);
   const view = await journal.todayView(user);
@@ -35,7 +37,7 @@ export async function isReminderDue(reminder: ReminderRow, user: UserRow, now: D
   const current = local.hour * 60 + local.minute;
   if (current < scheduled) return false;
   if (current - scheduled > CATCHUP_MINUTES) return false;
-  if (!reminder.url && (await journal.trainedOnDay(user.id, local.date, user.tz))) return false;
+  if (skipIfTrained(reminder.slug, reminder.url) && (await journal.trainedOnDay(user.id, local.date, user.tz))) return false;
   return true;
 }
 

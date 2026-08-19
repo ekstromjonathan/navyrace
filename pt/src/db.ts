@@ -48,6 +48,7 @@ export function getDb(): DatabaseSync {
   ensureEntryArchiveColumns(sqlite);
   ensureReminderOnceColumn(sqlite);
   ensureReminderUrlColumn(sqlite);
+  ensureReminderRoutineColumns(sqlite);
   return sqlite;
 }
 
@@ -77,6 +78,13 @@ function ensureReminderUrlColumn(database: DatabaseSync) {
   if (!cols.some((c) => c.name === "url")) {
     database.exec("ALTER TABLE reminders ADD COLUMN url TEXT");
   }
+}
+
+function ensureReminderRoutineColumns(database: DatabaseSync) {
+  const cols = database.prepare("PRAGMA table_info(reminders)").all() as { name: string }[];
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has("slug")) database.exec("ALTER TABLE reminders ADD COLUMN slug TEXT NOT NULL DEFAULT 'train'");
+  if (!names.has("title")) database.exec("ALTER TABLE reminders ADD COLUMN title TEXT NOT NULL DEFAULT 'trening'");
 }
 
 export function initJournal(): JournalBackend {

@@ -121,14 +121,33 @@ describe("journal", () => {
     assert.equal(rec.hour, 8);
     assert.equal(rec.enabled, 1);
     assert.equal(rec.once_on, null);
-    const again = await journal.upsertReminder(user.id, "train", 7, 30);
-    assert.equal(again.id, rec.id);
-    assert.equal(again.hour, 7);
-    assert.equal(again.minute, 30);
-    assert.equal((await journal.snapshot(user)).reminders.length, 1);
+    assert.equal(rec.slug, "train");
+    const moved = await journal.upsertReminder(user.id, "train", 8, 0);
+    assert.equal(moved.id, rec.id);
+    const evening = await journal.upsertReminder(user.id, "train", 22, 0);
+    assert.notEqual(evening.id, rec.id);
+    const video = await journal.upsertReminder(user.id, "video", 22, 0, { url: "https://youtu.be/abc", title: "video" });
+    assert.notEqual(video.id, evening.id);
+    const live = (await journal.snapshot(user)).reminders;
+    assert.equal(live.length, 3);
     await journal.disableReminder(user.id, "train");
-    assert.equal((await journal.listReminders(user.id))[0]?.enabled, 0);
-    assert.equal((await journal.snapshot(user)).reminders.length, 0);
+    assert.equal((await journal.snapshot(user)).reminders.length, 1);
+    const all = await journal.disableReminders(user.id);
+    assert.equal(all.length, 1);
+  });
+
+  it("patches a reminder URL in place without creating a second row", async () => {
+    const user = await journal.upsertUser("chat-patch-rem", "+4740343211");
+    const rec = await journal.upsertReminder(user.id, "train", 22, 0);
+    const patched = await journal.patchReminder(rec.id, {
+      url: "https://youtu.be/abc",
+      slug: "video",
+      title: "video",
+    });
+    assert.equal(patched?.id, rec.id);
+    assert.equal(patched?.slug, "video");
+    assert.match(patched?.url ?? "", /youtu/);
+    assert.equal((await journal.listReminders(user.id)).filter((r) => r.enabled === 1).length, 1);
   });
 
   it("stores a one-shot reminder and disables after fire", async () => {

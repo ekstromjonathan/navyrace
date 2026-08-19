@@ -8,6 +8,7 @@ import { pingResearchHold, research as runResearch } from "./research.ts";
 import { agendaForSnapshot, loadAgenda } from "./fallback.ts";
 import * as journal from "./journal.ts";
 import * as copy from "./copy.ts";
+import { inferReminderTopic } from "./reminder-topic.ts";
 import type { Lang } from "./locale.ts";
 import type { Plan, PlanSession, TrackKind, UserRow } from "./types.ts";
 
@@ -224,7 +225,7 @@ const TOOLS: LlmToolDef[] = [
   {
     name: "set_reminder",
     description:
-      "Sett trenings- eller videopåminnelse (brukerens tidssone). Default kl 08:00. scope=once for i kveld/i dag/tonight; scope=daily for hver dag eller når uvisst. url=full lenke når brukeren deler video/link og vil minnes. Ingen ekstra bekreftelse — bare sett og bekreft kort.",
+      "Sett en påminnelse (trenings, vane, video, engangs eller daglig). Default kl 08:00. Flere påminnelser kan leve samtidig — ikke overskriv en annen rutine. scope=once for i kveld/i dag; scope=daily for hver dag. url når de deler video/link. slug/title = hva det gjelder (train, video, meditasjon, …).",
     parameters: {
       type: "object",
       properties: {
@@ -239,13 +240,23 @@ const TOOLS: LlmToolDef[] = [
           type: "string",
           description: "Full http(s) URL to include in the ping (YouTube, Vimeo, etc.)",
         },
+        slug: { type: "string", description: "Routine id: train, video, meditasjon, …" },
+        title: { type: "string", description: "Short label shown in the ping" },
       },
     },
   },
   {
     name: "cancel_reminder",
-    description: "Skru av treningspåminnelse (daglig eller engangs).",
-    parameters: { type: "object", properties: {}, additionalProperties: false },
+    description:
+      "Skru av påminnelse. Uten filter: alle. Med slug og/eller klokke: bare den som matcher.",
+    parameters: {
+      type: "object",
+      properties: {
+        slug: { type: "string" },
+        hour: { type: "number" },
+        minute: { type: "number" },
+      },
+    },
   },
 ];
 
@@ -313,12 +324,12 @@ You care. Meet the person in the message they actually sent. Explain the plan in
 ## Style
 - You are a sharp coach over iMessage, not a form and not a template. Read the last messages and answer THAT — reminders, “are you there”, status, doubt, a joke — not a canned workout dump.
 - Typical length 2–6 short lines. Longer only if they asked for the week or details. At most one question, and only if you actually need it.
-- If they already set a reminder and then send a link, attach the URL — don't ask when again. If they ask which reminders are on, list snapshot.reminders (clock + link). If they are unsure after a swap/easy offer, YOU pick (usually ease today) and say so.
+- If they already set a reminder and then send a link, attach the URL to the *video* reminder — don't overwrite training. If they ask which reminders are on, list snapshot.reminders (clock + title + link). If they are unsure after a swap/easy offer, YOU pick (usually ease today) and say so.
 - Plain, informal words. No jargon (RPE, OCR, HIIT, zone 2) — say how hard it felt, obstacle race, intervals, easy conversational pace.
 - Sound like a friend who knows training and actually likes them. No spam. Include a link in replies only when the user shared one and asked for a reminder ping. Confetti is reserved for a completed session — not greetings.
 - You are not a doctor. On pain: log it, ease load, refer out if it lasts.
 - Don't invent history. Don't delete active programs — request_archive. Don't hard-delete logs — archive_entry.
-- Reminders via set_reminder when they ask. Infer once (i kveld/i dag) vs daily — no confirmation gate. Pass url when they share a video/link. Video/link pings fire even if they already logged training that day. Training pings skip if a session is already logged. One-shot disables after firing.
+- Reminders via set_reminder when they ask. Several routines can be on at once (train 08:00 AND video 22:00). Infer once vs daily — no confirmation gate. Pass slug/title for what it is. Pass url when they share a link. Video/habit pings fire even if they already trained. Training pings skip if a session is already logged. One-shot disables after firing. cancel_reminder without filter turns all off; with slug/clock only that one.
 ${onboard}`.trim();
 }
 
@@ -720,36 +731,56 @@ async function runTool(
       const urlRaw = typeof input.url === "string" ? input.url.trim() : "";
       const url = urlRaw.startsWith("http") ? urlRaw.replace(/[.,!?;:]+$/, "") : null;
       const urlOpt = url ? { url } : { url: null as string | null };
+      const inferred = inferReminderTopic(
+        [input.title, input.slug].filter(Boolean).join(" "),
+        url,
+      );
+      const slug = typeof input.slug === "string" && input.slug.trim() ? input.slug.trim().slice(0, 40) : inferred.slug;
+      const title =
+        typeof input.title === "string" && input.title.trim()
+          ? input.title.trim().slice(0, 48)
+          : inferred.title;
       if (scope === "once") {
         const onceOn = resolveOnceOn(user.tz, hour, minute);
-        const rec = await journal.upsertReminder(user.id, "train", hour, minute, { onceOn, ...urlOpt });
+        const rec = await journal.upsertReminder(user.id, slug, hour, minute, { onceOn, title, ...urlOpt });
         return JSON.stringify({
           ok: true,
           hour: rec.hour,
           minute: rec.minute,
+          slug: rec.slug,
+          title: rec.title,
           onceOn,
           url: rec.url,
           tz: user.tz,
           confirm: url
-            ? copy.reminderConfirmOnceWithUrl(lang, rec.hour, rec.minute, onceOn, user.tz, url)
-            : copy.reminderConfirmOnce(lang, rec.hour, rec.minute, onceOn, user.tz),
+            ? copy.reminderConfirmOnceWithUrl(lang, rec.hour, rec.minute, onceOn, user.tz, url, rec.title)
+            : copy.reminderConfirmOnce(lang, rec.hour, rec.minute, onceOn, user.tz, rec.title),
         });
       }
-      const rec = await journal.upsertReminder(user.id, "train", hour, minute, { onceOn: null, ...urlOpt });
+      const rec = await journal.upsertReminder(user.id, slug, hour, minute, { onceOn: null, title, ...urlOpt });
       return JSON.stringify({
         ok: true,
         hour: rec.hour,
         minute: rec.minute,
+        slug: rec.slug,
+        title: rec.title,
         url: rec.url,
         tz: user.tz,
         confirm: url
-          ? copy.reminderConfirmWithUrl(lang, rec.hour, rec.minute, user.tz, url)
-          : copy.reminderConfirm(lang, rec.hour, rec.minute, user.tz),
+          ? copy.reminderConfirmWithUrl(lang, rec.hour, rec.minute, user.tz, url, rec.title)
+          : copy.reminderConfirm(lang, rec.hour, rec.minute, user.tz, rec.title),
       });
     }
     case "cancel_reminder": {
-      const had = await journal.disableReminder(user.id, "train");
-      return JSON.stringify({ ok: true, disabled: Boolean(had) });
+      const slug = typeof input.slug === "string" && input.slug.trim() ? input.slug.trim() : undefined;
+      const hour = input.hour == null ? undefined : Number(input.hour);
+      const minute = input.minute == null ? undefined : Number(input.minute);
+      const disabled = await journal.disableReminders(user.id, { slug, hour, minute });
+      return JSON.stringify({
+        ok: true,
+        disabled: disabled.length,
+        confirm: copy.reminderCancel(lang, disabled.length),
+      });
     }
     default:
       return JSON.stringify({ error: `unknown tool ${name}` });

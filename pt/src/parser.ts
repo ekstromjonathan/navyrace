@@ -1,4 +1,5 @@
 import { isExtraWording, looksLikeActivityReport } from "./activity.ts";
+import { inferReminderTopic } from "./reminder-topic.ts";
 import { extractUrl } from "./urls.ts";
 
 export type HeuristicIntent =
@@ -31,8 +32,8 @@ export type HeuristicIntent =
   | { kind: "greeting"; confident: true }
   | { kind: "activate"; confident: true }
   | { kind: "archive"; confident: true }
-  | { kind: "reminder_set"; confident: true; hour: number; minute: number; scope: "daily" | "once"; url: string | null }
-  | { kind: "reminder_cancel"; confident: true }
+  | { kind: "reminder_set"; confident: true; hour: number; minute: number; scope: "daily" | "once"; url: string | null; slug: string; title: string }
+  | { kind: "reminder_cancel"; confident: true; slug?: string; hour?: number; minute?: number }
   | { kind: "reminder_list"; confident: true }
   | { kind: "video_link"; confident: true; url: string }
   | { kind: "archive_entry"; confident: true; slug?: string; trackKind?: "training" }
@@ -79,7 +80,17 @@ export function parseMessage(body: string): HeuristicIntent {
   if (archiveEntry) return archiveEntry;
 
   if (/\b(slutt å minne|ikke minn meg|avbryt påminnelse|skru av påminnelse|stop reminding|don't remind|sluta påminna|sluta minna)\b/i.test(lower)) {
-    return { kind: "reminder_cancel", confident: true };
+    const clock = parseClock(lower);
+    const topic = inferReminderTopic(text, extractUrl(text));
+    const named =
+      topic.slug !== "train" ||
+      /\b(trene|trening|økt|workout|train(ing)?)\b/i.test(lower);
+    return {
+      kind: "reminder_cancel",
+      confident: true,
+      ...(named ? { slug: topic.slug } : {}),
+      ...(clock.explicit ? { hour: clock.hour, minute: clock.minute } : {}),
+    };
   }
 
   const url = extractUrl(text);
@@ -103,7 +114,17 @@ export function parseMessage(body: string): HeuristicIntent {
       hour = 18;
       minute = 0;
     }
-    return { kind: "reminder_set", confident: true, hour, minute, scope, url };
+    const topic = inferReminderTopic(text, url);
+    return {
+      kind: "reminder_set",
+      confident: true,
+      hour,
+      minute,
+      scope,
+      url,
+      slug: topic.slug,
+      title: topic.title,
+    };
   }
 
   if (url && text.replace(url, "").trim().length < 24) {
@@ -404,7 +425,9 @@ export function parseTimeReply(text: string): { hour: number; minute: number; sc
 export function detectReminderScope(text: string): "daily" | "once" {
   const t = text.toLowerCase();
   if (
-    /\b(hver dag|daglig|every day|daily|hver morgen|recurring|gjentagende|permanent|varje dag|dagligen)\b/i.test(t)
+    /\b(hver dag|daglig|every day|daily|hver morgen|hver kveld|recurring|gjentagende|permanent|varje dag|dagligen|every evening)\b/i.test(
+      t,
+    )
   ) {
     return "daily";
   }

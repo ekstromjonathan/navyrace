@@ -89,6 +89,8 @@ CREATE TABLE IF NOT EXISTS reminders (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('train')),
+  slug TEXT NOT NULL DEFAULT 'train',
+  title TEXT NOT NULL DEFAULT 'trening',
   hour INTEGER NOT NULL,
   minute INTEGER NOT NULL DEFAULT 0,
   enabled INTEGER NOT NULL DEFAULT 1,
@@ -97,9 +99,12 @@ CREATE TABLE IF NOT EXISTS reminders (
   url TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id),
-  UNIQUE (user_id, kind)
+  FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+-- NULL once_on (daily) must collide with another daily at the same clock; expression unique matches Postgres.
+CREATE UNIQUE INDEX IF NOT EXISTS reminders_identity
+  ON reminders (user_id, slug, hour, minute, ifnull(once_on, ''));
 
 CREATE INDEX IF NOT EXISTS reminders_enabled ON reminders(enabled, hour, minute);
 
