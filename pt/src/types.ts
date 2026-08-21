@@ -119,8 +119,9 @@ export type PlanSession = {
   loadKey?: string;
   load?: number;
   unit?: string;
-  items?: { name: string; detail?: string }[];
+  items?: { name: string; detail?: string; cue?: string; timer?: WorkoutTimerSpec }[];
   est?: string;
+  timer?: WorkoutTimerSpec;
 };
 
 export type Plan = {
@@ -129,6 +130,67 @@ export type Plan = {
   /** Local YYYY-MM-DD when the plan was locked. Week 1 starts that week's Monday. */
   startedOn?: string;
   sessions: PlanSession[];
+};
+
+export type WorkoutTimerSpec = {
+  mode: "countdown" | "intervals" | "tabata";
+  workSeconds: number;
+  restSeconds: number;
+  rounds: number;
+  prepareSeconds?: number;
+};
+
+export type WorkoutExercise = {
+  id: string;
+  name: string;
+  detail: string | null;
+  cue: string | null;
+};
+
+export type WorkoutBlock = {
+  id: string;
+  kind: "instruction" | "sets" | "intervals" | "tabata" | "cooldown";
+  title: string;
+  detail: string | null;
+  exercises: WorkoutExercise[];
+  timer: WorkoutTimerSpec | null;
+};
+
+export type WorkoutSnapshot = {
+  version: 1;
+  sessionRef: string;
+  localDate: string;
+  title: string;
+  estimate: string | null;
+  reason: string;
+  blocks: WorkoutBlock[];
+};
+
+export type WorkoutFeedback = {
+  quality: "lett" | "passe" | "brutalt";
+  body: "good" | "tight" | "pain";
+  note?: string;
+  clientCompletionId: string;
+};
+
+export type WorkoutInstanceRow = {
+  id: string;
+  user_id: string;
+  track_id: string;
+  session_ref: string;
+  local_date: string;
+  plan_version: number;
+  snapshot: string;
+  token_hash: string;
+  expires_at: string;
+  opened_at: string | null;
+  completed_at: string | null;
+  completion_entry_id: string | null;
+  client_completion_id: string | null;
+  feedback: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type InviteStatus = "pending" | "approved" | "denied";

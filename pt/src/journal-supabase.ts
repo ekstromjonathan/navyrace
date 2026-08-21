@@ -25,6 +25,9 @@ import type {
   TrackStatus,
   UserFacts,
   UserRow,
+  WorkoutFeedback,
+  WorkoutInstanceRow,
+  WorkoutSnapshot,
   ReminderFilter,
 } from "./types.ts";
 import { titleForSlug } from "./reminder-topic.ts";
@@ -115,6 +118,28 @@ function asCoachEvent(row: Record<string, unknown>): CoachEventRow {
   };
 }
 
+function asWorkoutInstance(row: Record<string, unknown>): WorkoutInstanceRow {
+  return {
+    id: String(row.id),
+    user_id: String(row.user_id),
+    track_id: String(row.track_id),
+    session_ref: String(row.session_ref),
+    local_date: String(row.local_date).slice(0, 10),
+    plan_version: Number(row.plan_version),
+    snapshot: jsonText(row.snapshot, "{}"),
+    token_hash: String(row.token_hash),
+    expires_at: String(row.expires_at),
+    opened_at: row.opened_at == null ? null : String(row.opened_at),
+    completed_at: row.completed_at == null ? null : String(row.completed_at),
+    completion_entry_id: row.completion_entry_id == null ? null : String(row.completion_entry_id),
+    client_completion_id: row.client_completion_id == null ? null : String(row.client_completion_id),
+    feedback: row.feedback == null ? null : jsonText(row.feedback, "{}"),
+    revoked_at: row.revoked_at == null ? null : String(row.revoked_at),
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
+}
+
 export async function claimEvent(eventId: string): Promise<boolean> {
   const { error } = await getSupabase().from("webhook_events").insert({ event_id: eventId, received_at: nowIso() });
   if (isUniqueViolation(error)) return false;
@@ -185,6 +210,167 @@ export async function listCoachEvents(userId: string, limit = 50): Promise<Coach
     .limit(n);
   throwIf(error);
   return (data ?? []).map((r) => asCoachEvent(r as Record<string, unknown>));
+}
+
+export async function createWorkoutInstance(input: {
+  userId: string;
+  trackId: string;
+  sessionRef: string;
+  localDate: string;
+  planVersion: number;
+  snapshot: WorkoutSnapshot;
+  tokenHash: string;
+  expiresAt: string;
+}): Promise<WorkoutInstanceRow> {
+  const ts = nowIso();
+  const { data, error } = await getSupabase()
+    .from("workout_instances")
+    .insert({
+      id: randomUUID(),
+      user_id: input.userId,
+      track_id: input.trackId,
+      session_ref: input.sessionRef,
+      local_date: input.localDate,
+      plan_version: input.planVersion,
+      snapshot: input.snapshot,
+      token_hash: input.tokenHash,
+      expires_at: input.expiresAt,
+      created_at: ts,
+      updated_at: ts,
+    })
+    .select("*")
+    .single();
+  throwIf(error);
+  return asWorkoutInstance(data as Record<string, unknown>);
+}
+
+export async function findLiveWorkoutInstance(input: {
+  userId: string;
+  trackId: string;
+  sessionRef: string;
+  localDate: string;
+  planVersion: number;
+}): Promise<WorkoutInstanceRow | undefined> {
+  const { data, error } = await getSupabase()
+    .from("workout_instances")
+    .select("*")
+    .eq("user_id", input.userId)
+    .eq("track_id", input.trackId)
+    .eq("session_ref", input.sessionRef)
+    .eq("local_date", input.localDate)
+    .eq("plan_version", input.planVersion)
+    .is("revoked_at", null)
+    .maybeSingle();
+  throwIf(error);
+  return data ? asWorkoutInstance(data as Record<string, unknown>) : undefined;
+}
+
+export async function rotateWorkoutInstance(
+  id: string,
+  tokenHash: string,
+  snapshot: WorkoutSnapshot,
+  expiresAt: string,
+): Promise<WorkoutInstanceRow | undefined> {
+  const { data, error } = await getSupabase()
+    .from("workout_instances")
+    .update({
+      token_hash: tokenHash,
+      snapshot,
+      expires_at: expiresAt,
+      opened_at: null,
+      updated_at: nowIso(),
+    })
+    .eq("id", id)
+    .is("completed_at", null)
+    .is("revoked_at", null)
+    .select("*")
+    .maybeSingle();
+  throwIf(error);
+  return data ? asWorkoutInstance(data as Record<string, unknown>) : getWorkoutInstance(id);
+}
+
+export async function getWorkoutInstance(id: string): Promise<WorkoutInstanceRow | undefined> {
+  const { data, error } = await getSupabase()
+    .from("workout_instances")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  throwIf(error);
+  return data ? asWorkoutInstance(data as Record<string, unknown>) : undefined;
+}
+
+export async function findWorkoutInstanceByTokenHash(
+  tokenHash: string,
+): Promise<WorkoutInstanceRow | undefined> {
+  const { data, error } = await getSupabase()
+    .from("workout_instances")
+    .select("*")
+    .eq("token_hash", tokenHash)
+    .maybeSingle();
+  throwIf(error);
+  return data ? asWorkoutInstance(data as Record<string, unknown>) : undefined;
+}
+
+export async function findWorkoutInstanceByClientCompletionId(
+  clientCompletionId: string,
+): Promise<WorkoutInstanceRow | undefined> {
+  const { data, error } = await getSupabase()
+    .from("workout_instances")
+    .select("*")
+    .eq("client_completion_id", clientCompletionId)
+    .maybeSingle();
+  throwIf(error);
+  return data ? asWorkoutInstance(data as Record<string, unknown>) : undefined;
+}
+
+export async function markWorkoutOpened(id: string): Promise<WorkoutInstanceRow | undefined> {
+  const existing = await getWorkoutInstance(id);
+  if (!existing) return undefined;
+  const { data, error } = await getSupabase()
+    .from("workout_instances")
+    .update({ opened_at: existing.opened_at ?? nowIso(), updated_at: nowIso() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  throwIf(error);
+  return asWorkoutInstance(data as Record<string, unknown>);
+}
+
+export async function markWorkoutCompleted(
+  id: string,
+  entryId: string,
+  feedback: WorkoutFeedback,
+): Promise<WorkoutInstanceRow | undefined> {
+  const ts = nowIso();
+  const { data, error } = await getSupabase()
+    .from("workout_instances")
+    .update({
+      completed_at: ts,
+      completion_entry_id: entryId,
+      client_completion_id: feedback.clientCompletionId,
+      feedback,
+      updated_at: ts,
+    })
+    .eq("id", id)
+    .is("completed_at", null)
+    .select("*")
+    .maybeSingle();
+  throwIf(error);
+  if (data) return asWorkoutInstance(data as Record<string, unknown>);
+  return getWorkoutInstance(id);
+}
+
+export async function revokeWorkoutInstance(id: string): Promise<WorkoutInstanceRow | undefined> {
+  const existing = await getWorkoutInstance(id);
+  if (!existing) return undefined;
+  const { data, error } = await getSupabase()
+    .from("workout_instances")
+    .update({ revoked_at: existing.revoked_at ?? nowIso(), updated_at: nowIso() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  throwIf(error);
+  return asWorkoutInstance(data as Record<string, unknown>);
 }
 
 export async function getUser(id: string): Promise<UserRow | undefined> {
@@ -538,6 +724,16 @@ export async function logEntry(input: {
   if (input.linqMessageId && isUniqueViolation(error)) return { id: "", duplicate: true };
   throwIf(error);
   return { id, duplicate: false };
+}
+
+export async function entryIdByMessageId(messageId: string): Promise<string | undefined> {
+  const { data, error } = await getSupabase()
+    .from("entries")
+    .select("id")
+    .eq("linq_message_id", messageId)
+    .maybeSingle();
+  throwIf(error);
+  return data ? String((data as { id: string }).id) : undefined;
 }
 
 export async function patchEntry(

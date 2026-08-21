@@ -28,6 +28,7 @@ export type HeuristicIntent =
   | { kind: "today"; confident: true }
   | { kind: "program"; confident: true }
   | { kind: "alive"; confident: true }
+  | { kind: "workout_link"; confident: true }
   | { kind: "adapt_choice"; confident: true; choice: "swap" | "ease" | "keep" }
   | { kind: "greeting"; confident: true }
   | { kind: "activate"; confident: true }
@@ -74,6 +75,15 @@ export function parseMessage(body: string): HeuristicIntent {
   }
   if (/^(arkiver og lag nytt|archive and start new)$/i.test(text)) {
     return { kind: "archive", confident: true };
+  }
+
+  if (
+    /\b(treningslenke|øktlenke|oktlenke|workout link|training link|öktlänk|träningslänk)\b/iu.test(lower) ||
+    /\b(åpne|open|öppna)\s+(?:dagens\s+|today'?s\s+)?(økt|okt|pass|session|workout)\b/iu.test(lower) ||
+    /\b(lenke|link|länk)\s+(til|to|för)\s+(dagens\s+)?(økt|okt|trening|pass|workout)\b/iu.test(lower) ||
+    /^(send|gi|give)\s+(meg|me|mig)\s+(trenings)?(lenke|link|länk)\b/iu.test(lower)
+  ) {
+    return { kind: "workout_link", confident: true };
   }
 
   const archiveEntry = parseArchiveEntry(text);

@@ -350,6 +350,79 @@ export function reminderScopeCancelled(lang: Lang): string {
   return pick(lang, "Ok, no reminder set.", "Ok, ingen påminnelse satt.", "Ok, ingen påminnelse satt.");
 }
 
+export function workoutLinkReply(lang: Lang, title: string, url: string): string {
+  return pick(
+    lang,
+    `Today's session is ready — ${title}.\nOpen it here:\n${url}`,
+    `Dagens økt er klar — ${title}.\nÅpne den her:\n${url}`,
+    `Dagens pass är klart — ${title}.\nÖppna det här:\n${url}`,
+  );
+}
+
+export function workoutLinkUnavailable(
+  lang: Lang,
+  reason: "no_plan" | "rest" | "logged" | "complete",
+): string {
+  if (reason === "rest") {
+    return pick(
+      lang,
+      "Today is a rest day. No workout player — keep it easy.",
+      "I dag er hviledag. Ingen øktspiller — hold det rolig.",
+      "Idag är vilodag. Ingen passpelare — håll det lugnt.",
+    );
+  }
+  if (reason === "logged") {
+    return pick(
+      lang,
+      "Today's session is already logged.",
+      "Dagens økt er allerede logget.",
+      "Dagens pass är redan loggat.",
+    );
+  }
+  if (reason === "complete") {
+    return pick(
+      lang,
+      "This program block is complete. We'll make the next block before opening a new session.",
+      "Programblokka er fullført. Vi lager neste blokk før vi åpner en ny økt.",
+      "Programblocket är klart. Vi gör nästa block innan vi öppnar ett nytt pass.",
+    );
+  }
+  return pick(
+    lang,
+    "There isn't an active plan to open yet.",
+    "Det finnes ikke en aktiv plan å åpne ennå.",
+    "Det finns ingen aktiv plan att öppna ännu.",
+  );
+}
+
+export function webWorkoutCompleted(
+  lang: Lang,
+  title: string,
+  quality: "lett" | "passe" | "brutalt",
+  body: "good" | "tight" | "pain",
+): string {
+  const effort =
+    quality === "lett"
+      ? pick(lang, "easy", "lett", "lätt")
+      : quality === "brutalt"
+        ? pick(lang, "brutal", "brutalt", "brutalt")
+        : pick(lang, "about right", "passe", "lagom");
+  if (body === "pain") {
+    return pick(
+      lang,
+      `Logged “${title}” as ${effort}. You reported pain — don't push it further today.`,
+      `«${title}» er logget som ${effort}. Du meldte smerte — ikke press videre i dag.`,
+      `”${title}” är loggat som ${effort}. Du rapporterade smärta — pressa inte vidare idag.`,
+    );
+  }
+  return pick(
+    lang,
+    `Logged “${title}” as ${effort}. Nice work.`,
+    `«${title}» er logget som ${effort}. Bra jobba.`,
+    `”${title}” är loggat som ${effort}. Bra jobbat.`,
+  );
+}
+
 export function reminderCancel(lang: Lang, count: number): string {
   if (count > 1) {
     return pick(

@@ -25,6 +25,9 @@ import type {
   TrackStatus,
   UserFacts,
   UserRow,
+  WorkoutFeedback,
+  WorkoutInstanceRow,
+  WorkoutSnapshot,
   ReminderFilter,
 } from "./types.ts";
 import { titleForSlug } from "./reminder-topic.ts";
@@ -114,6 +117,136 @@ export function listCoachEvents(userId: string, limit = 50): CoachEventRow[] {
     userId,
     n,
   );
+}
+
+export function createWorkoutInstance(input: {
+  userId: string;
+  trackId: string;
+  sessionRef: string;
+  localDate: string;
+  planVersion: number;
+  snapshot: WorkoutSnapshot;
+  tokenHash: string;
+  expiresAt: string;
+}): WorkoutInstanceRow {
+  const id = randomUUID();
+  const ts = nowIso();
+  run(
+    `INSERT INTO workout_instances
+       (id, user_id, track_id, session_ref, local_date, plan_version, snapshot,
+        token_hash, expires_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id,
+    input.userId,
+    input.trackId,
+    input.sessionRef,
+    input.localDate,
+    input.planVersion,
+    JSON.stringify(input.snapshot),
+    input.tokenHash,
+    input.expiresAt,
+    ts,
+    ts,
+  );
+  return getWorkoutInstance(id)!;
+}
+
+export function findLiveWorkoutInstance(input: {
+  userId: string;
+  trackId: string;
+  sessionRef: string;
+  localDate: string;
+  planVersion: number;
+}): WorkoutInstanceRow | undefined {
+  return row<WorkoutInstanceRow>(
+    `SELECT * FROM workout_instances
+     WHERE user_id = ? AND track_id = ? AND session_ref = ? AND local_date = ?
+       AND plan_version = ? AND revoked_at IS NULL`,
+    input.userId,
+    input.trackId,
+    input.sessionRef,
+    input.localDate,
+    input.planVersion,
+  );
+}
+
+export function rotateWorkoutInstance(
+  id: string,
+  tokenHash: string,
+  snapshot: WorkoutSnapshot,
+  expiresAt: string,
+): WorkoutInstanceRow | undefined {
+  run(
+    `UPDATE workout_instances
+     SET token_hash = ?, snapshot = ?, expires_at = ?, opened_at = NULL, updated_at = ?
+     WHERE id = ? AND completed_at IS NULL AND revoked_at IS NULL`,
+    tokenHash,
+    JSON.stringify(snapshot),
+    expiresAt,
+    nowIso(),
+    id,
+  );
+  return getWorkoutInstance(id);
+}
+
+export function getWorkoutInstance(id: string): WorkoutInstanceRow | undefined {
+  return row<WorkoutInstanceRow>("SELECT * FROM workout_instances WHERE id = ?", id);
+}
+
+export function findWorkoutInstanceByTokenHash(tokenHash: string): WorkoutInstanceRow | undefined {
+  return row<WorkoutInstanceRow>("SELECT * FROM workout_instances WHERE token_hash = ?", tokenHash);
+}
+
+export function findWorkoutInstanceByClientCompletionId(
+  clientCompletionId: string,
+): WorkoutInstanceRow | undefined {
+  return row<WorkoutInstanceRow>(
+    "SELECT * FROM workout_instances WHERE client_completion_id = ?",
+    clientCompletionId,
+  );
+}
+
+export function markWorkoutOpened(id: string): WorkoutInstanceRow | undefined {
+  const ts = nowIso();
+  run(
+    "UPDATE workout_instances SET opened_at = COALESCE(opened_at, ?), updated_at = ? WHERE id = ?",
+    ts,
+    ts,
+    id,
+  );
+  return getWorkoutInstance(id);
+}
+
+export function markWorkoutCompleted(
+  id: string,
+  entryId: string,
+  feedback: WorkoutFeedback,
+): WorkoutInstanceRow | undefined {
+  const ts = nowIso();
+  run(
+    `UPDATE workout_instances
+     SET completed_at = ?, completion_entry_id = ?, client_completion_id = ?,
+         feedback = ?, updated_at = ?
+     WHERE id = ? AND completed_at IS NULL`,
+    ts,
+    entryId,
+    feedback.clientCompletionId,
+    JSON.stringify(feedback),
+    ts,
+    id,
+  );
+  return getWorkoutInstance(id);
+}
+
+export function revokeWorkoutInstance(id: string): WorkoutInstanceRow | undefined {
+  const ts = nowIso();
+  run(
+    "UPDATE workout_instances SET revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE id = ?",
+    ts,
+    ts,
+    id,
+  );
+  return getWorkoutInstance(id);
 }
 
 export function getUser(id: string): UserRow | undefined {
@@ -389,6 +522,10 @@ export function logEntry(input: {
     if (input.linqMessageId && /UNIQUE/i.test(msg)) return { id: "", duplicate: true };
     throw err;
   }
+}
+
+export function entryIdByMessageId(messageId: string): string | undefined {
+  return row<{ id: string }>("SELECT id FROM entries WHERE linq_message_id = ?", messageId)?.id;
 }
 
 export function patchEntry(

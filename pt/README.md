@@ -14,7 +14,7 @@ SUPABASE_SECRET_KEY=sb_secret_...   # Settings → API Keys → Secret keys (nev
 
 Supabase renamed keys: new projects show **Secret keys** (`sb_secret_…`) instead of a `service_role` JWT. Same privileges (bypasses RLS). Find them under [Settings → API Keys](https://supabase.com/dashboard/project/_/settings/api-keys) — use the **API Keys** tab (create if needed), or **Legacy API Keys** for the old JWT.
 
-Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0011_pt_coach_quality.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
+Apply migrations `supabase/migrations/0003_pt_journal.sql` … `0012_pt_workout_instances.sql`, then expose schema `pt` under Project Settings → API → Exposed schemas (or Data API settings).
 
 Without those env vars the process falls back to local SQLite (`PT_DB_PATH`) so unit tests stay offline.
 
@@ -78,6 +78,17 @@ If you ask the PT to remind you (e.g. «minn meg på å trene kl 8» or «kl 19 
 - Video/link: include a URL — ping sends the link; fires even if you already trained. A bare link attaches to the only live reminder, or to an existing video reminder; otherwise it asks for a time.
 - Catch-up window is 3 hours (process down at 08:00 can still ping at 10:00, not at 22:00).
 - «slutt å minne meg» turns all off. «slutt å minne meg på videoen» / «ikke minn meg kl 8» turns off that one.
+
+## Browser workout player
+
+«Åpne dagens økt» materializes the PT journal's weekday session as an immutable snapshot and returns a short `https://lodd.ai/w/{token}` capability link.
+
+- URL contains a random 256-bit token; only its SHA-256 hash is stored.
+- `GET /api/workouts/{token}` exposes the workout snapshot without user id, phone, chat id, or token hash.
+- The light mobile player lives in the separate `/workout/` Vite entry and supports exercise check-off, offline state, and deadline-based interval/Tabata timing.
+- Completion posts `lett/passe/brutalt`, body state, and an optional note. A stable journal dedupe key prevents duplicate entries across retries.
+- Completion writes the same `pt.entries` truth as iMessage logging, records structured open/complete outcomes, and sends one short iMessage acknowledgement.
+- Links expire after 36 hours. Reissuing the same session rotates the token and invalidates the old link.
 - Only fires while `npm start` is running.
 
 ## Hosting
