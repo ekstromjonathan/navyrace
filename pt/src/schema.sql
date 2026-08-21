@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS workout_instances (
   FOREIGN KEY (completion_entry_id) REFERENCES entries(id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS workout_instances_live_identity
+CREATE INDEX IF NOT EXISTS workout_instances_identity
   ON workout_instances(user_id, track_id, session_ref, local_date, plan_version)
   WHERE revoked_at IS NULL;
 

@@ -93,7 +93,7 @@ describe("workout snapshot and timer", () => {
 });
 
 describe("workout issue and completion", { concurrency: 1 }, () => {
-  it("issues, rotates, resolves, and completes exactly once", async () => {
+  it("keeps issued links valid and completes exactly once", async () => {
     const user = await seededUser("chat-workout-main");
     const first = await issueTodayWorkout(user);
     assert.equal(first.ok, true);
@@ -109,10 +109,10 @@ describe("workout issue and completion", { concurrency: 1 }, () => {
     const second = await issueTodayWorkout(user);
     assert.equal(second.ok, true);
     if (!second.ok) return;
-    assert.equal(second.rotated, true);
+    assert.equal(second.rotated, false);
     const token2 = second.url.split("/").at(-1) ?? "";
     assert.notEqual(token2, token1);
-    await assert.rejects(resolveWorkoutToken(token1), /not_found/);
+    assert.equal((await resolveWorkoutToken(token1)).snapshot.sessionRef, "w1d1");
 
     const feedback = {
       quality: "passe",
@@ -131,6 +131,33 @@ describe("workout issue and completion", { concurrency: 1 }, () => {
     const events = await journal.listCoachEvents(user.id);
     assert.equal(events.filter((event) => event.kind === "workout_opened").length, 1);
     assert.equal(events.filter((event) => event.kind === "workout_completed").length, 1);
+  });
+
+  it("serializes concurrent issue/completion races across valid links", async () => {
+    const user = await seededUser("chat-workout-race");
+    const [first, second] = await Promise.all([issueTodayWorkout(user), issueTodayWorkout(user)]);
+    assert.equal(first.ok && second.ok, true);
+    if (!first.ok || !second.ok) return;
+    const token1 = first.url.split("/").at(-1) ?? "";
+    const token2 = second.url.split("/").at(-1) ?? "";
+    const [a, b] = await Promise.all([
+      completeWorkout(token1, {
+        quality: "passe",
+        body: "good",
+        clientCompletionId: "650e8400-e29b-41d4-a716-446655440001",
+      }),
+      completeWorkout(token2, {
+        quality: "brutalt",
+        body: "tight",
+        clientCompletionId: "650e8400-e29b-41d4-a716-446655440002",
+      }),
+    ]);
+    assert.equal([a, b].filter((result) => result.newlyCompleted).length, 1);
+    assert.equal((await journal.recentEntries(user.id, 10)).length, 1);
+    assert.equal(
+      (await journal.listCoachEvents(user.id)).filter((event) => event.kind === "workout_completed").length,
+      1,
+    );
   });
 
   it("does not issue on rest days or without a plan", async () => {

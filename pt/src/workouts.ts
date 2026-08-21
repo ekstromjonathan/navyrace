@@ -102,29 +102,18 @@ export async function issueTodayWorkout(user: UserRow): Promise<WorkoutIssueResu
     localDate,
     planVersion: track.version,
   };
-  const existing = await journal.findLiveWorkoutInstance(identity);
-  if (existing?.completed_at) return { ok: false, reason: "logged" };
-  let instance: WorkoutInstanceRow;
-  let rotated = false;
-  if (existing) {
-    instance =
-      (await journal.rotateWorkoutInstance(existing.id, tokenHash, snapshot, expiresAt)) ??
-      existing;
-    rotated = true;
-  } else {
-    instance = await journal.createWorkoutInstance({
-      ...identity,
-      snapshot,
-      tokenHash,
-      expiresAt,
-    });
-  }
+  const instance = await journal.createWorkoutInstance({
+    ...identity,
+    snapshot,
+    tokenHash,
+    expiresAt,
+  });
   return {
     ok: true,
     url: `${env.publicOrigin}/w/${token}`,
     title: snapshot.title,
     instanceId: instance.id,
-    rotated,
+    rotated: false,
   };
 }
 
@@ -162,6 +151,17 @@ export async function resolveWorkoutToken(
   };
 }
 
+const completionLocks = new Map<string, Promise<unknown>>();
+
+function withCompletionLock<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const previous = completionLocks.get(key) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(work);
+  completionLocks.set(key, current);
+  return current.finally(() => {
+    if (completionLocks.get(key) === current) completionLocks.delete(key);
+  });
+}
+
 export async function completeWorkout(
   token: string,
   input: unknown,
@@ -171,54 +171,81 @@ export async function completeWorkout(
   feedback: WorkoutFeedback;
   user: UserRow;
   duplicate: boolean;
+  newlyCompleted: boolean;
 }> {
   const feedback = validateWorkoutFeedback(input);
-  const resolved = await resolveWorkoutToken(token);
-  const { instance, snapshot } = resolved;
-  const user = await journal.getUser(instance.user_id);
-  if (!user) throw new WorkoutError("not_found", 404);
+  const initial = await resolveWorkoutToken(token);
+  const lockKey = [
+    initial.instance.user_id,
+    initial.instance.track_id,
+    initial.instance.session_ref,
+    initial.instance.local_date,
+  ].join(":");
+  return withCompletionLock(lockKey, async () => {
+    const resolved = await resolveWorkoutToken(token);
+    const { instance, snapshot } = resolved;
+    const user = await journal.getUser(instance.user_id);
+    if (!user) throw new WorkoutError("not_found", 404);
 
-  const completion = await journal.findWorkoutInstanceByClientCompletionId(feedback.clientCompletionId);
-  if (completion && completion.id !== instance.id) {
-    throw new WorkoutError("completion_conflict", 409);
-  }
-  if (instance.completed_at && instance.completion_entry_id) {
-    return { instance, snapshot, feedback, user, duplicate: true };
-  }
+    const completion = await journal.findWorkoutInstanceByClientCompletionId(feedback.clientCompletionId);
+    if (completion && completion.id !== instance.id) {
+      throw new WorkoutError("completion_conflict", 409);
+    }
+    if (instance.completed_at && instance.completion_entry_id) {
+      const stored = parseJson<WorkoutFeedback>(instance.feedback ?? "{}", feedback);
+      return {
+        instance,
+        snapshot,
+        feedback: stored,
+        user,
+        duplicate: true,
+        newlyCompleted: false,
+      };
+    }
 
-  const entryKey = `web-workout:${instance.user_id}:${instance.track_id}:${instance.session_ref}:${instance.local_date}`;
-  const logged = await journal.logEntry({
-    trackId: instance.track_id,
-    userId: instance.user_id,
-    quality: feedback.quality,
-    note: feedbackNote(feedback, snapshot.title),
-    sessionRef: instance.session_ref,
-    source: "user",
-    linqMessageId: entryKey,
-    occurredAt: dayAnchorIso(instance.local_date),
-  });
-  const entryId = logged.duplicate
-    ? await journal.entryIdByMessageId(entryKey)
-    : logged.id;
-  if (!entryId) throw new Error("workout completion entry was not recoverable");
-
-  const completed =
-    (await journal.markWorkoutCompleted(instance.id, entryId, feedback)) ??
-    instance;
-  await journal
-    .recordCoachEvent({
+    const entryKey = `web-workout:${instance.user_id}:${instance.track_id}:${instance.session_ref}:${instance.local_date}`;
+    const logged = await journal.logEntry({
+      trackId: instance.track_id,
       userId: instance.user_id,
-      kind: "workout_completed",
-      source: "integration",
-      refId: instance.id,
-      dedupeKey: `workout:${instance.id}:complete`,
-      metadata: {
-        sessionRef: instance.session_ref,
-        localDate: instance.local_date,
-        quality: feedback.quality,
-        bodyState: feedback.body,
-      },
-    })
-    .catch((err) => console.error("workout completion event failed", instance.id, err));
-  return { instance: completed, snapshot, feedback, user, duplicate: logged.duplicate };
+      quality: feedback.quality,
+      note: feedbackNote(feedback, snapshot.title),
+      sessionRef: instance.session_ref,
+      source: "user",
+      linqMessageId: entryKey,
+      occurredAt: dayAnchorIso(instance.local_date),
+    });
+    const entryId = logged.duplicate
+      ? await journal.entryIdByMessageId(entryKey)
+      : logged.id;
+    if (!entryId) throw new Error("workout completion entry was not recoverable");
+
+    const completed =
+      (await journal.markWorkoutCompleted(instance.id, entryId, feedback)) ??
+      instance;
+    if (!logged.duplicate) {
+      await journal
+        .recordCoachEvent({
+          userId: instance.user_id,
+          kind: "workout_completed",
+          source: "integration",
+          refId: instance.id,
+          dedupeKey: `workout-entry:${entryId}:complete`,
+          metadata: {
+            sessionRef: instance.session_ref,
+            localDate: instance.local_date,
+            quality: feedback.quality,
+            bodyState: feedback.body,
+          },
+        })
+        .catch((err) => console.error("workout completion event failed", instance.id, err));
+    }
+    return {
+      instance: completed,
+      snapshot,
+      feedback,
+      user,
+      duplicate: logged.duplicate,
+      newlyCompleted: !logged.duplicate,
+    };
+  });
 }

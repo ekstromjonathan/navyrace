@@ -151,44 +151,6 @@ export function createWorkoutInstance(input: {
   return getWorkoutInstance(id)!;
 }
 
-export function findLiveWorkoutInstance(input: {
-  userId: string;
-  trackId: string;
-  sessionRef: string;
-  localDate: string;
-  planVersion: number;
-}): WorkoutInstanceRow | undefined {
-  return row<WorkoutInstanceRow>(
-    `SELECT * FROM workout_instances
-     WHERE user_id = ? AND track_id = ? AND session_ref = ? AND local_date = ?
-       AND plan_version = ? AND revoked_at IS NULL`,
-    input.userId,
-    input.trackId,
-    input.sessionRef,
-    input.localDate,
-    input.planVersion,
-  );
-}
-
-export function rotateWorkoutInstance(
-  id: string,
-  tokenHash: string,
-  snapshot: WorkoutSnapshot,
-  expiresAt: string,
-): WorkoutInstanceRow | undefined {
-  run(
-    `UPDATE workout_instances
-     SET token_hash = ?, snapshot = ?, expires_at = ?, opened_at = NULL, updated_at = ?
-     WHERE id = ? AND completed_at IS NULL AND revoked_at IS NULL`,
-    tokenHash,
-    JSON.stringify(snapshot),
-    expiresAt,
-    nowIso(),
-    id,
-  );
-  return getWorkoutInstance(id);
-}
-
 export function getWorkoutInstance(id: string): WorkoutInstanceRow | undefined {
   return row<WorkoutInstanceRow>("SELECT * FROM workout_instances WHERE id = ?", id);
 }

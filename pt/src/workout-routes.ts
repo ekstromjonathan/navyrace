@@ -47,7 +47,7 @@ export function mountWorkoutApi(
     }
     try {
       const result = await completeWorkout(c.req.param("token"), body);
-      if (!result.duplicate && opts.onCompleted) {
+      if (result.newlyCompleted && opts.onCompleted) {
         void opts.onCompleted(result).catch((err) =>
           console.error("workout completion callback failed", result.instance.id, err),
         );

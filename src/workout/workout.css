@@ -1,7 +1,7 @@
 :root {
   --bg: #f6f5f2;
   --ink: #111111;
-  --muted: rgba(17, 17, 17, 0.5);
+  --muted: rgba(17, 17, 17, 0.64);
   --line: rgba(17, 17, 17, 0.11);
   --fill: rgba(17, 17, 17, 0.05);
   --paper: rgba(255, 255, 255, 0.72);
@@ -331,6 +331,14 @@ textarea:focus-visible {
   margin: 9px 0 0;
   color: var(--muted);
   font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.submit-error {
+  margin: 10px 0 0;
+  color: #8a2f2a;
+  font-size: 13px;
   line-height: 1.4;
   text-align: center;
 }

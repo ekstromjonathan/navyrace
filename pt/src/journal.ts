@@ -101,25 +101,6 @@ export async function createWorkoutInstance(input: {
   return asAsync(api().createWorkoutInstance(input));
 }
 
-export async function findLiveWorkoutInstance(input: {
-  userId: string;
-  trackId: string;
-  sessionRef: string;
-  localDate: string;
-  planVersion: number;
-}): Promise<WorkoutInstanceRow | undefined> {
-  return asAsync(api().findLiveWorkoutInstance(input));
-}
-
-export async function rotateWorkoutInstance(
-  id: string,
-  tokenHash: string,
-  snapshot: WorkoutSnapshot,
-  expiresAt: string,
-): Promise<WorkoutInstanceRow | undefined> {
-  return asAsync(api().rotateWorkoutInstance(id, tokenHash, snapshot, expiresAt));
-}
-
 export async function getWorkoutInstance(id: string): Promise<WorkoutInstanceRow | undefined> {
   return asAsync(api().getWorkoutInstance(id));
 }

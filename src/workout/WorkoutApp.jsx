@@ -39,6 +39,41 @@ function createId() {
   );
 }
 
+function responseError(response) {
+  const error = new Error(`status:${response.status}`);
+  error.status = response.status;
+  return error;
+}
+
+async function postCompletion(payload) {
+  const response = await fetch(`/api/workouts/${encodeURIComponent(token)}/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw responseError(response);
+  return response.json();
+}
+
+function validCachedWorkout() {
+  const cached = readJson(CACHE_KEY, null);
+  if (!cached?.expiresAt || Date.parse(cached.expiresAt) <= Date.now()) {
+    try { localStorage.removeItem(CACHE_KEY); } catch {}
+    return null;
+  }
+  return cached;
+}
+
+function clearWorkoutStorage() {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(RUN_KEY);
+    localStorage.removeItem(QUEUE_KEY);
+  } catch {
+    // Storage may be unavailable.
+  }
+}
+
 function useWorkoutTimer(spec) {
   const stored = readJson(RUN_KEY, null);
   const [clock, setClock] = useState(
@@ -193,7 +228,7 @@ function ExerciseList({ exercises, completed, onToggle }) {
   );
 }
 
-function Feedback({ workout, sending, onSubmit }) {
+function Feedback({ sending, error, onSubmit }) {
   const [quality, setQuality] = useState("");
   const [body, setBody] = useState("");
   const [note, setNote] = useState("");
@@ -246,6 +281,7 @@ function Feedback({ workout, sending, onSubmit }) {
       >
         {sending ? "Lagrer …" : "Lagre hos coachen"} <ChevronRight size={18} />
       </button>
+      {error ? <p className="submit-error" role="alert">{error}</p> : null}
       <p className="privacy-note">Tilbakemeldingen lagres i den private coach-journalen.</p>
     </main>
   );
@@ -285,23 +321,32 @@ export default function WorkoutApp() {
   const [completed, setCompleted] = useState(new Set(storedRun.completed || []));
   const [view, setView] = useState("workout");
   const [sending, setSending] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/workouts/${encodeURIComponent(token)}`, { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error(`status:${response.status}`);
+        if (!response.ok) throw responseError(response);
         return response.json();
       })
       .then((data) => {
         if (cancelled) return;
         writeJson(CACHE_KEY, data);
         setResource({ state: "ready", data });
-        if (data.completed) setView("complete");
+        if (data.completed) {
+          clearWorkoutStorage();
+          setView("complete");
+        }
       })
       .catch((error) => {
         if (cancelled) return;
-        const cached = readJson(CACHE_KEY, null);
+        if (error.status) {
+          clearWorkoutStorage();
+          setResource({ state: "invalid", error });
+          return;
+        }
+        const cached = validCachedWorkout();
         if (cached) setResource({ state: "ready", data: cached });
         else setResource({ state: navigator.onLine ? "invalid" : "offline", error });
       });
@@ -309,17 +354,33 @@ export default function WorkoutApp() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    async function flush() {
+      const queued = readJson(QUEUE_KEY, null);
+      if (!queued?.payload || !navigator.onLine) return;
+      setView("queued");
+      try {
+        await postCompletion(queued.payload);
+        if (!active) return;
+        clearWorkoutStorage();
+        setView("complete");
+      } catch (error) {
+        if (!active) return;
+        if (error.status) {
+          clearWorkoutStorage();
+          setResource({ state: "invalid", error });
+          setView("invalid");
+        }
+      }
+    }
     const queued = readJson(QUEUE_KEY, null);
-    if (!queued || !navigator.onLine) return;
-    fetch(`/api/workouts/${encodeURIComponent(token)}/complete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(queued),
-    }).then((response) => {
-      if (!response.ok) throw new Error("retry failed");
-      localStorage.removeItem(QUEUE_KEY);
-      setView("complete");
-    }).catch(() => {});
+    if (queued?.payload) setView("queued");
+    void flush();
+    window.addEventListener("online", flush);
+    return () => {
+      active = false;
+      window.removeEventListener("online", flush);
+    };
   }, []);
 
   const workout = resource.data?.workout;
@@ -340,18 +401,22 @@ export default function WorkoutApp() {
 
   async function submitFeedback(payload) {
     setSending(true);
+    setSubmitError("");
     try {
-      const response = await fetch(`/api/workouts/${encodeURIComponent(token)}/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error(`status:${response.status}`);
-      localStorage.removeItem(QUEUE_KEY);
+      await postCompletion(payload);
+      clearWorkoutStorage();
       setView("complete");
-    } catch {
-      writeJson(QUEUE_KEY, payload);
-      setView("queued");
+    } catch (error) {
+      if (!error.status) {
+        writeJson(QUEUE_KEY, { payload, queuedAt: new Date().toISOString() });
+        setView("queued");
+      } else if (error.status === 404) {
+        clearWorkoutStorage();
+        setResource({ state: "invalid", error });
+        setView("invalid");
+      } else {
+        setSubmitError("Kunne ikke lagre nå. Prøv igjen.");
+      }
     } finally {
       setSending(false);
     }
@@ -363,9 +428,10 @@ export default function WorkoutApp() {
   if (resource.state === "invalid" || resource.state === "offline") {
     return <ErrorState offline={resource.state === "offline"} />;
   }
-  if (view === "feedback") return <Feedback workout={workout} sending={sending} onSubmit={submitFeedback} />;
+  if (view === "feedback") return <Feedback sending={sending} error={submitError} onSubmit={submitFeedback} />;
   if (view === "complete") return <Completed />;
   if (view === "queued") return <Completed queued />;
+  if (view === "invalid") return <ErrorState />;
 
   return (
     <main className="workout-shell">

@@ -88,7 +88,7 @@ If you ask the PT to remind you (e.g. «minn meg på å trene kl 8» or «kl 19 
 - The light mobile player lives in the separate `/workout/` Vite entry and supports exercise check-off, offline state, and deadline-based interval/Tabata timing.
 - Completion posts `lett/passe/brutalt`, body state, and an optional note. A stable journal dedupe key prevents duplicate entries across retries.
 - Completion writes the same `pt.entries` truth as iMessage logging, records structured open/complete outcomes, and sends one short iMessage acknowledgement.
-- Links expire after 36 hours. Reissuing the same session rotates the token and invalidates the old link.
+- Links expire after 36 hours. Several messages can keep valid links to the same snapshot; completion still deduplicates to one journal entry.
 - Only fires while `npm start` is running.
 
 ## Hosting

@@ -244,51 +244,6 @@ export async function createWorkoutInstance(input: {
   return asWorkoutInstance(data as Record<string, unknown>);
 }
 
-export async function findLiveWorkoutInstance(input: {
-  userId: string;
-  trackId: string;
-  sessionRef: string;
-  localDate: string;
-  planVersion: number;
-}): Promise<WorkoutInstanceRow | undefined> {
-  const { data, error } = await getSupabase()
-    .from("workout_instances")
-    .select("*")
-    .eq("user_id", input.userId)
-    .eq("track_id", input.trackId)
-    .eq("session_ref", input.sessionRef)
-    .eq("local_date", input.localDate)
-    .eq("plan_version", input.planVersion)
-    .is("revoked_at", null)
-    .maybeSingle();
-  throwIf(error);
-  return data ? asWorkoutInstance(data as Record<string, unknown>) : undefined;
-}
-
-export async function rotateWorkoutInstance(
-  id: string,
-  tokenHash: string,
-  snapshot: WorkoutSnapshot,
-  expiresAt: string,
-): Promise<WorkoutInstanceRow | undefined> {
-  const { data, error } = await getSupabase()
-    .from("workout_instances")
-    .update({
-      token_hash: tokenHash,
-      snapshot,
-      expires_at: expiresAt,
-      opened_at: null,
-      updated_at: nowIso(),
-    })
-    .eq("id", id)
-    .is("completed_at", null)
-    .is("revoked_at", null)
-    .select("*")
-    .maybeSingle();
-  throwIf(error);
-  return data ? asWorkoutInstance(data as Record<string, unknown>) : getWorkoutInstance(id);
-}
-
 export async function getWorkoutInstance(id: string): Promise<WorkoutInstanceRow | undefined> {
   const { data, error } = await getSupabase()
     .from("workout_instances")
