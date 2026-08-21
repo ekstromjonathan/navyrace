@@ -78,10 +78,10 @@ export function parseMessage(body: string): HeuristicIntent {
   }
 
   if (
-    /(?:^|\s)(treningslenke|øktlenke|oktlenke|workout link|training link|öktlänk|träningslänk)(?:$|\s|[.!?])/iu.test(lower) ||
+    /(?:^|\s)(treningslenk(?:e|en)|øktlenk(?:e|en)|oktlenk(?:e|en)|workout link|training link|öktlänk(?:en)?|träningslänk(?:en)?)(?:$|\s|[.!?])/iu.test(lower) ||
     /(?:^|\s)(åpne|open|öppna)\s+(?:dagens\s+|today'?s\s+)?(økt|okt|pass|session|workout)(?:$|\s|[.!?])/iu.test(lower) ||
     /(?:^|\s)(lenke|link|länk)\s+(til|to|för)\s+(dagens\s+)?(økt|okt|trening|pass|workout)(?:$|\s|[.!?])/iu.test(lower) ||
-    /^(send|gi|give)\s+(meg|me|mig)\s+(trenings)?(lenke|link|länk)\b/iu.test(lower)
+    /^(send|gi|give)\s+(meg|me|mig)\s+(trenings)?(lenke(?:n)?|link|länk(?:en)?)\b/iu.test(lower)
   ) {
     return { kind: "workout_link", confident: true };
   }
