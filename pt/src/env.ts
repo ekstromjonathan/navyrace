@@ -37,6 +37,7 @@ export const env = {
   hostname: optional("PT_HOST", "0.0.0.0"),
   tz: optional("PT_TZ", "Europe/Oslo"),
   coachName: optional("PT_COACH_NAME", "lodd.ai"),
+  publicOrigin: optional("PT_PUBLIC_ORIGIN", "https://lodd.ai").replace(/\/$/, ""),
   /** Sending line. Used to set iMessage name + photo on that number. */
   linqFromNumber: optional("LINQ_FROM_NUMBER", "+14044465379"),
   get contactCardImageUrl() {

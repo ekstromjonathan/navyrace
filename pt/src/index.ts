@@ -11,6 +11,9 @@ import { handlePayload } from "./handle.ts";
 import { startScheduler } from "./scheduler.ts";
 import * as journal from "./journal.ts";
 import * as linq from "./linq.ts";
+import * as copy from "./copy.ts";
+import { isLang } from "./locale.ts";
+import { mountWorkoutApi } from "./workout-routes.ts";
 
 const backend = initJournal();
 
@@ -112,6 +115,31 @@ app.post("/webhook", async (c) => {
     /* 200: Linq retries 5xx and would restart the typing bubble. */
     return c.json({ ok: true, skipped: "handler-error" });
   }
+});
+
+mountWorkoutApi(app, {
+  onCompleted: async ({ user, snapshot, feedback }) => {
+    const raw = journal.factsOf(user).uiLang;
+    const lang = isLang(raw) ? raw : isLang(user.locale) ? user.locale : "nb";
+    const text = copy.webWorkoutCompleted(lang, snapshot.title, feedback.quality, feedback.body);
+    await linq.sendText(user.chat_id, text, { effect: "confetti" });
+    await journal.logMessage(user.id, "pt", text).catch((err) =>
+      console.error("web workout reply log failed", user.id, err),
+    );
+  },
+});
+
+app.get("/w/:token", (c) => {
+  if (!staticRoot) return c.notFound();
+  const file = join(resolve(process.cwd(), staticRoot), "workout/index.html");
+  if (!existsSync(file)) return c.notFound();
+  return c.html(readFileSync(file, "utf8"), 200, {
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy":
+      "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+    "X-Content-Type-Options": "nosniff",
+  });
 });
 
 if (staticRoot) {

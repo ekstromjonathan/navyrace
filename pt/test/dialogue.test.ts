@@ -347,6 +347,48 @@ describe("dialogue replay", () => {
     assert.equal(after.some((r) => r.slug === "train" && r.hour === 8), true);
   });
 
+  it("opens today's planned session with one secure browser link", async () => {
+    const user = await journal.upsertUser("chat-dialogue-workout-link", "+4740343295");
+    await journal.setFacts(user.id, { uiLang: "nb", goal: "bli sterkere" });
+    await journal.touchContactCard(user.id);
+    const draft = await journal.createTrack({
+      userId: user.id,
+      kind: "training",
+      slug: "workout-link-plan",
+      name: "Lenketest",
+      status: "draft",
+      plan: {
+        weeks: 1,
+        startedOn: "2026-08-17",
+        sessions: [
+          {
+            id: "w1d1",
+            week: 1,
+            day: 1,
+            title: "Styrke i dag",
+            items: [{ name: "Knebøy", detail: "3 × 8" }],
+          },
+        ],
+      },
+    });
+    await journal.activateTrack(draft.id);
+    const before = outbound.length;
+    await handleInbound({
+      eventId: "e-dialogue-workout-link",
+      messageId: "m-dialogue-workout-link",
+      chatId: "chat-dialogue-workout-link",
+      phone: "+4740343295",
+      body: "Åpne dagens økt",
+      direction: "inbound",
+      isGroup: false,
+      healthStatus: "HEALTHY",
+      service: "imessage",
+    });
+    assert.equal(outbound.length, before + 1);
+    assert.match(lastOut(), /Styrke i dag/i);
+    assert.match(lastOut(), /https:\/\/lodd\.ai\/w\/[A-Za-z0-9_-]{43}/);
+  });
+
   it("routes an exercise red flag before pending or the LLM", async () => {
     const user = await journal.upsertUser("chat-dialogue-safety", "+4740343295");
     await journal.setFacts(user.id, { uiLang: "nb" });

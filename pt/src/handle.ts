@@ -28,6 +28,7 @@ import { composeFromPacket, gatherPacket } from "./compose.ts";
 import { inferReminderTopic } from "./reminder-topic.ts";
 import { detectSafetyRoute, isSafetyFollowup } from "./safety.ts";
 import { detectPrivacyRequest } from "./privacy.ts";
+import { issueTodayWorkout } from "./workouts.ts";
 import type { Inbound, InviteRow, ReminderRow, UserRow } from "./types.ts";
 
 type ReplyResult = { text: string; effect?: string };
@@ -616,6 +617,13 @@ async function applyHeuristic(
   if (parsed.kind === "program") return formatWeek(user, lang);
 
   if (parsed.kind === "alive") return copy.fallbackAlive(lang);
+
+  if (parsed.kind === "workout_link") {
+    const workout = await issueTodayWorkout(user);
+    return workout.ok
+      ? copy.workoutLinkReply(lang, workout.title, workout.url)
+      : copy.workoutLinkUnavailable(lang, workout.reason);
+  }
 
   if (parsed.kind === "reminder_list") {
     const reminders = (await journal.listReminders(user.id))

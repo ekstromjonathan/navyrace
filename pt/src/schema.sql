@@ -126,6 +126,39 @@ CREATE INDEX IF NOT EXISTS coach_events_kind_time ON coach_events(kind, created_
 CREATE UNIQUE INDEX IF NOT EXISTS coach_events_user_dedupe
   ON coach_events(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS workout_instances (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  track_id TEXT NOT NULL,
+  session_ref TEXT NOT NULL,
+  local_date TEXT NOT NULL,
+  plan_version INTEGER NOT NULL,
+  snapshot TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  opened_at TEXT,
+  completed_at TEXT,
+  completion_entry_id TEXT,
+  client_completion_id TEXT,
+  feedback TEXT,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (track_id) REFERENCES tracks(id),
+  FOREIGN KEY (completion_entry_id) REFERENCES entries(id)
+);
+
+CREATE INDEX IF NOT EXISTS workout_instances_identity
+  ON workout_instances(user_id, track_id, session_ref, local_date, plan_version)
+  WHERE revoked_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS workout_instances_client_completion
+  ON workout_instances(client_completion_id) WHERE client_completion_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS workout_instances_user_time
+  ON workout_instances(user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS webhook_events (
   event_id TEXT PRIMARY KEY,
   received_at TEXT NOT NULL

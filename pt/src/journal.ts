@@ -19,6 +19,9 @@ import type {
   TrackStatus,
   UserFacts,
   UserRow,
+  WorkoutFeedback,
+  WorkoutInstanceRow,
+  WorkoutSnapshot,
 } from "./types.ts";
 
 export type { ArchivedEntry } from "./journal-sqlite.ts";
@@ -83,6 +86,51 @@ export async function recordCoachEvent(input: {
 
 export async function listCoachEvents(userId: string, limit = 50): Promise<CoachEventRow[]> {
   return asAsync(api().listCoachEvents(userId, limit));
+}
+
+export async function createWorkoutInstance(input: {
+  userId: string;
+  trackId: string;
+  sessionRef: string;
+  localDate: string;
+  planVersion: number;
+  snapshot: WorkoutSnapshot;
+  tokenHash: string;
+  expiresAt: string;
+}): Promise<WorkoutInstanceRow> {
+  return asAsync(api().createWorkoutInstance(input));
+}
+
+export async function getWorkoutInstance(id: string): Promise<WorkoutInstanceRow | undefined> {
+  return asAsync(api().getWorkoutInstance(id));
+}
+
+export async function findWorkoutInstanceByTokenHash(
+  tokenHash: string,
+): Promise<WorkoutInstanceRow | undefined> {
+  return asAsync(api().findWorkoutInstanceByTokenHash(tokenHash));
+}
+
+export async function findWorkoutInstanceByClientCompletionId(
+  clientCompletionId: string,
+): Promise<WorkoutInstanceRow | undefined> {
+  return asAsync(api().findWorkoutInstanceByClientCompletionId(clientCompletionId));
+}
+
+export async function markWorkoutOpened(id: string): Promise<WorkoutInstanceRow | undefined> {
+  return asAsync(api().markWorkoutOpened(id));
+}
+
+export async function markWorkoutCompleted(
+  id: string,
+  entryId: string,
+  feedback: WorkoutFeedback,
+): Promise<WorkoutInstanceRow | undefined> {
+  return asAsync(api().markWorkoutCompleted(id, entryId, feedback));
+}
+
+export async function revokeWorkoutInstance(id: string): Promise<WorkoutInstanceRow | undefined> {
+  return asAsync(api().revokeWorkoutInstance(id));
 }
 
 export async function getUser(id: string): Promise<UserRow | undefined> {
@@ -208,6 +256,10 @@ export async function logEntry(input: {
   occurredAt?: string;
 }): Promise<{ id: string; duplicate: boolean }> {
   return asAsync(api().logEntry(input));
+}
+
+export async function entryIdByMessageId(messageId: string): Promise<string | undefined> {
+  return asAsync(api().entryIdByMessageId(messageId));
 }
 
 export async function patchEntry(

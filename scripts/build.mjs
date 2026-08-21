@@ -15,8 +15,9 @@ const root = process.cwd();
 const landing = "index.html";
 const appPage = "app/index.html";
 const vilkar = "vilkar/index.html";
+const workoutPage = "workout/index.html";
 
-for (const file of [landing, appPage, vilkar]) {
+for (const file of [landing, appPage, vilkar, workoutPage]) {
   const abs = resolve(root, file);
   if (!existsSync(abs)) {
     console.error(`build: missing HTML entry ${abs}`);
@@ -77,18 +78,18 @@ await build({
     outDir: "dist",
     emptyOutDir: false,
     rollupOptions: {
-      input: [appPage, vilkar],
+      input: [appPage, vilkar, workoutPage],
     },
   },
 });
 
-for (const file of ["dist/index.html", "dist/app/index.html", "dist/vilkar/index.html"]) {
+for (const file of ["dist/index.html", "dist/app/index.html", "dist/vilkar/index.html", "dist/workout/index.html"]) {
   if (!existsSync(resolve(root, file))) {
     console.error(`build: missing ${file}; dist has: ${listDist()}`);
     process.exit(1);
   }
 }
 
-console.log("build: dist/index.html, dist/app/, dist/vilkar/ ok");
+console.log("build: dist/index.html, dist/app/, dist/vilkar/, dist/workout/ ok");
 
 await import("./sync-pt-dist.mjs");

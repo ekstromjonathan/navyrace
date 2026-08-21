@@ -37,6 +37,9 @@ describe("parser", () => {
   it("parses rpe and today", () => {
     assert.equal(parseMessage("brutalt").kind, "rpe");
     assert.equal(parseMessage("hva trener jeg i dag").kind, "today");
+    assert.equal(parseMessage("åpne dagens økt").kind, "workout_link");
+    assert.equal(parseMessage("send meg treningslenken").kind, "workout_link");
+    assert.equal(parseMessage("open today's workout").kind, "workout_link");
     assert.equal(parseMessage("Hvilket program går vi for?").kind, "program");
     assert.equal(parseMessage("hva er programmet").kind, "program");
     assert.equal(parseMessage("what's my program").kind, "program");
