@@ -153,9 +153,7 @@ function TimerBlock({ block }) {
         {phase?.round ? <span>Runde {phase.round} / {block.timer.rounds}</span> : null}
       </div>
       <div className="timer-time" aria-live="polite">{formatClock(timer.moment.remainingSeconds)}</div>
-      <div className="timer-track" aria-hidden="true">
-        <span style={{ transform: `scaleX(${timer.moment.progress || 0})` }} />
-      </div>
+      <progress className="timer-track" max="1" value={timer.moment.progress || 0} aria-label="Total fremdrift" />
       <div className="timer-actions">
         <button className="icon-button" type="button" onClick={timer.reset} aria-label="Start klokka på nytt">
           <RotateCcw size={19} />
