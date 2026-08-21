@@ -1,7 +1,6 @@
 process.env.PT_JOURNAL_BACKEND = "sqlite";
 process.env.PT_DB_PATH = `${process.env.TMPDIR || "/tmp"}/mai-pt-workout-${process.hrtime.bigint()}.sqlite`;
 process.env.PT_TODAY = "2026-08-18";
-process.env.PT_PUBLIC_ORIGIN = "https://test.lodd.ai";
 process.env.LINQ_API_TOKEN = "test-token";
 
 import assert from "node:assert/strict";
@@ -99,7 +98,7 @@ describe("workout issue and completion", { concurrency: 1 }, () => {
     const first = await issueTodayWorkout(user);
     assert.equal(first.ok, true);
     if (!first.ok) return;
-    assert.match(first.url, /^https:\/\/test\.lodd\.ai\/w\/[A-Za-z0-9_-]{43}$/);
+    assert.match(first.url, /^https:\/\/lodd\.ai\/w\/[A-Za-z0-9_-]{43}$/);
     assert.equal(first.url.includes(user.id), false);
     const token1 = first.url.split("/").at(-1) ?? "";
     const opened = await resolveWorkoutToken(token1, { markOpened: true });
